@@ -1,5 +1,5 @@
 import "server-only";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
@@ -8,7 +8,7 @@ import { cookies } from "next/headers";
 // administrativa que precisa furar RLS de propósito, use createAdminClient
 // abaixo, e só em código que roda no servidor (daí o "server-only" acima:
 // importar isto num componente cliente já quebra o build).
-export function createClient() {
+export async function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -19,14 +19,17 @@ export function createClient() {
     );
   }
 
-  const cookieStore = cookies();
+  // Next 15: cookies() é assíncrono em Server Components.
+  const cookieStore = await cookies();
 
   return createServerClient(url, anonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(
+        cookiesToSet: { name: string; value: string; options: CookieOptions }[]
+      ) {
         try {
           for (const { name, value, options } of cookiesToSet) {
             cookieStore.set(name, value, options);
