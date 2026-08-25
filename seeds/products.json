@@ -1,0 +1,31 @@
+{
+  "_nota": "Preço não existe ainda — price_cents fica null aqui, mas a coluna product_variants.price_cents é NOT NULL no banco. Por isso a variante nasce is_active=false e o produto nasce status='draft': scripts/seed.mjs NÃO deve tentar dar upsert numa variante com price_cents null contra o banco real (vai violar a constraint) até o Francisco definir o preço.",
+  "products": [
+    {
+      "slug": "micropele-008",
+      "name": "Micropele 0,08mm",
+      "description": "Base ultrafina de 0,08mm, com acabamento natural na linha frontal.",
+      "base_type": "micropele",
+      "base_thickness_mm": 0.08,
+      "is_featured": true,
+      "status": "draft",
+      "seo_title": null,
+      "seo_description": null,
+      "sort_order": 1,
+      "variants": [
+        {
+          "sku": "MICROPELE-008-PADRAO",
+          "size_id": null,
+          "color_id": null,
+          "gray_level_id": null,
+          "length_cm": null,
+          "stock_qty": 0,
+          "price_cents": null,
+          "_todo_price_cents": "Francisco vai definir o preço real",
+          "compare_at_price_cents": null,
+          "is_active": false
+        }
+      ]
+    }
+  ]
+}

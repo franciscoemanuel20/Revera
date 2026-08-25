@@ -1,0 +1,71 @@
+/**
+ * tokens.css — paleta e escala tipográfica da Reverá.
+ *
+ * Direção de marca (decidida antes deste scaffold, não é escolha do
+ * desenvolvedor): premium + tecnologia + naturalidade. Deliberadamente
+ * NÃO é o visual genérico de produto gerado por IA — sem gradiente
+ * roxo-azul, sem Inter como única fonte. A base é um "papel quente"
+ * (--paper) em vez de branco puro, com um acento de cobre usado com
+ * moderação (é destaque, não fundo) e um verde-musgo reservado só para
+ * selos de confiança/garantia — nunca como cor de botão ou link.
+ *
+ * As mesmas cores existem em tailwind.config.ts (theme.extend.colors), lendo
+ * as variáveis *-rgb abaixo (formato exigido para suportar opacidade, ver
+ * comentário mais abaixo). Dobrado de propósito: classe utilitária
+ * (`bg-copper`, `text-ink/80`) para o caso comum, var CSS direta (--ink,
+ * --copper, em hex) para os poucos lugares que não passam por classe
+ * Tailwind (ex.: estilo inline vindo de cor de variante cadastrada no
+ * admin, como em ColorSelector.tsx).
+ */
+
+:root {
+  /* Neutros — "quase preto" e "papel", nunca #000/#fff puros */
+  --ink: #1b1712;
+  --paper: #faf6f1;
+
+  /* Acento primário — cobre/bronze, remete a fio de cabelo e calor.
+     Usar em CTA e destaque pontual, não em áreas grandes de fundo. */
+  --copper: #b07a45;
+  --copper-deep: #8c5f34; /* hover / estado ativo do acento */
+
+  /* Reservado para selos de confiança e garantia (ex.: "7 dias de
+     garantia", "testado antes do envio") — nunca como acento principal
+     ou cor de botão de venda. */
+  --moss: #4b5a45;
+
+  /* Neutro secundário: bordas, superfícies elevadas, divisores */
+  --sand: #e8ddd0;
+
+  /*
+   * As mesmas seis cores, repetidas como tripla R G B (sem função, sem
+   * vírgula — é o formato que o padrão `rgb(var(--x-rgb) / <alpha-value>)`
+   * exige). Existem só para o tailwind.config.ts poder oferecer
+   * modificador de opacidade (`text-ink/80`, `bg-ink/40` etc.): um valor
+   * de cor vindo de `var(--ink)` sozinho (hex) não aceita opacidade via
+   * Tailwind, porque o build não enxerga os canais dentro da var. Ver
+   * https://tailwindcss.com/docs/customizing-colors#using-css-variables.
+   * Gerar as duas formas à mão evita depender de suporte a color-mix(),
+   * que varia entre versões do Tailwind.
+   */
+  --ink-rgb: 27 23 18;
+  --paper-rgb: 250 246 241;
+  --copper-rgb: 176 122 69;
+  --copper-deep-rgb: 140 95 52;
+  --moss-rgb: 75 90 69;
+  --sand-rgb: 232 221 208;
+
+  /* Tipografia — ver tailwind.config.ts para o mapeamento em fontFamily.
+     Fraunces (display, serifada) para headline e nome de produto;
+     Manrope (corpo) para o resto. Explicitamente NÃO Inter, NÃO Space
+     Grotesk — são a fonte-padrão de todo produto que parece "feito por
+     IA" e a marca pediu para fugir disso. */
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * Dark mode: decisão deliberada de NÃO implementar agora. A Reverá é uma
+ * loja com identidade visual única e fixa (papel quente + cobre) — não um
+ * app de uso prolongado onde dark mode é esperado. Ver README.md, seção
+ * de decisões pendentes.
+ */

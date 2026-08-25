@@ -1,0 +1,12 @@
+{
+  "_nota": "uses_synthetic_fiber é true para todos os níveis (não só acima de 50%). O fato de negócio conhecido é especificamente sobre acima de 50%: grisalho acima de 50% também usa fibra sintética para permitir tonalização sem alterar os fios brancos. Para os demais níveis o campo também é true porque é assim que a linha é fabricada hoje — mas o motivo específico documentado é esse.",
+  "gray_levels": [
+    { "percent": 10, "label": "10%", "photo_url": "", "uses_synthetic_fiber": true, "sort_order": 1 },
+    { "percent": 20, "label": "20%", "photo_url": "", "uses_synthetic_fiber": true, "sort_order": 2 },
+    { "percent": 30, "label": "30%", "photo_url": "", "uses_synthetic_fiber": true, "sort_order": 3 },
+    { "percent": 40, "label": "40%", "photo_url": "", "uses_synthetic_fiber": true, "sort_order": 4 },
+    { "percent": 50, "label": "50%", "photo_url": "", "uses_synthetic_fiber": true, "sort_order": 5 },
+    { "percent": 65, "label": "65%", "photo_url": "", "uses_synthetic_fiber": true, "sort_order": 6 },
+    { "percent": 80, "label": "80%", "photo_url": "", "uses_synthetic_fiber": true, "sort_order": 7 }
+  ]
+}
