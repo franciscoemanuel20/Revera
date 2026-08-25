@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/Button";
-import { signOutAction } from "./actions";
+import { signOutAction } from "../actions";
 
 // Guarda de acesso de todo /admin/*. Server component de propósito: a
 // checagem de sessão e de admin_users acontece antes de qualquer HTML da
