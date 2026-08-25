@@ -1,12 +1,7 @@
-// Formata centavos em BRL — único lugar que faz essa conta na UI, para não
-// espalhar `.toFixed(2)` divergente pela loja. Não decide preço nenhum,
+// Formatação de centavos em BRL mora em src/lib/format/money.ts (o admin,
+// fase 2, também precisa dela) — aqui só consome. Não decide preço nenhum,
 // só formata o que já veio calculado (ver src/lib/pricing/discount.ts).
-function formatarBRL(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
+import { formatarBRL } from "@/lib/format/money";
 
 export interface PriceProps {
   cents: number;
