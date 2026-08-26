@@ -56,7 +56,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-sand px-6 py-4">
+      {/* print:hidden — impressão de pedido (/admin/pedidos/[id]) some com o
+          cabeçalho do painel: quem imprime quer o pedido, não o crachá do
+          admin. Ver PrintButton.tsx. */}
+      <header className="flex items-center justify-between border-b border-sand px-6 py-4 print:hidden">
         <span className="font-display text-lg italic text-ink">Reverá — admin</span>
         <div className="flex items-center gap-4">
           <span className="text-sm text-ink/70">{adminUser.full_name ?? user.email}</span>
@@ -69,13 +72,18 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       </header>
 
       <div className="flex flex-1">
-        <nav className="w-56 shrink-0 border-r border-sand px-4 py-6">
-          <Link
-            href="/admin/produtos"
-            className="block rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-sand"
-          >
-            Produtos
-          </Link>
+        <nav className="w-56 shrink-0 border-r border-sand px-4 py-6 print:hidden">
+          <div className="flex flex-col gap-1">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="block rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-sand"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
         </nav>
 
         <main className="flex-1 px-6 py-6">{children}</main>
@@ -83,3 +91,18 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     </div>
   );
 }
+
+// Um item por módulo desta entrega (26/08/2026) — Produtos já existia,
+// os outros seis foram construídos junto com esta navegação. Ordem segue a
+// que a auditoria listou: Dashboard primeiro (é a home do painel agora,
+// ver src/app/admin/(protected)/page.tsx), Pedidos em seguida por ser "o
+// módulo mais importante" do escopo.
+const NAV_ITEMS = [
+  { href: "/admin", label: "Painel" },
+  { href: "/admin/pedidos", label: "Pedidos" },
+  { href: "/admin/produtos", label: "Produtos" },
+  { href: "/admin/precos", label: "Preços" },
+  { href: "/admin/solicitacoes", label: "Solicitações" },
+  { href: "/admin/conteudo", label: "Conteúdo" },
+  { href: "/admin/configuracoes", label: "Configurações" },
+] as const;

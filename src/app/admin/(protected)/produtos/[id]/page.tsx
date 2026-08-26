@@ -69,6 +69,10 @@ export default async function EditarProdutoPage({ params }: { params: Promise<{ 
             unitPriceReais: centavosParaTexto(r.unit_price_cents),
             discountPercent: r.discount_percent != null ? String(r.discount_percent) : "",
             label: r.label ?? "",
+            // timestamptz -> "yyyy-mm-dd" para caber num <input type="date">.
+            startsAt: r.starts_at ? String(r.starts_at).slice(0, 10) : "",
+            endsAt: r.ends_at ? String(r.ends_at).slice(0, 10) : "",
+            sortOrder: String(r.sort_order ?? 0),
             isActive: r.is_active,
           })),
         }}

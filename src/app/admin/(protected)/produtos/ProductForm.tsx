@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Toast } from "@/components/ui/Toast";
 import { reaisParaCentavos } from "@/lib/format/money";
+import {
+  DiscountRulesEditor,
+  type DiscountRuleRow,
+} from "@/components/admin/DiscountRulesEditor";
 import { salvarProdutoAction, type SalvarProdutoInput } from "./actions";
 
 // Formulário único de produto: dados do produto + variantes + regras de
@@ -35,17 +39,6 @@ interface VariantRow {
   isActive: boolean;
 }
 
-interface RuleRow {
-  key: string;
-  id?: string;
-  minQty: string;
-  mode: "preco" | "percentual";
-  unitPriceReais: string;
-  discountPercent: string;
-  label: string;
-  isActive: boolean;
-}
-
 export interface ProductFormInitialData {
   id?: string;
   name: string;
@@ -58,7 +51,7 @@ export interface ProductFormInitialData {
   seoTitle: string;
   seoDescription: string;
   variants: VariantRow[];
-  discountRules: RuleRow[];
+  discountRules: DiscountRuleRow[];
 }
 
 export interface ProductFormProps {
@@ -103,18 +96,6 @@ function novaVariante(): VariantRow {
   };
 }
 
-function novaRegra(): RuleRow {
-  return {
-    key: novaChave(),
-    minQty: "",
-    mode: "percentual",
-    unitPriceReais: "",
-    discountPercent: "",
-    label: "",
-    isActive: true,
-  };
-}
-
 const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink";
 const selectClass = inputClass;
 
@@ -131,7 +112,7 @@ export function ProductForm({ sizes, colors, grayLevels, initialData }: ProductF
   const [seoTitle, setSeoTitle] = useState(initialData?.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(initialData?.seoDescription ?? "");
   const [variants, setVariants] = useState<VariantRow[]>(initialData?.variants ?? []);
-  const [rules, setRules] = useState<RuleRow[]>(initialData?.discountRules ?? []);
+  const [rules, setRules] = useState<DiscountRuleRow[]>(initialData?.discountRules ?? []);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -153,14 +134,6 @@ export function ProductForm({ sizes, colors, grayLevels, initialData }: ProductF
 
   function removerVariante(key: string) {
     setVariants((atuais) => atuais.filter((v) => v.key !== key));
-  }
-
-  function atualizarRegra(key: string, patch: Partial<RuleRow>) {
-    setRules((atuais) => atuais.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  }
-
-  function removerRegra(key: string) {
-    setRules((atuais) => atuais.filter((r) => r.key !== key));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -201,6 +174,13 @@ export function ProductForm({ sizes, colors, grayLevels, initialData }: ProductF
         unitPriceCents: r.mode === "preco" && r.unitPriceReais.trim() ? reaisParaCentavos(Number(r.unitPriceReais)) : null,
         discountPercent: r.mode === "percentual" && r.discountPercent.trim() ? Number(r.discountPercent) : null,
         label: r.label.trim() ? r.label : null,
+        // <input type="date"> devolve "yyyy-mm-dd" — vira ISO (meia-noite
+        // local) só quando preenchido; regra sem vigência definida manda
+        // null, que o banco entende como "vale sempre" (ver
+        // quantity_discount_rules.starts_at/ends_at, nullable).
+        startsAt: r.startsAt.trim() ? new Date(r.startsAt).toISOString() : null,
+        endsAt: r.endsAt.trim() ? new Date(r.endsAt).toISOString() : null,
+        sortOrder: Number(r.sortOrder || "0"),
         isActive: r.isActive,
       })),
     };
@@ -476,98 +456,12 @@ export function ProductForm({ sizes, colors, grayLevels, initialData }: ProductF
         </div>
       </section>
 
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl text-ink">Desconto por quantidade</h2>
-          <Button type="button" variant="secondary" size="sm" onClick={() => setRules((r) => [...r, novaRegra()])}>
-            Adicionar regra
-          </Button>
-        </div>
-
-        {rules.length === 0 ? <p className="text-sm text-ink/60">Nenhuma regra de desconto cadastrada.</p> : null}
-
-        <div className="flex flex-col gap-4">
-          {rules.map((regra) => (
-            <div key={regra.key} className="grid grid-cols-2 gap-3 rounded-md border border-sand p-4 sm:grid-cols-4">
-              <label className="flex flex-col gap-1 text-sm text-ink">
-                Quantidade mínima
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  value={regra.minQty}
-                  onChange={(e) => atualizarRegra(regra.key, { minQty: e.target.value })}
-                  className={inputClass}
-                />
-              </label>
-
-              <label className="flex flex-col gap-1 text-sm text-ink">
-                Tipo de desconto
-                <select
-                  value={regra.mode}
-                  onChange={(e) => atualizarRegra(regra.key, { mode: e.target.value as RuleRow["mode"] })}
-                  className={selectClass}
-                >
-                  <option value="percentual">Percentual</option>
-                  <option value="preco">Preço unitário fixo</option>
-                </select>
-              </label>
-
-              {regra.mode === "percentual" ? (
-                <label className="flex flex-col gap-1 text-sm text-ink">
-                  Desconto (%)
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={regra.discountPercent}
-                    onChange={(e) => atualizarRegra(regra.key, { discountPercent: e.target.value })}
-                    className={inputClass}
-                  />
-                </label>
-              ) : (
-                <label className="flex flex-col gap-1 text-sm text-ink">
-                  Preço unitário (R$)
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={regra.unitPriceReais}
-                    onChange={(e) => atualizarRegra(regra.key, { unitPriceReais: e.target.value })}
-                    className={inputClass}
-                  />
-                </label>
-              )}
-
-              <label className="flex flex-col gap-1 text-sm text-ink">
-                Rótulo (opcional)
-                <input
-                  value={regra.label}
-                  onChange={(e) => atualizarRegra(regra.key, { label: e.target.value })}
-                  className={inputClass}
-                />
-              </label>
-
-              <label className="flex items-center gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={regra.isActive}
-                  onChange={(e) => atualizarRegra(regra.key, { isActive: e.target.checked })}
-                  className="h-5 w-5"
-                />
-                Ativa
-              </label>
-
-              <div className="flex items-end">
-                <Button type="button" variant="ghost" size="sm" onClick={() => removerRegra(regra.key)}>
-                  Remover regra
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Editor de regras — src/components/admin/DiscountRulesEditor.tsx.
+          Extraído para cá em 26/08/2026 (era JSX inline neste arquivo) para
+          o módulo /admin/precos usar a mesma UI sem duplicar grid de
+          inputs; comportamento idêntico ao que existia antes. */}
+      <section>
+        <DiscountRulesEditor rules={rules} onChange={setRules} />
       </section>
 
       <div>

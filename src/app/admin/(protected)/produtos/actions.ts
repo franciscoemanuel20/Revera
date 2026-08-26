@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { regraDescontoSchema, sincronizarRegrasDesconto } from "@/lib/admin/discount-rules";
 
 // Server Actions do CRUD de produto (produto + variantes + regras de
 // desconto, todos numa única gravação — ver ProductForm.tsx). Usam
@@ -35,18 +36,9 @@ const varianteSchema = z.object({
   isActive: z.boolean(),
 });
 
-const regraDescontoSchema = z
-  .object({
-    id: z.string().uuid().optional(),
-    minQty: z.number().int().positive("Quantidade mínima precisa ser maior que zero"),
-    unitPriceCents: z.number().int().nonnegative().nullable(),
-    discountPercent: z.number().min(0).max(100).nullable(),
-    label: z.string().trim().nullable(),
-    isActive: z.boolean(),
-  })
-  .refine((regra) => (regra.unitPriceCents != null) !== (regra.discountPercent != null), {
-    message: "Cada regra de desconto precisa de preço unitário OU percentual — nunca os dois, nunca nenhum",
-  });
+// regraDescontoSchema agora vem de src/lib/admin/discount-rules.ts — extraído
+// de lá para o módulo /admin/precos poder reusar a MESMA validação (ver
+// comentário naquele arquivo). Mesmo schema de sempre, só mudou de casa.
 
 const produtoSchema = z.object({
   id: z.string().uuid().optional(),
@@ -125,7 +117,7 @@ export async function salvarProdutoAction(input: SalvarProdutoInput): Promise<Sa
   const erroVariantes = await sincronizarVariantes(supabase, productId, dados.variants);
   if (erroVariantes) return { error: erroVariantes };
 
-  const erroRegras = await sincronizarRegras(supabase, productId, dados.discountRules);
+  const erroRegras = await sincronizarRegrasDesconto(supabase, productId, dados.discountRules);
   if (erroRegras) return { error: erroRegras };
 
   revalidatePath("/admin/produtos");
@@ -177,46 +169,6 @@ async function sincronizarVariantes(
     } else {
       const { error } = await supabase.from("product_variants").insert(payload);
       if (error) return `Não foi possível criar a variante "${variante.sku}" — SKU repetido ou combinação já existe.`;
-    }
-  }
-
-  return null;
-}
-
-async function sincronizarRegras(
-  supabase: ClienteSupabase,
-  productId: string,
-  regras: SalvarProdutoInput["discountRules"]
-): Promise<string | null> {
-  const { data: atuais, error: erroLeitura } = await supabase
-    .from("quantity_discount_rules")
-    .select("id")
-    .eq("product_id", productId);
-  if (erroLeitura) return "Não foi possível ler as regras de desconto existentes.";
-
-  const idsMantidos = new Set(regras.filter((r) => r.id).map((r) => r.id as string));
-  const idsParaRemover = (atuais ?? []).map((r) => r.id as string).filter((id) => !idsMantidos.has(id));
-  if (idsParaRemover.length > 0) {
-    const { error } = await supabase.from("quantity_discount_rules").delete().in("id", idsParaRemover);
-    if (error) return "Não foi possível remover uma regra de desconto retirada do formulário.";
-  }
-
-  for (const regra of regras) {
-    const payload = {
-      product_id: productId,
-      min_qty: regra.minQty,
-      unit_price_cents: regra.unitPriceCents,
-      discount_percent: regra.discountPercent,
-      label: regra.label,
-      is_active: regra.isActive,
-    };
-
-    if (regra.id) {
-      const { error } = await supabase.from("quantity_discount_rules").update(payload).eq("id", regra.id);
-      if (error) return "Não foi possível salvar uma regra de desconto.";
-    } else {
-      const { error } = await supabase.from("quantity_discount_rules").insert(payload);
-      if (error) return "Não foi possível criar uma regra de desconto.";
     }
   }
 
