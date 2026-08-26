@@ -5,11 +5,14 @@
  * pela chave natural de cada tabela (code, percent, slug/sku, question),
  * então rodar duas vezes não duplica linha.
  *
- * NÃO RODADO neste scaffold — não existe projeto Supabase real ainda (ver
- * README, "decisões pendentes"). Escrito e pronto para quando o projeto
- * existir; então basta `npm run seed` com .env.local preenchido.
+ * Rodado pela primeira vez de verdade em 25/08/2026, contra o projeto
+ * Supabase real — e falhou na primeira tentativa: diferente de `next dev`/
+ * `next build`, um script node puro não lê .env.local sozinho, então
+ * process.env vinha vazio mesmo com o arquivo preenchido. Corrigido com a
+ * flag nativa do Node (`--env-file`, disponível a partir do Node 20.6, sem
+ * precisar da dependência `dotenv`) — ver package.json, script "seed".
  *
- * Uso: node scripts/seed.mjs   (ou: npm run seed)
+ * Uso: npm run seed   (ou, direto: node --env-file=.env.local scripts/seed.mjs)
  */
 import { createClient } from "@supabase/supabase-js";
 import { readFile } from "node:fs/promises";
@@ -18,6 +21,19 @@ import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SEEDS_DIR = join(__dirname, "..", "seeds");
+
+// Node 20 (o que este projeto usa, ver docs/fundacao-25-08-2026.md) não tem
+// WebSocket global — só o Node 22+ tem. @supabase/supabase-js sempre monta
+// um RealtimeClient dentro de createClient(), mesmo quando o script nunca
+// abre canal nenhum (aqui só se usa REST via upsert/insert): sem isso, a
+// simples chamada de createClient() já lança "Node.js 20 detected without
+// native WebSocket support". Sem `npm install` disponível neste ambiente
+// para trazer o pacote "ws" (sugestão oficial do erro), este stub resolve
+// sem dependência nova — nunca é de fato instanciado, porque nada aqui usa
+// realtime.
+if (typeof globalThis.WebSocket === "undefined") {
+  globalThis.WebSocket = class WebSocketStub {};
+}
 
 async function lerJson(nomeArquivo) {
   const caminho = join(SEEDS_DIR, nomeArquivo);
@@ -97,20 +113,22 @@ async function seedProducts(db) {
   const { products } = await lerJson("products.json");
 
   for (const produto of products) {
-    const semPreco = produto.variants.some((v) => v.price_cents == null);
-    if (semPreco) {
-      // products.status já nasce 'draft' e variant.is_active=false para
-      // isso — mesmo assim recusamos explicitamente aqui, porque
-      // product_variants.price_cents é NOT NULL no banco (ver migration):
-      // tentar inserir null quebraria o upsert inteiro do produto.
-      console.warn(
-        `produtos: pulando "${produto.slug}" — variante sem price_cents ` +
-          `(TODO: Francisco vai definir o preço real). Rode de novo depois ` +
-          `de preencher seeds/products.json.`
-      );
-      continue;
-    }
-
+    // Primeira rodada real deste script (25/08/2026) mostrou um bug: a
+    // versão anterior pulava o produto INTEIRO (a linha de `products`
+    // também, não só a variante) quando havia variante sem price_cents —
+    // resultado prático: a Micropele não existia em lugar nenhum no banco,
+    // nem para o Francisco editar no /admin/produtos e ativar depois que
+    // definir o preço. product_variants.price_cents é NOT NULL, mas
+    // `products` não tem coluna de preço — não havia motivo para o produto
+    // em si não existir.
+    //
+    // Correção: o produto sempre é upsertado. Só a variante sem preço
+    // ganha um price_cents=0 técnico (nunca um preço inventado de verdade)
+    // só para satisfazer a constraint — is_active fica false independente
+    // do que vier do JSON, então a policy pública ("public read variants",
+    // is_active = true) nunca expõe esse 0 para um cliente. Quem vê o 0 é
+    // só o Francisco, no formulário de admin, e o campo já é editável lá
+    // para o preço real entrar antes de ativar o produto.
     const { data: produtoInserido, error: erroProduto } = await db
       .from("products")
       .upsert(
@@ -132,6 +150,17 @@ async function seedProducts(db) {
       .single();
     if (erroProduto) throw erroProduto;
 
+    const variantesComPrecoPendente = produto.variants.filter((v) => v.price_cents == null);
+    if (variantesComPrecoPendente.length > 0) {
+      console.warn(
+        `produtos: "${produto.slug}" tem ${variantesComPrecoPendente.length} ` +
+          `variante(s) sem preço definido (TODO: Francisco vai definir o preço ` +
+          `real) — nasce(m) com price_cents=0 técnico e is_active=false, ` +
+          `invisível na vitrine. Editar e ativar pelo /admin/produtos quando ` +
+          `o preço existir.`
+      );
+    }
+
     const { error: erroVariantes } = await db.from("product_variants").upsert(
       produto.variants.map((v) => ({
         product_id: produtoInserido.id,
@@ -141,9 +170,9 @@ async function seedProducts(db) {
         gray_level_id: v.gray_level_id,
         length_cm: v.length_cm,
         stock_qty: v.stock_qty,
-        price_cents: v.price_cents,
+        price_cents: v.price_cents ?? 0,
         compare_at_price_cents: v.compare_at_price_cents,
-        is_active: v.is_active,
+        is_active: v.price_cents == null ? false : v.is_active,
       })),
       { onConflict: "sku" }
     );

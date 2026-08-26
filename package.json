@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "verify:secrets": "node scripts/verify-no-secrets-in-bundle.mjs",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node --env-file=.env.local scripts/seed.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",
