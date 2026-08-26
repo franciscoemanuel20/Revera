@@ -81,3 +81,36 @@ export function melhorOpcao(opcoes: ShippingQuote[]): ShippingQuote | null {
   );
   return validas.sort((a, b) => a.priceCents - b.priceCents)[0] ?? null;
 }
+
+/**
+ * Qual serviço comprar na hora de despachar. A ESCOLHA NÃO É LIVRE.
+ *
+ * Regra trazida do site irmão, onde nasceu de um erro já cometido
+ * (painel/postagem/route.ts, 19/08/2026): a rota recotava e comprava a melhor
+ * opção do momento. Parecia certo — "preço de ontem não vale para postar
+ * hoje" — e estava errado, porque o cliente JÁ FOI COBRADO por um frete
+ * específico no checkout. Comprar outro faz a diferença sair do bolso da
+ * operação sem aparecer em lugar nenhum, só na fatura do fim do mês.
+ *
+ * Então: procura o MESMO serviço que o cliente pagou, e confirma que ele
+ * continua servindo hoje — uma transportadora pode ter saído da praça, ou vir
+ * com erro para aquele CEP. Só quando não dá (pedido sem serviço gravado, ou
+ * serviço que sumiu) cai na melhor opção do momento.
+ *
+ * Repare que o serviço pago é aceito mesmo sem `coversInsurance`: se ele foi
+ * cobrado assim, mudar agora sem ninguém saber seria trocar uma decisão já
+ * tomada. Quem decide sobre diferença é a camada de cima, que compara os
+ * preços e para quando passa de R$ 5.
+ */
+export function escolherServico(
+  servicoPago: number | null,
+  opcoes: ShippingQuote[]
+): ShippingQuote | null {
+  if (servicoPago) {
+    const mesmo = opcoes.find(
+      (o) => o.serviceId === servicoPago && !o.error && o.priceCents > 0
+    );
+    if (mesmo) return mesmo;
+  }
+  return melhorOpcao(opcoes);
+}

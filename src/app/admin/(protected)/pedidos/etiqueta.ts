@@ -6,23 +6,27 @@
  * ===========================================================================
  * ESTA AÇÃO GASTA DINHEIRO DE VERDADE
  * ===========================================================================
- * Criar a etiqueta na SuperFrete debita o valor do frete da carteira, no
- * instante da chamada. Não existe "criar para ver como fica". Por isso:
+ * Pagar a etiqueta na SuperFrete debita o frete da carteira no instante da
+ * chamada. Não existe "criar para ver como fica". Por isso:
  *
  *   1. Só roda em pedido PAGO. Um pedido não pago não gera etiqueta, ponto.
  *   2. Uma etiqueta por pedido, garantido por índice único no banco
  *      (00000000000006_shipments_unique.sql) — não por um `if`, que teria
  *      uma janela entre ler e escrever, e é nessa janela que o segundo
  *      clique entra.
- *   3. O serviço é o que o cliente JÁ PAGOU, lido de shipping_quotes. Não se
- *      recota no despacho: outra cotação daria outro preço e outra
- *      transportadora, e a diferença sairia do bolso de alguém sem ninguém
- *      ter combinado.
+ *   3. A cotação É REFEITA (preço de duas semanas atrás não compra etiqueta
+ *      hoje), mas A ESCOLHA NÃO É LIVRE: compra-se o mesmo serviço que o
+ *      cliente pagou, enquanto ele existir. Ver escolherServico() em
+ *      src/lib/shipping/regras.ts.
+ *   4. Se o preço mudou mais de R$ 5 desde a compra, a ação PARA e devolve os
+ *      dois números. Não é bloqueio — é fazer a diferença aparecer para
+ *      alguém antes de sair do bolso da operação, em vez de na fatura do fim
+ *      do mês, misturada.
  *
- * A ordem das operações abaixo é deliberada: a trava vem ANTES da chamada
- * que gasta. Se a SuperFrete falhar, o status volta ao que era — melhor um
- * pedido que precisa de outro clique que um pedido travado em "preparando"
- * sem etiqueta e sem ninguém entender por quê.
+ * A ordem das operações é deliberada: cria → GRAVA → paga → completa. Gravar
+ * entre criar e pagar é o que impede uma etiqueta paga que o nosso banco não
+ * conhece. E a trava de status vem antes de tudo isso, para dois cliques não
+ * virarem duas etiquetas.
  */
 
 import { z } from "zod";
@@ -31,19 +35,39 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
 import { getShippingProvider, ShippingUnavailable } from "@/lib/shipping";
-import { caixaPara } from "@/lib/shipping/regras";
+import { caixaPara, escolherServico } from "@/lib/shipping/regras";
+import { cotarFrete } from "@/lib/shipping/cotar";
 import type { OrderStatusValue } from "@/lib/admin/order-status";
 
-const schema = z.object({ orderId: z.string().uuid() });
+const schema = z.object({
+  orderId: z.string().uuid(),
+  /** Segunda passagem, depois de a pessoa ver a diferença de preço. */
+  confirmarDiferenca: z.boolean().optional(),
+});
+
+/**
+ * Acima de quanto a diferença de frete precisa de gente para decidir.
+ *
+ * Centavos acontecem — travar a postagem por causa deles seria pior que o
+ * problema. Acima de R$ 5 alguém precisa saber ANTES de comprar: pode ser
+ * reajuste da transportadora, CEP corrigido, ou uma cotação de duas semanas
+ * atrás. Número trazido do site irmão.
+ */
+const DIFERENCA_QUE_PEDE_GENTE_CENTS = 500;
 
 export type GerarEtiquetaResultado =
   | { error: string }
+  | {
+      /** O frete mudou desde a cobrança — mostra os dois números e para. */
+      confirmar: {
+        cobradoCents: number;
+        agoraCents: number;
+        diferencaCents: number;
+        servicoAgora: string;
+      };
+    }
   | { ok: true; rastreio: string | null; etiquetaUrl: string | null };
 
-/** Serviço padrão quando a cotação não registrou qual foi (pedido antigo ou
- *  cotação indisponível na hora da compra). PAC cobre o valor da peça e
- *  atende o país inteiro — é a escolha conservadora, não a mais barata. */
-const SERVICO_PADRAO = 1;
 
 export async function gerarEtiquetaAction(
   input: unknown
@@ -57,7 +81,7 @@ export async function gerarEtiquetaAction(
   const { data: pedido, error: erroLeitura } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal_cents, customer_id, address_id"
+      "id, order_number, status, subtotal_cents, shipping_cents, customer_id, address_id"
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -132,9 +156,6 @@ export async function gerarEtiquetaAction(
     };
   }
 
-  const bruto = (cotacao?.raw_response ?? {}) as { service_id?: unknown };
-  const serviceId = Number(bruto.service_id) || SERVICO_PADRAO;
-
   const { data: itens } = await supabase
     .from("order_items")
     .select("quantity")
@@ -143,6 +164,56 @@ export async function gerarEtiquetaAction(
     (soma, i) => soma + Number(i.quantity ?? 0),
     0
   );
+
+  // Recota para saber o que existe HOJE — mas a escolha continua presa ao
+  // que o cliente pagou (ver escolherServico).
+  const bruto = (cotacao?.raw_response ?? {}) as { service_id?: unknown };
+  const servicoPago = Number(bruto.service_id) || null;
+
+  const agora = await cotarFrete({
+    cepDestino: endereco.cep,
+    valorDeclaradoCents: pedido.subtotal_cents,
+    quantidade,
+  });
+
+  if (agora.indisponivel) {
+    return {
+      error: `A transportadora não respondeu agora (${agora.indisponivel.slice(0, 120)}). Tente de novo em instantes — nada foi cobrado.`,
+    };
+  }
+
+  const servico = escolherServico(servicoPago, agora.opcoes);
+  if (!servico) {
+    return {
+      error:
+        "Nenhuma transportadora disponível cobre o valor declarado deste pedido neste CEP. Confira o endereço antes de tentar de novo.",
+    };
+  }
+  const serviceId = servico.serviceId;
+
+  /**
+   * O frete mudou desde a cobrança? Mostra os dois números e para.
+   *
+   * Não é bloqueio: a segunda chamada, com confirmarDiferenca, compra assim
+   * mesmo. O ponto é que a diferença saia do bolso da operação com alguém
+   * sabendo, e não escondida na fatura do fim do mês.
+   */
+  const cobradoCents = pedido.shipping_cents ?? 0;
+  const diferenca = servico.priceCents - cobradoCents;
+  if (
+    cobradoCents > 0 &&
+    Math.abs(diferenca) > DIFERENCA_QUE_PEDE_GENTE_CENTS &&
+    !parsed.data.confirmarDiferenca
+  ) {
+    return {
+      confirmar: {
+        cobradoCents,
+        agoraCents: servico.priceCents,
+        diferencaCents: diferenca,
+        servicoAgora: servico.serviceName || servico.carrier,
+      },
+    };
+  }
 
   // TRAVA — antes de gastar. O `.eq("status", statusAtual)` faz com que só
   // um chamador passe daqui: o segundo encontra zero linhas afetadas e para.
@@ -171,9 +242,24 @@ export async function gerarEtiquetaAction(
 
   const provider = getShippingProvider();
 
+  /* =========================================================================
+   * A ORDEM DAQUI PARA BAIXO É A PARTE QUE IMPORTA
+   *
+   *   1. cria a etiqueta   (existe, não custou nada ainda)
+   *   2. GRAVA no banco     (com status pending)
+   *   3. paga a etiqueta    (aqui o dinheiro sai)
+   *   4. atualiza o registro com rastreio e PDF
+   *
+   * Gravar entre criar e pagar é o que impede o pior desfecho: uma etiqueta
+   * paga na SuperFrete que o nosso banco não conhece. Ali o dinheiro já saiu,
+   * ninguém sabe, e a reação natural de quem vê o erro é gerar outra — e
+   * pagar duas. Regra trazida do site irmão, onde ela está escrita com o
+   * mesmo motivo (painel/postagem/route.ts, 19/08/2026).
+   * ========================================================================= */
+
   let resultado;
   try {
-    resultado = await provider.createShipment({
+    resultado = await provider.createLabel({
       orderId: pedido.id,
       orderNumber: pedido.order_number,
       serviceId,
@@ -206,35 +292,69 @@ export async function gerarEtiquetaAction(
     };
   }
 
-  // A etiqueta EXISTE e já foi paga a partir daqui. Falha de gravação abaixo
-  // não pode significar "gera outra" — por isso o id volta em toda mensagem
-  // de erro, para alguém achá-la no painel da SuperFrete.
-  let etiquetaUrl: string | null = null;
-  try {
-    etiquetaUrl = await provider.getLabelUrl(resultado.providerShipmentId);
-  } catch {
-    // O PDF é recuperável depois; não vale desfazer um envio pago por causa
-    // dele.
-    etiquetaUrl = null;
-  }
-
+  // PASSO 2 — grava ANTES de pagar. Se a gravação falhar, a etiqueta criada
+  // ainda não custou nada: dá para descartá-la no painel deles sem prejuízo.
+  const shipmentId = randomUUID();
   const { error: erroEnvio } = await supabase.from("shipments").insert({
-    id: randomUUID(),
+    id: shipmentId,
     order_id: orderId,
     provider: provider.name,
     provider_shipment_id: resultado.providerShipmentId,
-    service_name: cotacao?.service_name ?? resultado.carrier ?? null,
-    tracking_code: resultado.trackingCode ?? null,
-    label_url: etiquetaUrl,
+    service_name: servico.serviceName || servico.carrier || null,
+    tracking_code: null,
+    label_url: null,
     status: resultado.status,
   });
 
   if (erroEnvio) {
     await devolverStatus();
     return {
-      error: `A etiqueta ${resultado.providerShipmentId} foi criada e paga na SuperFrete, mas não conseguimos registrá-la aqui. NÃO gere outra — anote este número e procure a etiqueta no painel deles.`,
+      error: `A etiqueta ${resultado.providerShipmentId} foi criada na SuperFrete mas não conseguimos registrá-la aqui — e por isso ela NÃO foi paga, então nada foi cobrado. Tente de novo.`,
     };
   }
+
+  // PASSO 3 — aqui o dinheiro sai.
+  try {
+    await provider.payLabel(resultado.providerShipmentId);
+  } catch (e) {
+    // O registro fica, com status pending: a etiqueta existe, não foi paga, e
+    // o painel mostra isso. Não devolve o status do pedido, porque "preparing"
+    // com envio pendente é exatamente o estado real.
+    return {
+      error:
+        e instanceof ShippingUnavailable
+          ? e.message
+          : "A etiqueta foi criada mas o pagamento dela falhou. Confira o saldo da carteira na SuperFrete.",
+    };
+  }
+
+  // PASSO 4 — o rastreio só existe depois de paga; agora dá para perguntar.
+  let rastreio: string | null = null;
+  let etiquetaUrl: string | null = null;
+  let statusFinal = "released";
+  try {
+    const info = await provider.getShipmentStatus(resultado.providerShipmentId);
+    rastreio = info.trackingCode;
+    statusFinal = info.status;
+  } catch {
+    // Etiqueta paga e registrada; o rastreio aparece depois. Não vale
+    // transformar isto em erro para quem já conseguiu comprar.
+  }
+  try {
+    etiquetaUrl = await provider.getLabelUrl(resultado.providerShipmentId);
+  } catch {
+    etiquetaUrl = null;
+  }
+
+  await supabase
+    .from("shipments")
+    .update({
+      tracking_code: rastreio,
+      label_url: etiquetaUrl,
+      status: statusFinal,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", shipmentId);
 
   await supabase
     .from("orders")
@@ -250,17 +370,18 @@ export async function gerarEtiquetaAction(
       de: statusAtual,
       para: "label_ready",
       etiqueta: resultado.providerShipmentId,
-      rastreio: resultado.trackingCode ?? null,
+      rastreio,
       servico: serviceId,
+      servico_pago_no_checkout: servicoPago,
+      // Quando o frete mudou de preço entre a compra e o despacho, o número
+      // fica registrado. É a diferença que a operação absorveu neste pedido.
+      cobrado_cents: pedido.shipping_cents,
+      pago_agora_cents: servico.priceCents,
     },
   });
 
   revalidatePath("/admin/pedidos");
   revalidatePath(`/admin/pedidos/${orderId}`);
 
-  return {
-    ok: true,
-    rastreio: resultado.trackingCode ?? null,
-    etiquetaUrl,
-  };
+  return { ok: true, rastreio, etiquetaUrl };
 }

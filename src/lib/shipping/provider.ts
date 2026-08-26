@@ -104,13 +104,22 @@ export interface ShippingProvider {
     declaredValueCents: number
   ): Promise<ShippingQuote[]>;
   /**
-   * Cria a etiqueta E paga com o saldo da carteira, numa operação só.
+   * Passo 1 — cria a etiqueta. Ela nasce sem valor: não foi paga, não tem
+   * rastreio, e nada foi debitado ainda.
    *
-   * Os dois passos andam juntos de propósito: o código de rastreio só existe
-   * depois do pagamento da etiqueta, então parar no meio deixaria um pedido
-   * com etiqueta criada, sem rastreio e sem ninguém saber por quê.
+   * Separado do pagamento DE PROPÓSITO, para quem chama poder gravar o
+   * registro no meio. Se os dois fossem uma operação só e a gravação
+   * falhasse depois, existiria uma etiqueta paga na SuperFrete que o nosso
+   * banco não conhece — dinheiro gasto sem rastro, e a tentação de gerar
+   * outra. Ver src/app/admin/(protected)/pedidos/etiqueta.ts.
    */
-  createShipment(order: ShippableOrder): Promise<ShipmentResult>;
+  createLabel(order: ShippableOrder): Promise<ShipmentResult>;
+
+  /**
+   * Passo 2 — paga a etiqueta com o saldo da carteira. AQUI o dinheiro sai.
+   * O código de rastreio só passa a existir depois disto.
+   */
+  payLabel(providerShipmentId: string): Promise<void>;
   getShipmentStatus(providerShipmentId: string): Promise<ShipmentStatus>;
   getLabelUrl(providerShipmentId: string): Promise<string | null>;
 }

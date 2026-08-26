@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CAIXA_UNITARIA, caixaPara, melhorOpcao } from "@/lib/shipping/regras";
+import {
+  CAIXA_UNITARIA,
+  caixaPara,
+  escolherServico,
+  melhorOpcao,
+} from "@/lib/shipping/regras";
 import type { ShippingQuote } from "@/lib/shipping/provider";
 
 /**
@@ -60,6 +65,46 @@ describe("melhorOpcao — a regra do seguro", () => {
     const original = [...COTACAO_REAL];
     melhorOpcao(COTACAO_REAL);
     expect(COTACAO_REAL).toEqual(original);
+  });
+});
+
+describe("escolherServico — no despacho a escolha não é livre", () => {
+  it("compra o MESMO serviço que o cliente pagou, mesmo havendo mais barato hoje", () => {
+    // SEDEX foi cobrado no checkout. Hoje a Loggi está mais barata — e não
+    // importa: trocar faria a diferença sair do bolso da operação.
+    const escolhido = escolherServico(2, COTACAO_REAL);
+    expect(escolhido?.serviceId).toBe(2);
+    expect(escolhido?.serviceName).toBe("SEDEX");
+  });
+
+  it("cai na melhor opção quando o serviço pago sumiu da praça", () => {
+    const semLoggi = COTACAO_REAL.filter((o) => o.serviceId !== 31);
+    // 31 (Loggi) foi cobrado, mas não aparece mais na cotação de hoje.
+    const escolhido = escolherServico(31, semLoggi);
+    expect(escolhido?.carrier).toBe("Correios");
+    expect(escolhido?.priceCents).toBe(2612); // o PAC, mais barato dos que cobrem
+  });
+
+  it("cai na melhor opção quando o serviço pago voltou com erro", () => {
+    const comErro = COTACAO_REAL.map((o) =>
+      o.serviceId === 2 ? { ...o, error: "CEP não atendido" } : o
+    );
+    expect(escolherServico(2, comErro)?.serviceId).toBe(31);
+  });
+
+  it("pedido antigo sem serviço gravado usa a melhor opção", () => {
+    expect(escolherServico(null, COTACAO_REAL)?.carrier).toBe("Loggi");
+  });
+
+  it("respeita o serviço pago mesmo que ele não cubra o seguro — mudar sozinho seria desfazer decisão já tomada", () => {
+    // A Jadlog não cobre os R$ 1.600. Se ainda assim foi ela que o cliente
+    // pagou, quem decide trocar é gente, olhando a diferença de preço — não
+    // esta função, calada.
+    expect(escolherServico(3, COTACAO_REAL)?.carrier).toBe("Jadlog");
+  });
+
+  it("sem nenhuma opção utilizável devolve null, não uma etiqueta errada", () => {
+    expect(escolherServico(2, [])).toBeNull();
   });
 });
 

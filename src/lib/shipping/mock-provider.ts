@@ -55,14 +55,20 @@ export class MockShippingProvider implements ShippingProvider {
     ];
   }
 
-  async createShipment(order: ShippableOrder): Promise<ShipmentResult> {
+  async createLabel(order: ShippableOrder): Promise<ShipmentResult> {
+    // Nasce `pending` e sem rastreio, igual à de verdade — assim o caminho
+    // exercitado em desenvolvimento é o mesmo de produção.
     return {
       providerShipmentId: `mock_${order.orderId}`,
-      status: "released",
-      trackingCode: `MOCKBR${order.orderId.replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+      status: "pending",
+      trackingCode: null,
       carrier: "Correios",
       labelUrl: null,
     };
+  }
+
+  async payLabel(_providerShipmentId: string): Promise<void> {
+    // Nada a debitar: no mock não existe carteira.
   }
 
   async getShipmentStatus(providerShipmentId: string): Promise<ShipmentStatus> {

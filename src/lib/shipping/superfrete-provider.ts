@@ -253,20 +253,14 @@ export class SuperFreteShippingProvider implements ShippingProvider {
   }
 
   /**
-   * Cria a etiqueta (POST /cart, nasce `pending`) e paga com o saldo da
-   * carteira (POST /checkout, vira `released`), nesta ordem.
-   *
-   * Saldo insuficiente falha no SEGUNDO passo, com a etiqueta já criada. É um
-   * cenário real e a operação precisa enxergá-lo: pedido pago pelo cliente,
-   * etiqueta presa por falta de saldo. Por isso o erro sobe com a mensagem
-   * original em vez de virar um "falhou" genérico — e o id da etiqueta volta
-   * junto, para não ficar órfão na conta da SuperFrete.
+   * Passo 1 — POST /cart. A etiqueta nasce `pending`: existe na conta deles,
+   * mas não foi paga, não tem rastreio e não debitou nada.
    *
    * `non_commercial: true` = declaração de conteúdo em vez de nota fiscal. Se
    * o contador definir que o envio sai com NF-e, este é o ponto exato que
    * muda (entra o objeto `invoice` com a chave de 44 dígitos).
    */
-  async createShipment(order: ShippableOrder): Promise<ShipmentResult> {
+  async createLabel(order: ShippableOrder): Promise<ShipmentResult> {
     const d = order.recipient;
 
     const corpo = {
@@ -322,30 +316,35 @@ export class SuperFreteShippingProvider implements ShippingProvider {
       );
     }
 
+    return {
+      providerShipmentId: id,
+      status: String(criada?.status ?? "pending"),
+      trackingCode: null,
+      carrier: null,
+      labelUrl: null,
+    };
+  }
+
+  /**
+   * Passo 2 — POST /checkout. Debita o frete do saldo da carteira e a
+   * etiqueta vira `released`. É AQUI que o dinheiro sai.
+   *
+   * Saldo insuficiente falha exatamente neste ponto, com a etiqueta já
+   * criada. É um cenário real e a operação precisa enxergá-lo: pedido pago
+   * pelo cliente, etiqueta presa por falta de saldo. Por isso o erro sobe com
+   * a mensagem original em vez de virar um "falhou" genérico — e com o id,
+   * para ninguém criar uma segunda e pagar duas.
+   */
+  async payLabel(providerShipmentId: string): Promise<void> {
     try {
-      await postar("/checkout", { orders: [id] });
+      await postar("/checkout", { orders: [providerShipmentId] });
     } catch (e) {
-      // A etiqueta EXISTE mesmo com o pagamento falhando. Devolver o id na
-      // mensagem é o que permite a alguém achá-la no painel da SuperFrete em
-      // vez de criar uma segunda e pagar duas.
       throw new ShippingUnavailable(
-        `Etiqueta ${id} criada, mas o pagamento dela falhou (saldo na carteira?): ${
+        `A etiqueta ${providerShipmentId} foi criada, mas o pagamento dela falhou (saldo na carteira?): ${
           e instanceof Error ? e.message : e
         }`
       );
     }
-
-    // O rastreio só existe de `released` em diante — por isso a consulta vem
-    // DEPOIS do pagamento, e não junto da criação.
-    const info = await this.getShipmentStatus(id);
-
-    return {
-      providerShipmentId: id,
-      status: info.status,
-      trackingCode: info.trackingCode,
-      carrier: info.carrier,
-      labelUrl: null,
-    };
   }
 
   async getShipmentStatus(providerShipmentId: string): Promise<ShipmentStatus> {
