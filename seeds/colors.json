@@ -1,14 +1,13 @@
 {
-  "_nota": "Códigos vieram de fotos reais na pasta de marca (Drive) — mantidos exatamente. photo_url fica vazio até alguém importar essas fotos para um storage público; ver TODO abaixo. Nome de exibição não foi definido além do próprio código: não inventamos rótulo comercial (ex.: 'Castanho Escuro') sem confirmação do Francisco.",
-  "_todo": "importar do Drive as fotos de cada cor e preencher photo_url",
+  "_nota": "Códigos vieram de fotos reais na pasta de marca (Drive) — mantidos exatamente. photo_url aponta pra /media/cores/*.jpg (baixado do Drive em 25/08/2026, arquivo real, não gerado). Nome de exibição não foi definido além do próprio código: não inventamos rótulo comercial (ex.: 'Castanho Escuro') sem confirmação do Francisco.",
   "colors": [
-    { "code": "1b", "name": "1B", "hex_preview": null, "photo_url": "", "sort_order": 1, "is_active": true },
-    { "code": "2", "name": "2", "hex_preview": null, "photo_url": "", "sort_order": 2, "is_active": true },
-    { "code": "3", "name": "3", "hex_preview": null, "photo_url": "", "sort_order": 3, "is_active": true },
-    { "code": "3.10", "name": "3.10", "hex_preview": null, "photo_url": "", "sort_order": 4, "is_active": true },
-    { "code": "4", "name": "4", "hex_preview": null, "photo_url": "", "sort_order": 5, "is_active": true },
-    { "code": "5", "name": "5", "hex_preview": null, "photo_url": "", "sort_order": 6, "is_active": true },
-    { "code": "6", "name": "6", "hex_preview": null, "photo_url": "", "sort_order": 7, "is_active": true },
-    { "code": "7", "name": "7", "hex_preview": null, "photo_url": "", "sort_order": 8, "is_active": true }
+    { "code": "1b", "name": "1B", "hex_preview": null, "photo_url": "/media/cores/1b.jpg", "sort_order": 1, "is_active": true },
+    { "code": "2", "name": "2", "hex_preview": null, "photo_url": "/media/cores/2.jpg", "sort_order": 2, "is_active": true },
+    { "code": "3", "name": "3", "hex_preview": null, "photo_url": "/media/cores/3.jpg", "sort_order": 3, "is_active": true },
+    { "code": "3.10", "name": "3.10", "hex_preview": null, "photo_url": "/media/cores/3.10.jpg", "sort_order": 4, "is_active": true },
+    { "code": "4", "name": "4", "hex_preview": null, "photo_url": "/media/cores/4.jpg", "sort_order": 5, "is_active": true },
+    { "code": "5", "name": "5", "hex_preview": null, "photo_url": "/media/cores/5.jpg", "sort_order": 6, "is_active": true },
+    { "code": "6", "name": "6", "hex_preview": null, "photo_url": "/media/cores/6.jpg", "sort_order": 7, "is_active": true },
+    { "code": "7", "name": "7", "hex_preview": null, "photo_url": "/media/cores/7.jpg", "sort_order": 8, "is_active": true }
   ]
 }
