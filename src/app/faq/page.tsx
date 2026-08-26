@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { FAQ } from "@/components/ui/FAQ";
+import { Reveal } from "@/components/ui/Reveal";
+import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 
 // Página pública de FAQ — as perguntas vêm direto de faq_items via a policy
 // pública "public read faq" (is_visible = true, ver
@@ -16,18 +18,24 @@ export default async function FaqPage() {
     .order("sort_order");
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-12">
-      <div className="flex flex-col gap-2 text-center">
+    <main
+      className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 pb-12"
+      style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
+    >
+      <Reveal className="flex flex-col items-center gap-2 text-center">
+        <span className="eyebrow-ink">Dúvidas</span>
         <h1 className="font-display text-3xl text-ink">Perguntas frequentes</h1>
-      </div>
+      </Reveal>
 
-      <FAQ
-        items={(itens ?? []).map((item) => ({
-          id: item.id as string,
-          question: item.question as string,
-          answer: item.answer as string,
-        }))}
-      />
+      <Reveal>
+        <FAQ
+          items={(itens ?? []).map((item) => ({
+            id: item.id as string,
+            question: item.question as string,
+            answer: item.answer as string,
+          }))}
+        />
+      </Reveal>
     </main>
   );
 }

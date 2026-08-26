@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 import { Footer } from "@/components/ui/Footer";
+import { Header } from "@/components/ui/Header";
 import "./globals.css";
 
 // Fraunces: display serifado com itálico óptico, para headline e nome de
@@ -34,6 +35,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
       <body className="flex min-h-screen flex-col">
+        {/* Header é `fixed` (Header.tsx) — não entra no fluxo, então não
+            empurra o conteúdo sozinho. Cada página pública compensa com
+            padding-top próprio (HEADER_HEIGHT_PX), igual o hero da home já
+            fazia antes de o header existir. */}
+        <Header />
         <div className="flex-1">{children}</div>
         <Footer />
       </body>

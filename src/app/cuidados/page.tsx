@@ -5,6 +5,9 @@
 // blocos curtos, não um parágrafo corrido, porque é assim que a marca
 // passou o conteúdo — misturar tudo em um texto só inventaria transição
 // que ninguém escreveu.
+import { Reveal } from "@/components/ui/Reveal";
+import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+
 const BLOCOS = [
   {
     titulo: "Lavagem",
@@ -25,20 +28,26 @@ const BLOCOS = [
 
 export default function CuidadosPage() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-12">
-      <div className="flex flex-col gap-2 text-center">
+    <main
+      className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 pb-12"
+      style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
+    >
+      <Reveal className="flex flex-col items-center gap-2 text-center">
+        <span className="eyebrow-ink">Cuidados diários</span>
         <h1 className="font-display text-3xl text-ink">Cuidados com a prótese</h1>
         <p className="text-ink/70">
           Cuidados diários garantem mais durabilidade e beleza.
         </p>
-      </div>
+      </Reveal>
 
       <div className="flex flex-col gap-8">
-        {BLOCOS.map((bloco) => (
-          <section key={bloco.titulo} className="flex flex-col gap-2 border-t border-sand pt-6">
-            <h2 className="font-display text-xl text-ink">{bloco.titulo}</h2>
-            <p className="text-ink/80">{bloco.texto}</p>
-          </section>
+        {BLOCOS.map((bloco, i) => (
+          <Reveal key={bloco.titulo} delayMs={i * 80}>
+            <section className="flex flex-col gap-2 border-t border-sand pt-6">
+              <h2 className="font-display text-xl text-ink">{bloco.titulo}</h2>
+              <p className="text-ink/80">{bloco.texto}</p>
+            </section>
+          </Reveal>
         ))}
       </div>
     </main>

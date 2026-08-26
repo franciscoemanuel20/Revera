@@ -25,7 +25,7 @@ export function ProductCard({
   return (
     <Link
       href={`/produtos/${slug}`}
-      className="group flex flex-col gap-3 rounded-lg border border-sand p-3 transition-shadow hover:shadow-md"
+      className="group flex flex-col gap-3 rounded-lg border border-sand p-3 transition-shadow duration-300 hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
     >
       <div className="relative aspect-square w-full overflow-hidden rounded-md bg-sand">
         {imageUrl ? (
@@ -33,11 +33,11 @@ export function ProductCard({
             src={imageUrl}
             alt={name}
             fill
-            className="object-cover transition-transform group-hover:scale-105"
+            className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
           />
         ) : null}
         {isFeatured ? (
-          <span className="absolute left-2 top-2 rounded-full bg-gold px-2 py-1 text-xs font-semibold text-ink">
+          <span className="absolute left-2 top-2 rounded-full bg-gold-metal px-2 py-1 text-xs font-semibold text-ink">
             Destaque
           </span>
         ) : null}

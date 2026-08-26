@@ -16,5 +16,137 @@
   h3,
   h4 {
     font-family: var(--font-display);
+    /* Título quebrando "1 palavra órfã numa linha sozinha" é o tipo de
+       coisa que barateia uma página cara. `text-wrap: balance` já era
+       aplicado à mão em alguns títulos (classe `text-balance`) — subido
+       para a base porque é sempre a decisão certa em h1/h2/h3/h4 deste
+       site, não uma exceção pontual. Camada visual, 25/08/2026. */
+    text-wrap: balance;
+  }
+}
+
+/*
+ * Camada visual e de conversão — 25/08/2026.
+ *
+ * Utilitários abaixo existem para o dourado parar de ser uma cor chapada
+ * (bg-gold sozinho) e passar a ler como o metal da logo, e para dar um
+ * vocabulário comum de profundidade/revelação que os componentes de
+ * src/components/ui e as páginas em src/app usam. Ficam aqui (não em
+ * tokens.css) porque tokens.css é só variável — regra de fato (gradiente,
+ * sombra, transição) mora em @layer utilities, como o resto do Tailwind
+ * deste projeto.
+ */
+@layer utilities {
+  /* Degradê metálico dourado — depth-deep -> light -> deep num ângulo de
+     135deg, os mesmos três tons amostrados da logo (ver tokens.css). Usado
+     no botão primário e em qualquer detalhe que precise "ler como placa
+     dourada" em vez de adesivo colorido. O ângulo garante que sempre exista
+     um lado mais escuro e um mais claro visíveis mesmo em botões pequenos. */
+  .bg-gold-metal {
+    background-image: linear-gradient(
+      135deg,
+      var(--gold-deep) 0%,
+      var(--gold-light) 50%,
+      var(--gold-deep) 100%
+    );
+  }
+
+  /* Brilho sutil no hover do botão primário — box-shadow, não animação de
+     layout (nunca width/height/top, ver instrução da camada visual): só
+     paint, sem reflow. Ainda em texto preto por cima (Button.tsx mantém
+     isso), o brilho é só no fundo. */
+  .shadow-glow-gold {
+    box-shadow:
+      0 0 0 1px rgb(var(--gold-rgb) / 0.35),
+      0 6px 24px -6px rgb(var(--gold-rgb) / 0.55);
+  }
+
+  /* Filete de 1px para separar seções ESCURAS (bg-ink/ink-soft) — border-sand
+     (areia) desaparece sobre preto, então nunca usar borda cinza ali. Some
+     nas duas pontas para não parecer uma régua cortando a tela. */
+  .divider-gold {
+    height: 1px;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--gold-rgb) / 0.5),
+      transparent
+    );
+  }
+
+  /* "Olho" (eyebrow) — rótulo discreto acima de título de seção. É o gesto
+     mais barato que existe para uma página ler como "feita por estúdio":
+     maiúsculas, letter-spacing largo, dourado, pequeno. Nunca usar em corpo
+     de texto nem em CTA — é decoração tipográfica, não link.
+
+     SÓ para fundo ESCURO (--ink). Contraste medido (25/08/2026, ver conta
+     abaixo): mesmo o tom mais escuro dos três dourados da marca (--gold-deep)
+     dá só 2,93:1 sobre --paper — reprova o mínimo de 4,5:1 do WCAG AA para
+     texto pequeno. Sobre --ink o mesmo tom dá 6,38:1, aprova com folga. Por
+     isso existe .eyebrow-ink (mesma tipografia, cor sóbria) para usar em
+     qualquer seção de fundo claro — não force este aqui fora do --ink. */
+  .eyebrow {
+    @apply block text-xs font-semibold uppercase tracking-[0.2em] text-gold-deep;
+  }
+
+  /* Mesmo gesto tipográfico do .eyebrow, para seções de fundo CLARO
+     (--paper) — ver comentário acima sobre por que não dá para usar
+     dourado ali. text-ink/70 mede acima de 10:1 sobre --paper. */
+  .eyebrow-ink {
+    @apply block text-xs font-semibold uppercase tracking-[0.2em] text-ink/70;
+  }
+
+  /* Sombra realista para card sobre fundo CLARO — substitui shadow-md/lg
+     genérico do Tailwind (que empasta tudo num cinza uniforme). Duas
+     camadas: uma de contato bem rasa (o card "toca" o papel) e uma de
+     elevação larga e suave (a luz ambiente). */
+  .shadow-soft {
+    box-shadow:
+      0 1px 2px rgb(var(--ink-rgb) / 0.04),
+      0 12px 28px -12px rgb(var(--ink-rgb) / 0.18);
+  }
+
+  /* Superfície elevada sobre fundo ESCURO — cartão em cima de --ink usa
+     --ink-soft + borda quase invisível (branco 8%), nunca sombra preta
+     (que some no preto). Ver tokens.css sobre --ink-soft. */
+  .surface-elevada {
+    @apply border border-white/[0.08] bg-ink-soft;
+  }
+}
+
+/*
+ * Revelação ao rolar (componente Reveal, src/components/ui/Reveal.tsx).
+ * A classe só cuida do ESTADO visual (opacity/transform); quem decide
+ * QUANDO trocar de estado é o IntersectionObserver dentro do componente,
+ * não CSS puro — porque "revelar uma vez só ao entrar na tela" não dá para
+ * expressar só com media query.
+ *
+ * Só anima opacity/transform (nunca width/height/top): são as duas
+ * propriedades que o navegador consegue animar sem recalcular layout
+ * (compositor only), o que é a exigência de performance desta entrega.
+ */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 500ms ease-out,
+    transform 500ms ease-out;
+}
+
+.reveal[data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* prefers-reduced-motion: linha de defesa em CSS, redundante ao corte que
+   o próprio Reveal.tsx já faz em JS (ele nasce com data-visible="true" e
+   sem observer quando a preferência está ligada). Esta regra cobre o caso
+   do JS não ter rodado ainda (hidratação atrasada, script bloqueado) —
+   ninguém deve ficar preso num opacity:0 permanente por causa disso. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

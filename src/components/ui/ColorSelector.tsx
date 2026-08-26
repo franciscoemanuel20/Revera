@@ -34,7 +34,7 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
               aria-label={`Cor ${color.name}`}
               aria-pressed={selecionado}
               onClick={() => onChange(color.id)}
-              className={`relative h-11 w-11 overflow-hidden rounded-full border-2 transition-colors ${
+              className={`relative h-11 w-11 overflow-hidden rounded-full border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${
                 selecionado ? "border-gold" : "border-sand"
               }`}
               style={!color.photoUrl && color.hexPreview ? { backgroundColor: color.hexPreview } : undefined}

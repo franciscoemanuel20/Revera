@@ -31,6 +31,9 @@ export function Footer() {
 
   return (
     <footer className="mt-auto bg-ink px-6 py-10">
+      {/* filete dourado, não border-sand: --sand (areia) some sobre --ink
+          (ver globals.css, .divider-gold) — camada visual, 25/08/2026. */}
+      <div className="divider-gold mx-auto mb-10 w-full max-w-5xl" />
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6">
         {/* PNG com alfa reconstruído — ver comentário em src/app/page.tsx */}
         <Image
@@ -45,7 +48,7 @@ export function Footer() {
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm text-paper/70 hover:text-gold"
+              className="rounded text-sm text-paper/70 hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
             >
               {link.label}
             </Link>

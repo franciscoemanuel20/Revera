@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/Button";
 import { ColorSelector, type ColorOption } from "@/components/ui/ColorSelector";
 import { Price } from "@/components/ui/Price";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
+import { Reveal } from "@/components/ui/Reveal";
 import { TrustBar } from "@/components/ui/TrustBar";
+import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { applyQuantityDiscount, type QuantityDiscountRule } from "@/lib/pricing/discount";
 import { formatarBRL } from "@/lib/format/money";
 
@@ -32,9 +34,21 @@ export interface ProdutoInterativoProps {
   discountRules: Array<QuantityDiscountRule & { label: string | null }>;
 }
 
+// As duas fotos de close reais (public/media/hero) — hoje é sempre este par
+// fixo, para qualquer produto, porque só existe uma sessão de fotos feita
+// (ver seeds/products.json). Vira galeria de verdade (por produto, no
+// banco) quando existir mais de uma sessão — até lá, hard-code aqui é mais
+// honesto que inventar um campo `gallery_urls` que nada preenche ainda.
+function fotosDoProduto(name: string) {
+  return [
+    { src: "/media/hero/produto-close-1.jpeg", alt: `Close da base ${name}` },
+    { src: "/media/hero/produto-close-2.jpeg", alt: `Detalhe da linha frontal — ${name}` },
+  ];
+}
+
 // Ilha de interatividade da página de produto — a página em si (page.tsx) é
 // server component (busca no Supabase); aqui só vive o estado de UI
-// (cor/quantidade selecionada), mesmo padrão do ProductForm do admin.
+// (cor/quantidade/imagem selecionada), mesmo padrão do ProductForm do admin.
 //
 // Variante x cor: hoje (25/08/2026) a Micropele tem uma única variante
 // "genérica" (color_id null, ver seeds/products.json) — nenhuma cor tem
@@ -51,6 +65,13 @@ export function ProdutoInterativo({
   discountRules,
 }: ProdutoInterativoProps) {
   const router = useRouter();
+
+  const fotos = useMemo(() => fotosDoProduto(name), [name]);
+  const [fotoAtivaIndex, setFotoAtivaIndex] = useState(0);
+  // noUncheckedIndexedAccess (tsconfig) trata fotos[i] como possivelmente
+  // undefined — cai para a primeira foto se o índice guardado no estado
+  // sair da faixa por algum motivo (não deveria, mas o tipo não sabe disso).
+  const fotoAtiva = fotos[fotoAtivaIndex] ?? fotos[0]!;
 
   const variantePorCor = useMemo(() => {
     const mapa = new Map<string, VariantData>();
@@ -76,92 +97,144 @@ export function ProdutoInterativo({
     : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 py-12">
-      <div className="grid gap-8 sm:grid-cols-2">
-        <div className="flex flex-col gap-3">
-          <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand">
+    <main
+      className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 pb-16"
+      style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
+    >
+      <div className="grid gap-8 sm:grid-cols-2 lg:items-start">
+        {/* Galeria — miniatura clicável troca a foto principal; hover na
+            foto principal dá o leve zoom (scale 1.03) pedido para fotos de
+            produto/cor, dentro de container overflow-hidden (nunca anima
+            width/height, só transform). */}
+        <Reveal className="flex flex-col gap-3">
+          <div className="group relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand">
             <Image
-              src="/media/hero/produto-close-1.jpeg"
-              alt={`Close da base ${name}`}
+              src={fotoAtiva.src}
+              alt={fotoAtiva.alt}
               fill
               sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover"
+              className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
               priority
             />
           </div>
-          <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand">
-            <Image
-              src="/media/hero/produto-close-2.jpeg"
-              alt={`Detalhe da linha frontal — ${name}`}
-              fill
-              sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <h1 className="font-display text-3xl text-ink">{name}</h1>
-            {description ? <p className="text-ink/80">{description}</p> : null}
-            {baseThicknessMm != null ? (
-              <p className="text-sm text-ink/60">
-                Espessura da base: {baseThicknessMm.toLocaleString("pt-BR")}mm
-              </p>
-            ) : null}
-          </div>
-
-          {varianteSelecionada ? (
-            <Price
-              cents={resultadoDesconto!.unitPriceCents}
-              compareAtCents={varianteSelecionada.compareAtPriceCents}
-            />
-          ) : (
-            <p className="text-ink/60">
-              Preço em definição — em breve disponível para compra.
-            </p>
-          )}
-
-          {colors.length > 0 ? (
-            <ColorSelector
-              colors={colors}
-              selectedId={corSelecionadaId}
-              onChange={setCorSelecionadaId}
-              onNeedHelp={() => router.push("/cores#ajuda")}
-            />
+          {fotos.length > 1 ? (
+            <div className="flex gap-2">
+              {fotos.map((foto, i) => (
+                <button
+                  key={foto.src}
+                  type="button"
+                  aria-label={`Ver foto ${i + 1} de ${fotos.length}`}
+                  aria-pressed={fotoAtivaIndex === i}
+                  onClick={() => setFotoAtivaIndex(i)}
+                  className={`relative aspect-square w-16 shrink-0 overflow-hidden rounded-md border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${
+                    fotoAtivaIndex === i ? "border-gold" : "border-sand"
+                  }`}
+                >
+                  <Image src={foto.src} alt="" fill className="object-cover" />
+                </button>
+              ))}
+            </div>
           ) : null}
+        </Reveal>
 
-          <QuantitySelector value={quantidade} onChange={setQuantidade} />
+        {/* Painel de compra — sticky no desktop (lg:sticky), logo abaixo do
+            header fixo (top = altura do header + respiro). No mobile segue
+            no fluxo normal, como já era antes desta entrega. O elemento
+            sticky é ESTE div de fora; o Reveal fica por dentro só cuidando
+            do fade — sticky aninhado em dois níveis se comporta de forma
+            imprevisível entre navegadores. */}
+        <div className="lg:sticky lg:self-start" style={{ top: HEADER_HEIGHT_PX + 24 }}>
+          <Reveal delayMs={100} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <span className="eyebrow-ink">Reverá</span>
+              <h1 className="font-display text-3xl text-ink">{name}</h1>
+              {description ? <p className="text-ink/80">{description}</p> : null}
+              {baseThicknessMm != null ? (
+                <p className="text-sm text-ink/60">
+                  Espessura da base: {baseThicknessMm.toLocaleString("pt-BR")}mm
+                </p>
+              ) : null}
+            </div>
 
-          {discountRules.length > 0 && varianteSelecionada ? (
-            <ul className="flex flex-col gap-1 text-sm text-ink/70">
-              {discountRules.map((regra) => (
-                <li key={regra.minQty}>
-                  {regra.label ? `${regra.label}: ` : `A partir de ${regra.minQty} unidades: `}
-                  {formatarBRL(
-                    applyQuantityDiscount(
+            {varianteSelecionada ? (
+              <Price
+                cents={resultadoDesconto!.unitPriceCents}
+                compareAtCents={varianteSelecionada.compareAtPriceCents}
+              />
+            ) : (
+              <p className="text-ink/60">
+                Preço em definição — em breve disponível para compra.
+              </p>
+            )}
+
+            {colors.length > 0 ? (
+              <ColorSelector
+                colors={colors}
+                selectedId={corSelecionadaId}
+                onChange={setCorSelecionadaId}
+                onNeedHelp={() => router.push("/cores#ajuda")}
+              />
+            ) : null}
+
+            <QuantitySelector value={quantidade} onChange={setQuantidade} />
+
+            {/* Degraus de desconto — só renderiza se existir regra
+                cadastrada de verdade (discountRules vem do banco, ver
+                page.tsx); nenhum valor aqui é inventado. A faixa que se
+                aplica à quantidade atual ganha borda dourada + o quanto se
+                economiza em destaque, para a diferença ficar óbvia sem
+                precisar fazer conta. */}
+            {discountRules.length > 0 && varianteSelecionada ? (
+              <div className="flex flex-col gap-2">
+                <span className="eyebrow-ink">Comprando mais, o preço cai</span>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {discountRules.map((regra) => {
+                    const resultadoFaixa = applyQuantityDiscount(
                       varianteSelecionada.priceCents,
                       regra.minQty,
                       discountRules
-                    ).unitPriceCents
-                  )}{" "}
-                  cada
-                </li>
-              ))}
-            </ul>
-          ) : null}
+                    );
+                    // discountCents já vem calculado pela mesma função pura
+                    // que decide o preço (src/lib/pricing/discount.ts) — não
+                    // recalcula na mão aqui, para nunca divergir dela.
+                    const economiaCents = resultadoFaixa.discountCents;
+                    const faixaAtiva = resultadoDesconto?.appliedRule?.minQty === regra.minQty;
 
-          <div className="flex flex-col gap-2">
-            <Button size="lg" disabled title="Em breve">
-              Comprar agora — Em breve
-            </Button>
-            <p className="text-xs text-ink/50">
-              A compra pelo site ainda não está disponível — esta é a página
-              de apresentação do produto.
-            </p>
-          </div>
+                    return (
+                      <div
+                        key={regra.minQty}
+                        className={`rounded-lg border p-3 text-sm transition-colors ${
+                          faixaAtiva ? "border-gold bg-gold/5" : "border-sand"
+                        }`}
+                      >
+                        <p className="font-semibold text-ink">
+                          {regra.label ?? `A partir de ${regra.minQty} unidades`}
+                        </p>
+                        <p className="text-ink/70">{formatarBRL(resultadoFaixa.unitPriceCents)} cada</p>
+                        {economiaCents > 0 ? (
+                          <p className="mt-1 text-xs font-semibold text-gold-deep">
+                            Economize {formatarBRL(economiaCents)}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
-          <TrustBar />
+            <div className="flex flex-col gap-2">
+              <Button size="lg" disabled title="Em breve">
+                Comprar agora — Em breve
+              </Button>
+              <p className="text-xs text-ink/50">
+                A compra pelo site ainda não está disponível — esta é a página
+                de apresentação do produto.
+              </p>
+            </div>
+
+            <TrustBar />
+          </Reveal>
         </div>
       </div>
     </main>
