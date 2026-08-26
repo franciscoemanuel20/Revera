@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
+import { Footer } from "@/components/ui/Footer";
 import "./globals.css";
 
 // Fraunces: display serifado com itálico óptico, para headline e nome de
@@ -32,7 +33,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
-      <body>{children}</body>
+      <body className="flex min-h-screen flex-col">
+        <div className="flex-1">{children}</div>
+        <Footer />
+      </body>
     </html>
   );
 }
