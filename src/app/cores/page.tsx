@@ -2,6 +2,7 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+import { ColorHelpForm } from "./ColorHelpForm";
 
 // Página pública de cores — as 8 fotos reais baixadas do Drive em
 // 25/08/2026 (ver seeds/colors.json), servidas via colors.photo_url, que já
@@ -58,6 +59,13 @@ export default async function CoresPage() {
           Envie uma foto do seu cabelo natural e nossa equipe indica a cor
           mais parecida entre as opções disponíveis.
         </p>
+        {/* Ferramenta adicionada em 26/08/2026 — o texto acima já existia
+            (era só descrição, sem formulário de fato); ColorHelpForm.tsx
+            grava em color_help_requests + bucket privado color-help (ver
+            actions.ts e a migration 00000000000004, ainda não aplicada). */}
+        <div className="pt-4">
+          <ColorHelpForm />
+        </div>
       </section>
     </main>
   );

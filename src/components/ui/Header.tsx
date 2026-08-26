@@ -13,6 +13,29 @@ const LINKS = [
   { href: "/faq", label: "FAQ" },
 ];
 
+// Três páginas novas da auditoria de 26/08/2026 (explicação, objeção de
+// naturalidade, confiança) agrupadas num dropdown "Conheça" — 4 + 3 + 1
+// (Para profissionais) link soltos ficariam 8 itens numa linha só, e o
+// container tem max-w-5xl; testado de olho contra a largura da logo +
+// botão de menu mobile, não cabe sem quebrar. Agrupar é o que a missão
+// pediu ("se o menu ficar grande demais, agrupe com bom senso"), sem tirar
+// nenhum link que já existia.
+const LINKS_CONHECA = [
+  { href: "/sobre-as-proteses", label: "Sobre as próteses" },
+  { href: "/naturalidade", label: "Naturalidade" },
+  { href: "/por-que-revera", label: "Por que Reverá" },
+];
+
+// Fora do dropdown, como os outros: é a página que capta lead de um público
+// diferente (profissional, não cliente final) — enterrar num submenu de
+// conteúdo institucional esconderia justamente o link que mais importa
+// para esse público.
+const LINK_PROFISSIONAIS = { href: "/para-profissionais", label: "Para profissionais" };
+
+// Lista achatada para o menu mobile (details/summary vertical, sem
+// necessidade de segundo nível — ver por quê no <details> lá embaixo).
+const LINKS_MOBILE = [...LINKS, ...LINKS_CONHECA, LINK_PROFISSIONAIS];
+
 /**
  * Header fixo — camada visual e de conversão, 25/08/2026.
  *
@@ -89,12 +112,48 @@ export function Header() {
               {link.label}
             </Link>
           ))}
+
+          {/* Dropdown "Conheça" — mesmo padrão <details>/<summary> do menu
+              mobile logo abaixo, só que inline. Sem JS extra: <details>
+              fecha ao clicar fora sozinho no Safari/Chrome recentes; onde
+              não fecha, navegar por um dos links já desmonta o menu de
+              qualquer forma. */}
+          <details className="relative">
+            <summary
+              className="flex cursor-pointer list-none items-center gap-1 text-sm text-paper/85 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold [&::-webkit-details-marker]:hidden"
+            >
+              Conheça
+              <span aria-hidden="true" className="text-xs">▾</span>
+            </summary>
+            <nav className="surface-elevada absolute left-1/2 top-full mt-2 flex w-56 -translate-x-1/2 flex-col gap-1 rounded-md p-2 shadow-glow-gold">
+              {LINKS_CONHECA.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="min-h-toque rounded px-3 py-2 text-sm text-paper/90 transition-colors hover:bg-ink hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          </details>
+
+          <Link
+            href={LINK_PROFISSIONAIS.href}
+            className="text-sm text-paper/85 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+          >
+            {LINK_PROFISSIONAIS.label}
+          </Link>
         </nav>
 
         {/* Mobile: <details>/<summary> em vez de drawer — não há gesto de
             "arrastar para fechar" nem trava de scroll do body, mas cobre o
-            caso (abrir/fechar uma lista de 4 links) sem JS extra nem
-            biblioteca de menu. */}
+            caso (abrir/fechar uma lista de links) sem JS extra nem
+            biblioteca de menu. Lista achatada (LINKS_MOBILE): no vertical
+            não existe a pressão de largura que motivou o dropdown
+            "Conheça" no desktop, então aqui os 8 links vão soltos, na
+            mesma ordem de antes + os novos no fim — w-44 virou w-56 só
+            porque "Sobre as próteses" não cabia numa linha. */}
         <details className="relative sm:hidden">
           <summary
             aria-label="Abrir menu"
@@ -104,8 +163,8 @@ export function Header() {
               ≡
             </span>
           </summary>
-          <nav className="surface-elevada absolute right-0 top-full mt-2 flex w-44 flex-col gap-1 rounded-md p-2 shadow-glow-gold">
-            {LINKS.map((link) => (
+          <nav className="surface-elevada absolute right-0 top-full mt-2 flex w-56 flex-col gap-1 rounded-md p-2 shadow-glow-gold">
+            {LINKS_MOBILE.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
