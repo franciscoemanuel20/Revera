@@ -1,50 +1,67 @@
-import type { PaymentCharge, PaymentProvider, PaymentResult } from "./provider";
+import type {
+  ConfirmedPayment,
+  PaymentCharge,
+  PaymentProvider,
+  PaymentResult,
+  WebhookHint,
+} from "./provider";
 
 /**
- * Provider MOCK — nunca cobra ninguém de verdade, nunca fala com rede
- * nenhuma. Usado quando PAYMENT_PROVIDER=mock (padrão enquanto o
- * InfinitePay não for decidido, ver .env.example).
+ * Provider MOCK — nunca cobra ninguém, nunca fala com rede nenhuma.
+ * Padrão enquanto o gateway real não está configurado (PAYMENT_PROVIDER=mock).
  *
- * Determinístico de propósito: o id do pagamento é derivado do orderId
- * (mesmo pedido -> mesmo id sempre), e o status final é sempre "approved"
- * depois de "processado". Isso permite escrever teste sem mock de rede e
- * sem estado global escondido.
+ * Serve para exercitar o fluxo inteiro (checkout -> pagamento -> webhook ->
+ * pedido pago -> Purchase) sem dinheiro envolvido, inclusive em teste
+ * automatizado. Determinístico de propósito: mesmo pedido, mesmo id.
+ *
+ * Segue o MESMO contrato do provider real, incluindo a reconfirmação por
+ * `confirmPayment` — assim o caminho exercitado em desenvolvimento é o
+ * mesmo de produção, e não um atalho que esconde bug.
  */
 export class MockPaymentProvider implements PaymentProvider {
+  readonly name = "mock";
+
   async createCharge(charge: PaymentCharge): Promise<PaymentResult> {
-    const providerPaymentId = `mock_${charge.orderId}`;
-
     return {
-      providerPaymentId,
-      checkoutUrl: `/checkout/mock?orderId=${encodeURIComponent(charge.orderId)}`,
-      // MOCK aprova sempre — não existe recusa/estorno de verdade aqui.
-      // Fluxo de erro real fica para quando o provider de verdade existir.
-      status: "approved",
+      providerPaymentId: `mock_${charge.orderId}`,
+      // Página local que simula a tela do gateway (o "pague aqui").
+      checkoutUrl: `/checkout/simulado?pedido=${encodeURIComponent(charge.orderId)}`,
     };
   }
 
-  verifyWebhookSignature(_rawBody: string, _signatureHeader: string): boolean {
-    // Não há segredo nenhum para validar em modo mock — sempre "válido".
-    return true;
-  }
+  parseWebhookHint(rawBody: string): WebhookHint | null {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      return null;
+    }
+    const p = parsed as { order_nsu?: unknown; transaction_nsu?: unknown };
+    if (typeof p.order_nsu !== "string" || p.order_nsu.length === 0) return null;
 
-  parseWebhookEvent(rawBody: string): {
-    providerEventId: string;
-    providerPaymentId: string;
-    status: PaymentResult["status"];
-  } {
-    // Formato do corpo é o que o MOCK escolhe emitir (não segue formato do
-    // InfinitePay — quando o adapter real existir, ele parseia o formato
-    // deles, não este).
-    const parsed = JSON.parse(rawBody) as {
-      orderId: string;
-      eventId?: string;
-    };
+    const transactionId =
+      typeof p.transaction_nsu === "string"
+        ? p.transaction_nsu
+        : `mock_tx_${p.order_nsu}`;
 
     return {
-      providerEventId: parsed.eventId ?? `mock_evt_${parsed.orderId}`,
-      providerPaymentId: `mock_${parsed.orderId}`,
-      status: "approved",
+      orderId: p.order_nsu,
+      transactionId,
+      invoiceSlug: null,
+      eventId: transactionId,
+    };
+  }
+
+  async confirmPayment(hint: WebhookHint): Promise<ConfirmedPayment> {
+    // O mock "confirma" sempre. O valor volta null de propósito: quem chama
+    // trata null como "gateway não informou valor" e usa o total do pedido,
+    // então o caminho de conferência de valor também é exercitado.
+    return {
+      paid: true,
+      paidAmountCents: null,
+      method: "mock",
+      installments: 1,
+      raw: { mock: true, orderId: hint.orderId },
     };
   }
 }
