@@ -92,11 +92,24 @@ try {
   process.exit(1);
 }
 
-// Confere o que passou a existir, em vez de confiar no "deu certo".
-const { rows: policies } = await cliente.query(
-  `select count(*)::int as n from pg_policies
-   where policyname like 'admin manage%' or policyname like 'anon insert color-help%'`
+/**
+ * Confere o que passou a existir, em vez de confiar no "não deu erro".
+ *
+ * Por NOME, não por contagem. A primeira versão disto contava policies com
+ * `like 'admin manage%'` e comparava com 20 — e acusou 27, porque a
+ * migration 2 (produtos, cores, tamanhos) já tinha criado sete com nomes
+ * parecidos. A contagem estava certa; a expectativa é que era errada.
+ * Conferir por nome não tem esse problema: pergunta exatamente pelas que
+ * ESTE arquivo cria.
+ */
+const esperadas = [...sql.matchAll(/create policy\s+"([^"]+)"/g)].map((m) => m[1]);
+const { rows: encontradas } = await cliente.query(
+  "select policyname from pg_policies where policyname = any($1::text[])",
+  [esperadas]
 );
+const nomesEncontrados = new Set(encontradas.map((r) => r.policyname));
+const faltando = esperadas.filter((n) => !nomesEncontrados.has(n));
+const policies = [{ n: esperadas.length - faltando.length }];
 const { rows: indices } = await cliente.query(
   `select count(*)::int as n from pg_indexes where indexname = 'shipments_order_id_unico'`
 );
@@ -104,12 +117,16 @@ const { rows: baldes } = await cliente.query(
   `select count(*)::int as n from storage.buckets where id = 'color-help'`
 );
 
-console.log(`  policies de admin/upload:      ${policies[0].n}  (esperado 20)`);
-console.log(`  trava de etiqueta duplicada:   ${indices[0].n}   (esperado 1)`);
-console.log(`  balde privado das fotos:       ${baldes[0].n}   (esperado 1)`);
+console.log(
+  `  policies deste arquivo:        ${policies[0].n}/${esperadas.length}`
+);
+console.log(`  trava de etiqueta duplicada:   ${indices[0].n}/1`);
+console.log(`  balde privado das fotos:       ${baldes[0].n}/1`);
+if (faltando.length > 0) {
+  console.log(`\n  não encontradas: ${faltando.join(", ")}`);
+}
 
-const ok =
-  policies[0].n === 20 && indices[0].n === 1 && baldes[0].n === 1;
+const ok = faltando.length === 0 && indices[0].n === 1 && baldes[0].n === 1;
 console.log(ok ? "\nTudo no lugar.\n" : "\nAlgo não bateu — confira acima.\n");
 
 await cliente.end();
