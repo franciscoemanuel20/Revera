@@ -70,6 +70,15 @@ export function CheckoutForm() {
   const [enviando, setEnviando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [avisoCep, setAvisoCep] = useState<string | null>(null);
+  // null = ainda não cotado (ou cotação falhou). NÃO é 0 — mostrar R$ 0,00
+  // pareceria frete grátis, que é promessa que ninguém fez.
+  const [frete, setFrete] = useState<{
+    priceCents: number;
+    serviceName: string;
+    etaDays: number;
+  } | null>(null);
+  const [cotandoFrete, setCotandoFrete] = useState(false);
+  const [avisoFrete, setAvisoFrete] = useState<string | null>(null);
 
   function atualizarCampo<K extends keyof FormState>(campo: K, valor: string) {
     setCampos((atual) => ({ ...atual, [campo]: valor }));
@@ -118,6 +127,61 @@ export function CheckoutForm() {
       setAvisoCep("Não foi possível consultar o CEP agora — preencha o endereço manualmente.");
     } finally {
       setBuscandoCep(false);
+    }
+  }
+
+  /**
+   * Cota o frete assim que o CEP fica completo.
+   *
+   * O valor mostrado aqui é INFORMATIVO. Quem decide o que será cobrado é o
+   * servidor, na criação do pedido — esta chamada existe para o cliente não
+   * ser surpreendido por um total maior na tela do gateway.
+   *
+   * Só o CEP sobe: quantidade e valor saem do carrinho no servidor (ver
+   * src/app/api/frete/route.ts).
+   */
+  async function cotarFrete(cepDigitado: string) {
+    const digitos = cepDigitado.replace(/\D/g, "");
+    if (digitos.length !== 8 || cart.items.length === 0) {
+      setFrete(null);
+      return;
+    }
+
+    setCotandoFrete(true);
+    setAvisoFrete(null);
+    try {
+      const r = await fetch("/api/frete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cep: digitos }),
+      });
+      const dados = (await r.json()) as {
+        disponivel?: boolean;
+        priceCents?: number;
+        serviceName?: string;
+        etaDays?: number;
+      };
+
+      if (!r.ok || !dados.disponivel || typeof dados.priceCents !== "number") {
+        setFrete(null);
+        setAvisoFrete(
+          "Não conseguimos calcular o frete agora. Você pode continuar — combinamos o envio depois da confirmação."
+        );
+        return;
+      }
+
+      setFrete({
+        priceCents: dados.priceCents,
+        serviceName: dados.serviceName ?? "",
+        etaDays: dados.etaDays ?? 0,
+      });
+    } catch {
+      setFrete(null);
+      setAvisoFrete(
+        "Não conseguimos calcular o frete agora. Você pode continuar — combinamos o envio depois da confirmação."
+      );
+    } finally {
+      setCotandoFrete(false);
     }
   }
 
@@ -220,7 +284,13 @@ export function CheckoutForm() {
 
         <FormField
           label="CEP"
-          hint={buscandoCep ? "Buscando endereço…" : avisoCep ?? "Preenche rua, bairro, cidade e UF automaticamente."}
+          hint={
+            buscandoCep
+              ? "Buscando endereço…"
+              : cotandoFrete
+                ? "Calculando o frete…"
+                : avisoCep ?? "Preenche rua, bairro, cidade e UF — e calcula o frete."
+          }
           error={erros.cep}
         >
           {(props) => (
@@ -229,7 +299,10 @@ export function CheckoutForm() {
               required
               value={campos.cep}
               onChange={(e) => atualizarCampo("cep", formatarCEP(e.target.value))}
-              onBlur={(e) => void buscarEndereco(e.target.value)}
+              onBlur={(e) => {
+                void buscarEndereco(e.target.value);
+                void cotarFrete(e.target.value);
+              }}
               className={inputClass}
               inputMode="numeric"
               maxLength={9}
@@ -319,12 +392,31 @@ export function CheckoutForm() {
         </div>
       </section>
 
+      {/* O total soma o frete só quando ele existe de verdade. Enquanto não
+          existir, o resumo mostra "calculado ao preencher o CEP" — nunca
+          R$ 0,00, que o cliente leria como frete grátis. */}
       <CheckoutSummary
         subtotalCents={cart.subtotalSemDescontoCents}
         discountCents={cart.discountCents}
-        shippingCents={null}
-        totalCents={cart.totalCents}
+        shippingCents={frete?.priceCents ?? null}
+        totalCents={cart.totalCents + (frete?.priceCents ?? 0)}
+        shippingHint={cotandoFrete ? "calculando…" : "preencha o CEP acima"}
       />
+
+      {frete ? (
+        <p className="-mt-2 text-sm text-ink/60">
+          {frete.serviceName}
+          {frete.etaDays > 0
+            ? ` — chega em cerca de ${frete.etaDays} ${frete.etaDays === 1 ? "dia útil" : "dias úteis"} após a postagem.`
+            : "."}
+        </p>
+      ) : null}
+
+      {avisoFrete ? (
+        <p className="-mt-2 text-sm text-ink/70" role="status">
+          {avisoFrete}
+        </p>
+      ) : null}
 
       <Button type="submit" size="lg" disabled={enviando || cart.items.length === 0}>
         {enviando ? "Enviando…" : "Finalizar pedido"}

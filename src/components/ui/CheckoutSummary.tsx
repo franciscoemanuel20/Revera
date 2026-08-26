@@ -3,10 +3,14 @@ import { Price } from "./Price";
 export interface CheckoutSummaryProps {
   subtotalCents: number;
   discountCents: number;
-  // null = frete ainda não calculado (nenhuma integração de frete existe
-  // neste escopo, ver src/lib/shipping) — mostra texto, nunca um valor
-  // inventado (nem 0, que pareceria "frete grátis"). 26/08/2026.
+  // null = frete ainda não cotado (CEP em branco, ou a transportadora não
+  // respondeu) — mostra texto, nunca um valor inventado. Zero está proibido
+  // aqui de propósito: "R$ 0,00" no lugar de "ainda não calculado" é uma
+  // promessa de frete grátis que ninguém fez. 26/08/2026.
   shippingCents: number | null;
+  // Onde este resumo aparece, o frete se resolve de um jeito diferente: no
+  // checkout basta preencher o CEP; no carrinho ainda não há endereço.
+  shippingHint?: string;
   totalCents: number;
 }
 
@@ -19,6 +23,7 @@ export function CheckoutSummary({
   discountCents,
   shippingCents,
   totalCents,
+  shippingHint = "calculado na próxima etapa",
 }: CheckoutSummaryProps) {
   return (
     <dl className="flex flex-col gap-2 rounded-lg border border-sand p-4">
@@ -36,7 +41,7 @@ export function CheckoutSummary({
       ) : null}
       <div className="flex justify-between text-ink/80">
         <dt>Frete</dt>
-        <dd>{shippingCents == null ? <span className="text-ink/60">calculado na próxima etapa</span> : <Price cents={shippingCents} />}</dd>
+        <dd>{shippingCents == null ? <span className="text-ink/60">{shippingHint}</span> : <Price cents={shippingCents} />}</dd>
       </div>
       {/* aria-live: o total muda quando quantidade/desconto mudam antes do
           envio — quem usa leitor de tela precisa ouvir isso sem navegar até

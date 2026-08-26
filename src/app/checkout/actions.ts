@@ -48,6 +48,7 @@ import { redirect } from "next/navigation";
 import { lerCarrinhoCompleto, marcarCarrinhoConvertido } from "@/lib/cart/store";
 import { limparTokenDoCookie } from "@/lib/cart/token";
 import { createAdminClient } from "@/lib/supabase/server";
+import { cotarFrete } from "@/lib/shipping/cotar";
 import { checkoutSchema } from "./schema";
 
 export interface CheckoutResult {
@@ -119,12 +120,34 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
 
   const subtotalCents = carrinho.subtotalSemDescontoCents;
   const discountCents = carrinho.discountCents;
-  // Frete é assunto de outra etapa (fora deste escopo, ver
-  // src/lib/shipping) — nasce 0 porque a coluna não aceita null, NÃO
-  // porque o frete é grátis. A UI (CheckoutSummary/CarrinhoPageClient)
-  // mostra "calculado na próxima etapa", nunca R$ 0,00, enquanto isto não
-  // mudar.
-  const shippingCents = 0;
+
+  /**
+   * FRETE — cotado AQUI, no servidor, com o CEP que acabou de ser validado.
+   *
+   * Este é o único momento em que o frete pode ser calculado com honestidade:
+   * o endereço existe, o carrinho existe, e o preço ainda não foi congelado.
+   * Depois disto o valor vira `shipping_cents` no pedido e não muda mais —
+   * nem na hora de despachar. Recotar no despacho daria outro número, e a
+   * diferença sairia do bolso de alguém sem ninguém ter combinado.
+   *
+   * O valor declarado é o subtotal ANTES do desconto: é quanto a peça vale
+   * para repor, que é o que o seguro precisa cobrir. Um desconto promocional
+   * não torna a prótese mais barata de fabricar.
+   *
+   * Se a SuperFrete não responder, a venda ACONTECE do mesmo jeito, com
+   * frete 0 e o motivo gravado em shipping_quotes. A assimetria decide:
+   * perder uma venda de R$ 1.600 porque uma API de terceiro piscou é muito
+   * pior que a operação absorver ~R$ 25 de frete num pedido — e o registro
+   * garante que ninguém descubra isso pela fatura, três meses depois.
+   */
+  const quantidadeTotal = carrinho.items.reduce((soma, i) => soma + i.quantity, 0);
+  const cotacao = await cotarFrete({
+    cepDestino: dados.cep,
+    valorDeclaradoCents: subtotalCents,
+    quantidade: quantidadeTotal,
+  });
+
+  const shippingCents = cotacao.escolhida?.priceCents ?? 0;
   const totalCents = subtotalCents - discountCents + shippingCents;
 
   const orderId = randomUUID();
@@ -176,6 +199,45 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
   const { error: erroItens } = await admin.from("order_items").insert(itensPayload);
   if (erroItens) {
     return { erro: "Não foi possível registrar os itens do pedido. Tente novamente." };
+  }
+
+  /**
+   * O RECIBO DA COTAÇÃO.
+   *
+   * Grava o que a transportadora respondeu no instante em que este pedido foi
+   * fechado — inclusive quando ela NÃO respondeu. Serve a três perguntas que
+   * aparecem semanas depois e hoje não teriam resposta:
+   *
+   *   "por que este pedido saiu com frete 0?"       → `indisponivel` no raw
+   *   "por que pagamos Loggi e não Jadlog?"          → as opções recusadas
+   *   "com qual serviço este cliente pagou?"         → `service_id` no raw
+   *
+   * A última não é curiosidade: a etiqueta TEM que ser emitida no mesmo
+   * serviço que o cliente pagou, e é daqui que o despacho lê isso.
+   *
+   * Falha de gravação não derruba o pedido — o pedido já existe e já tem
+   * total. Perder o recibo é ruim; perder a venda por causa do recibo seria
+   * pior.
+   */
+  const { error: erroCotacao } = await admin.from("shipping_quotes").insert({
+    id: randomUUID(),
+    order_id: orderId,
+    cart_id: carrinho.cartId,
+    service_name: cotacao.escolhida?.serviceName ?? null,
+    carrier: cotacao.escolhida?.carrier ?? null,
+    price_cents: cotacao.escolhida?.priceCents ?? null,
+    eta_days: cotacao.escolhida?.etaDays ?? null,
+    raw_response: {
+      service_id: cotacao.escolhida?.serviceId ?? null,
+      indisponivel: cotacao.indisponivel,
+      cep_destino: dados.cep,
+      quantidade: quantidadeTotal,
+      valor_declarado_cents: subtotalCents,
+      opcoes: cotacao.opcoes,
+    },
+  });
+  if (erroCotacao) {
+    console.error("[checkout] cotação não gravada para", orderNumber, erroCotacao);
   }
 
   await marcarCarrinhoConvertido(carrinho.cartId);

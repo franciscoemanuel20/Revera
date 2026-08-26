@@ -35,7 +35,9 @@ export default async function PagamentoPage({
 
   const { data: pedido } = await supabase
     .from("orders")
-    .select("id, order_number, status, total_cents, access_token, customer_id")
+    .select(
+      "id, order_number, status, total_cents, shipping_cents, access_token, customer_id"
+    )
     .eq("access_token", accessToken)
     .maybeSingle();
 
@@ -77,13 +79,32 @@ export default async function PagamentoPage({
       redirectUrl: `${base}/pedido/${accessToken}`,
       // PORTA 1: o aviso do gateway. Segredo no caminho, nunca em query.
       webhookUrl: urlDoWebhook(base),
-      items: (itens ?? []).map((item) => ({
-        description: [item.product_name_snapshot, item.variant_label_snapshot]
-          .filter(Boolean)
-          .join(" — "),
-        quantity: item.quantity as number,
-        priceCents: item.unit_price_cents as number,
-      })),
+      // O frete entra como LINHA, não fica embutido no preço da peça.
+      //
+      // Sem isso as linhas somariam menos que `amountCents` e a tela do
+      // gateway mostraria um total que não bate com o que está listado — o
+      // tipo de detalhe que faz a pessoa desconfiar e abandonar bem no fim.
+      // (Desconto, quando houver, ainda não tem linha aqui: hoje nenhum
+      // pedido nasce com desconto. No dia em que nascer, esta soma volta a
+      // divergir e o lugar de corrigir é este.)
+      items: [
+        ...(itens ?? []).map((item) => ({
+          description: [item.product_name_snapshot, item.variant_label_snapshot]
+            .filter(Boolean)
+            .join(" — "),
+          quantity: item.quantity as number,
+          priceCents: item.unit_price_cents as number,
+        })),
+        ...(pedido.shipping_cents > 0
+          ? [
+              {
+                description: "Frete",
+                quantity: 1,
+                priceCents: pedido.shipping_cents as number,
+              },
+            ]
+          : []),
+      ],
     });
     checkoutUrl = resultado.checkoutUrl;
 

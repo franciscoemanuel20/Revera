@@ -1,17 +1,32 @@
 import "server-only";
 import type { ShippingProvider } from "./provider";
 import { MockShippingProvider } from "./mock-provider";
+import { SuperFreteShippingProvider } from "./superfrete-provider";
 
-// Não há uma env "SHIPPING_PROVIDER" separada (diferente de payments): a
-// escolha segue a presença de SUPERFRETE_TOKEN (.env.example), mesmo
-// princípio do factory de providers do projeto irmão — credencial ausente
-// => mock, sem precisar de uma segunda variável só para isso.
+/**
+ * Não há uma env "SHIPPING_PROVIDER" separada (diferente de payments): a
+ * escolha segue a presença de SUPERFRETE_TOKEN, mesmo princípio do factory de
+ * providers do projeto irmão — credencial ausente => mock, sem precisar de uma
+ * segunda variável só para isso.
+ *
+ * A consequência a ter em mente: o dia em que o token entrar na Vercel, o
+ * frete real passa a valer sozinho, sem deploy. É de propósito — mas é também
+ * o motivo de o token ser a ÚLTIMA coisa a ser configurada, depois de o resto
+ * estar conferido.
+ */
 export function getShippingProvider(): ShippingProvider {
   if (process.env.SUPERFRETE_TOKEN) {
-    // não implementado — Fase 3. Ver src/lib/shipping/provider.ts para o
-    // contrato que o adapter real (SuperFreteShippingProvider) vai cumprir.
-    throw new Error("SUPERFRETE_TOKEN presente, mas o adapter real não implementado — Fase 3.");
+    return new SuperFreteShippingProvider();
   }
-
   return new MockShippingProvider();
 }
+
+export { ShippingUnavailable } from "./provider";
+export type {
+  ShippingQuote,
+  ShippingProvider,
+  ShippableOrder,
+  ShipmentResult,
+  ShipmentStatus,
+  ShipmentRecipient,
+} from "./provider";

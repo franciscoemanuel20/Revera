@@ -5,6 +5,7 @@ import { formatarDataHora } from "@/lib/format/date";
 import { STATUS_BADGE_CLASS, STATUS_LABEL, type OrderStatusValue } from "@/lib/admin/order-status";
 import { PrintButton } from "../PrintButton";
 import { StatusActions } from "../StatusActions";
+import { BotaoEtiqueta } from "../BotaoEtiqueta";
 
 const METODO_LABEL: Record<string, string> = {
   pix: "Pix",
@@ -240,6 +241,7 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
 
       <section className="flex flex-col gap-3 print:hidden">
         <h2 className="font-display text-lg text-ink">Ações</h2>
+        <BotaoEtiqueta orderId={pedido.id} status={status} jaTemEtiqueta={Boolean(envio)} />
         <StatusActions orderId={pedido.id} status={status} />
       </section>
 
