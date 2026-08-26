@@ -54,17 +54,17 @@ export default function AdminLoginPage() {
         {/* A logo já traz o nome da marca; o h1 fica como texto acessível
             fora da tela para não repetir "Reverá" visualmente duas vezes. */}
         <h1 className="sr-only">Reverá — painel administrativo</h1>
-        {/* Fundo desta página é claro, então aqui NÃO entra o PNG com alfa
-            (o dourado dele é despremultiplicado para compor sobre escuro —
-            em fundo claro sai lavado). Usa-se o recorte com o próprio preto
-            da marca, como selo, que é como a logo aparece no impresso. */}
+        {/* Fundo claro: usa a variante clara OFICIAL da marca (a arte veio
+            com as duas versões, escura e clara). Não usar aqui o PNG com
+            alfa — ele é despremultiplicado para compor sobre escuro e sai
+            lavado em fundo claro. */}
         <Image
-          src="/media/marca/logo-revera-wordmark.jpeg"
+          src="/media/marca/logo-revera-claro.png"
           alt=""
-          width={490}
-          height={320}
+          width={1130}
+          height={620}
           priority
-          className="h-auto w-[200px] rounded-lg"
+          className="h-auto w-[220px]"
         />
         <p className="text-sm text-ink/70">Painel administrativo</p>
       </div>

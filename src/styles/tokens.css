@@ -7,9 +7,10 @@
  *
  * ATUALIZADO EM 25/08/2026, quando a logo oficial chegou: preto + dourado
  * metálico, extraídos por amostragem de pixel do próprio arquivo da logo
- * (public/media/marca/logo-revera.jpeg), não escolhidos a olho. Antes
- * disso a paleta era provisória (papel quente + cobre) porque a marca
- * ainda não tinha identidade definida — foi substituída, não misturada.
+ * (public/media/marca/logo-revera-original.jpeg), não escolhidos a olho.
+ * Antes disso a paleta era provisória (papel quente + cobre) porque a
+ * marca ainda não tinha identidade definida — foi substituída, não
+ * misturada.
  *
  * As mesmas cores existem em tailwind.config.ts (theme.extend.colors), lendo
  * as variáveis *-rgb abaixo (formato exigido para suportar opacidade, ver

@@ -19,23 +19,24 @@ import { TrustBar } from "@/components/ui/TrustBar";
 export default function HomePage() {
   return (
     <main className="flex flex-col">
-      {/* Hero escuro. A logo oficial chegou como JPEG (dourado sobre preto,
-          sem canal alfa), o que deixava um retângulo preto visível colado
-          na seção. logo-revera.png é derivado dela: recortado na marca e
-          com alfa reconstruído a partir da luminância (o preto do fundo
-          vira transparente, o dourado é despremultiplicado para recompor a
-          cor certa quando sobreposto). Sobre fundo escuro o resultado bate
-          com o original; NÃO usar sobre fundo claro — ver o comentário no
-          login do admin. Substituível por um SVG oficial sem mexer no resto. */}
+      {/* Hero escuro. A arte oficial (logo-revera-original.jpeg, 2048px)
+          traz as duas versões da marca — dourado sobre preto e sobre
+          branco — mas ambas em JPEG, sem canal alfa. logo-revera.png é
+          derivado da versão escura: recortado na marca e com alfa
+          reconstruído a partir da luminância, para o retângulo preto não
+          ficar colado na seção. USAR SÓ SOBRE FUNDO ESCURO — o dourado é
+          despremultiplicado para compor sobre preto; em fundo claro existe
+          a variante logo-revera-claro.png. Ambos são raster derivado de
+          JPEG: um SVG oficial ainda é o ideal para tamanho grande. */}
       <section className="w-full bg-ink px-6 pb-14 pt-12 sm:pt-16">
         <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 text-center">
           <Image
             src="/media/marca/logo-revera.png"
             alt="Reverá — Prótese Capilar"
-            width={490}
-            height={320}
+            width={1500}
+            height={920}
             priority
-            className="h-auto w-[230px] sm:w-[300px]"
+            className="h-auto w-[250px] sm:w-[330px]"
           />
 
           <h1 className="max-w-2xl text-balance font-display text-3xl text-paper sm:text-5xl">

@@ -36,9 +36,9 @@ export function Footer() {
         <Image
           src="/media/marca/logo-revera.png"
           alt="Reverá — Prótese Capilar"
-          width={490}
-          height={320}
-          className="h-auto w-[150px]"
+          width={1500}
+          height={920}
+          className="h-auto w-[170px]"
         />
         <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2">
           {LINKS.map((link) => (
