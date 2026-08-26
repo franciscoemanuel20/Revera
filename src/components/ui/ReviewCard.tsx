@@ -34,7 +34,7 @@ export function ReviewCard({
         </video>
       ) : null}
       {rating != null ? (
-        <div aria-label={`${rating} de 5 estrelas`} className="text-copper">
+        <div aria-label={`${rating} de 5 estrelas`} className="text-gold-deep">
           {"★".repeat(rating)}
           {"☆".repeat(5 - rating)}
         </div>

@@ -35,7 +35,7 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
               aria-pressed={selecionado}
               onClick={() => onChange(color.id)}
               className={`relative h-11 w-11 overflow-hidden rounded-full border-2 transition-colors ${
-                selecionado ? "border-copper" : "border-sand"
+                selecionado ? "border-gold" : "border-sand"
               }`}
               style={!color.photoUrl && color.hexPreview ? { backgroundColor: color.hexPreview } : undefined}
             >
@@ -51,7 +51,7 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
         })}
       </div>
       {onNeedHelp ? (
-        <button type="button" onClick={onNeedHelp} className="self-start text-sm text-copper underline">
+        <button type="button" onClick={onNeedHelp} className="self-start text-sm text-ink underline decoration-gold decoration-2 underline-offset-4">
           Não sei qual cor escolher
         </button>
       ) : null}

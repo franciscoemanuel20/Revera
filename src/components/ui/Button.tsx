@@ -6,8 +6,12 @@ import type { ButtonHTMLAttributes } from "react";
 type ButtonVariant = "primary" | "secondary" | "ghost";
 type ButtonSize = "sm" | "md" | "lg";
 
+// primary usa texto PRETO sobre o dourado, não branco: dourado (#c9b45f)
+// com branco dá ~1,9:1 de contraste — ilegível e reprovado em WCAG. Com
+// o preto da marca dá ~9:1. Além de acessível, é o que faz o botão ler
+// como "placa dourada", que é o gesto da logo.
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: "bg-copper text-paper hover:bg-copper-deep",
+  primary: "bg-gold text-ink hover:bg-gold-light",
   secondary: "bg-transparent text-ink border border-ink hover:bg-sand",
   ghost: "bg-transparent text-ink hover:bg-sand",
 };

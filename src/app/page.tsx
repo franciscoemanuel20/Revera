@@ -19,28 +19,51 @@ import { TrustBar } from "@/components/ui/TrustBar";
 export default function HomePage() {
   return (
     <main className="flex flex-col">
-      <section className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 pb-10 pt-14 sm:pt-20">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <span className="font-display text-2xl italic text-ink">Reverá</span>
-          <h1 className="max-w-2xl text-balance font-display text-3xl text-ink sm:text-5xl">
+      {/* Hero escuro. A logo oficial chegou como JPEG (dourado sobre preto,
+          sem canal alfa), o que deixava um retângulo preto visível colado
+          na seção. logo-revera.png é derivado dela: recortado na marca e
+          com alfa reconstruído a partir da luminância (o preto do fundo
+          vira transparente, o dourado é despremultiplicado para recompor a
+          cor certa quando sobreposto). Sobre fundo escuro o resultado bate
+          com o original; NÃO usar sobre fundo claro — ver o comentário no
+          login do admin. Substituível por um SVG oficial sem mexer no resto. */}
+      <section className="w-full bg-ink px-6 pb-14 pt-12 sm:pt-16">
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 text-center">
+          <Image
+            src="/media/marca/logo-revera.png"
+            alt="Reverá — Prótese Capilar"
+            width={490}
+            height={320}
+            priority
+            className="h-auto w-[230px] sm:w-[300px]"
+          />
+
+          <h1 className="max-w-2xl text-balance font-display text-3xl text-paper sm:text-5xl">
             Prótese capilar Micropele 0,08mm, com acabamento natural
           </h1>
-          <p className="max-w-xl text-balance text-ink/70">
+          <p className="max-w-xl text-balance text-paper/70">
             Envio para todo o Brasil.
           </p>
-        </div>
 
-        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-          <Link href="/produtos/micropele-008" className="w-full sm:w-auto">
-            <Button size="lg" className="w-full">
-              Comprar agora
-            </Button>
-          </Link>
-          <Link href="/produtos/micropele-008" className="w-full sm:w-auto">
-            <Button variant="secondary" size="lg" className="w-full">
-              Conheça nossas próteses
-            </Button>
-          </Link>
+          <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <Link href="/produtos/micropele-008" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full">
+                Comprar agora
+              </Button>
+            </Link>
+            <Link href="/produtos/micropele-008" className="w-full sm:w-auto">
+              {/* secondary do Button é pensado para fundo claro (borda e
+                  texto em --ink); sobre o preto do hero ficaria invisível,
+                  então este usa borda/texto em --paper via className. */}
+              <Button
+                variant="secondary"
+                size="lg"
+                className="w-full border-paper/40 text-paper hover:bg-paper/10"
+              >
+                Conheça nossas próteses
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -74,7 +97,7 @@ export default function HomePage() {
             Base ultrafina de 0,08mm, com acabamento natural na linha frontal —
             o carro-chefe da Reverá.
           </p>
-          <Link href="/produtos/micropele-008" className="self-start text-copper underline">
+          <Link href="/produtos/micropele-008" className="self-start text-ink underline decoration-gold decoration-2 underline-offset-4">
             Ver detalhes e cores disponíveis
           </Link>
         </div>

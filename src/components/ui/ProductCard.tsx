@@ -37,7 +37,7 @@ export function ProductCard({
           />
         ) : null}
         {isFeatured ? (
-          <span className="absolute left-2 top-2 rounded-full bg-copper px-2 py-1 text-xs font-semibold text-paper">
+          <span className="absolute left-2 top-2 rounded-full bg-gold px-2 py-1 text-xs font-semibold text-ink">
             Destaque
           </span>
         ) : null}

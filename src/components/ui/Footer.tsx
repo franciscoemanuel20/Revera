@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -29,18 +30,28 @@ export function Footer() {
   }
 
   return (
-    <footer className="border-t border-sand px-6 py-8">
-      <nav className="mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-x-6 gap-y-2">
-        {LINKS.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="text-sm text-ink/70 hover:text-ink"
-          >
-            {link.label}
-          </Link>
-        ))}
-      </nav>
+    <footer className="mt-auto bg-ink px-6 py-10">
+      <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6">
+        {/* PNG com alfa reconstruído — ver comentário em src/app/page.tsx */}
+        <Image
+          src="/media/marca/logo-revera.png"
+          alt="Reverá — Prótese Capilar"
+          width={490}
+          height={320}
+          className="h-auto w-[150px]"
+        />
+        <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+          {LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="text-sm text-paper/70 hover:text-gold"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
     </footer>
   );
 }

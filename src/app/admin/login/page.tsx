@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
@@ -49,8 +50,22 @@ export default function AdminLoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
-      <div className="flex flex-col gap-1 text-center">
-        <h1 className="font-display text-2xl italic text-ink">Reverá</h1>
+      <div className="flex flex-col items-center gap-3 text-center">
+        {/* A logo já traz o nome da marca; o h1 fica como texto acessível
+            fora da tela para não repetir "Reverá" visualmente duas vezes. */}
+        <h1 className="sr-only">Reverá — painel administrativo</h1>
+        {/* Fundo desta página é claro, então aqui NÃO entra o PNG com alfa
+            (o dourado dele é despremultiplicado para compor sobre escuro —
+            em fundo claro sai lavado). Usa-se o recorte com o próprio preto
+            da marca, como selo, que é como a logo aparece no impresso. */}
+        <Image
+          src="/media/marca/logo-revera-wordmark.jpeg"
+          alt=""
+          width={490}
+          height={320}
+          priority
+          className="h-auto w-[200px] rounded-lg"
+        />
         <p className="text-sm text-ink/70">Painel administrativo</p>
       </div>
 

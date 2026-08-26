@@ -54,7 +54,7 @@ export default async function ProdutosPage() {
 
     return {
       nome: (
-        <Link href={`/admin/produtos/${produto.id}`} className="font-medium text-copper hover:underline">
+        <Link href={`/admin/produtos/${produto.id}`} className="font-medium text-ink underline decoration-gold decoration-2 underline-offset-4 hover:decoration-gold-deep">
           {produto.name}
         </Link>
       ),

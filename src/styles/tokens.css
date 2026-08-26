@@ -1,13 +1,15 @@
 /**
  * tokens.css — paleta e escala tipográfica da Reverá.
  *
- * Direção de marca (decidida antes deste scaffold, não é escolha do
- * desenvolvedor): premium + tecnologia + naturalidade. Deliberadamente
+ * Direção de marca: premium + tecnologia + naturalidade. Deliberadamente
  * NÃO é o visual genérico de produto gerado por IA — sem gradiente
- * roxo-azul, sem Inter como única fonte. A base é um "papel quente"
- * (--paper) em vez de branco puro, com um acento de cobre usado com
- * moderação (é destaque, não fundo) e um verde-musgo reservado só para
- * selos de confiança/garantia — nunca como cor de botão ou link.
+ * roxo-azul, sem Inter como única fonte.
+ *
+ * ATUALIZADO EM 25/08/2026, quando a logo oficial chegou: preto + dourado
+ * metálico, extraídos por amostragem de pixel do próprio arquivo da logo
+ * (public/media/marca/logo-revera.jpeg), não escolhidos a olho. Antes
+ * disso a paleta era provisória (papel quente + cobre) porque a marca
+ * ainda não tinha identidade definida — foi substituída, não misturada.
  *
  * As mesmas cores existem em tailwind.config.ts (theme.extend.colors), lendo
  * as variáveis *-rgb abaixo (formato exigido para suportar opacidade, ver
@@ -19,22 +21,31 @@
  */
 
 :root {
-  /* Neutros — "quase preto" e "papel", nunca #000/#fff puros */
-  --ink: #1b1712;
-  --paper: #faf6f1;
+  /* Neutros da marca. --ink é o preto real do fundo da logo (#0a0a0a
+     amostrado, a cor mais frequente do arquivo). --paper é um off-white
+     levemente quente, para as seções claras respirarem sem virar branco
+     clínico. */
+  --ink: #0a0a0a;
+  --paper: #faf8f5;
 
-  /* Acento primário — cobre/bronze, remete a fio de cabelo e calor.
-     Usar em CTA e destaque pontual, não em áreas grandes de fundo. */
-  --copper: #b07a45;
-  --copper-deep: #8c5f34; /* hover / estado ativo do acento */
+  /* Acento primário — dourado da logo. Os três tons vêm da amostragem do
+     degradê metálico do wordmark: --gold é o tom médio (o que mais
+     aparece nas letras), --gold-light o brilho alto do topo das hastes,
+     --gold-deep a sombra da base. Manter os três: um dourado chapado
+     único é o que faz marca de luxo parecer barata. */
+  --gold: #c9b45f;
+  --gold-light: #e5d76c;
+  --gold-deep: #a19259;
 
   /* Reservado para selos de confiança e garantia (ex.: "7 dias de
      garantia", "testado antes do envio") — nunca como acento principal
      ou cor de botão de venda. */
   --moss: #4b5a45;
 
-  /* Neutro secundário: bordas, superfícies elevadas, divisores */
-  --sand: #e8ddd0;
+  /* Neutro secundário: bordas, superfícies elevadas, divisores. Em fundo
+     claro é uma areia fria; em fundo escuro, use --ink-soft. */
+  --sand: #e6e0d6;
+  --ink-soft: #1a1a1a; /* superfície elevada sobre o preto (cards, faixas) */
 
   /*
    * As mesmas seis cores, repetidas como tripla R G B (sem função, sem
@@ -47,12 +58,14 @@
    * Gerar as duas formas à mão evita depender de suporte a color-mix(),
    * que varia entre versões do Tailwind.
    */
-  --ink-rgb: 27 23 18;
-  --paper-rgb: 250 246 241;
-  --copper-rgb: 176 122 69;
-  --copper-deep-rgb: 140 95 52;
+  --ink-rgb: 10 10 10;
+  --ink-soft-rgb: 26 26 26;
+  --paper-rgb: 250 248 245;
+  --gold-rgb: 201 180 95;
+  --gold-light-rgb: 229 215 108;
+  --gold-deep-rgb: 161 146 89;
   --moss-rgb: 75 90 69;
-  --sand-rgb: 232 221 208;
+  --sand-rgb: 230 224 214;
 
   /* Tipografia — ver tailwind.config.ts para o mapeamento em fontFamily.
      Fraunces (display, serifada) para headline e nome de produto;
@@ -64,8 +77,8 @@
 }
 
 /*
- * Dark mode: decisão deliberada de NÃO implementar agora. A Reverá é uma
- * loja com identidade visual única e fixa (papel quente + cobre) — não um
- * app de uso prolongado onde dark mode é esperado. Ver README.md, seção
- * de decisões pendentes.
+ * Dark mode: decisão deliberada de NÃO implementar. A identidade da
+ * Reverá JÁ é escura (preto + dourado) — o site não alterna entre dois
+ * temas, ele tem um só, que é o da marca. Um "modo claro/escuro" aqui
+ * criaria uma segunda identidade que não existe no material impresso.
  */

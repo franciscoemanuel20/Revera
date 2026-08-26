@@ -32,8 +32,8 @@ export function VariantSelector({ label, options, selectedId, onChange }: Varian
               onClick={() => onChange(option.id)}
               className={`min-h-toque rounded-md border px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
                 selecionado
-                  ? "border-copper bg-copper text-paper"
-                  : "border-sand text-ink hover:border-copper"
+                  ? "border-gold bg-gold text-ink"
+                  : "border-sand text-ink hover:border-gold"
               }`}
             >
               {option.label}

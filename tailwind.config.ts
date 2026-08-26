@@ -13,11 +13,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "rgb(var(--ink-rgb) / <alpha-value>)",
+        ink: {
+          DEFAULT: "rgb(var(--ink-rgb) / <alpha-value>)",
+          soft: "rgb(var(--ink-soft-rgb) / <alpha-value>)",
+        },
         paper: "rgb(var(--paper-rgb) / <alpha-value>)",
-        copper: {
-          DEFAULT: "rgb(var(--copper-rgb) / <alpha-value>)",
-          deep: "rgb(var(--copper-deep-rgb) / <alpha-value>)",
+        gold: {
+          DEFAULT: "rgb(var(--gold-rgb) / <alpha-value>)",
+          light: "rgb(var(--gold-light-rgb) / <alpha-value>)",
+          deep: "rgb(var(--gold-deep-rgb) / <alpha-value>)",
         },
         moss: "rgb(var(--moss-rgb) / <alpha-value>)",
         sand: "rgb(var(--sand-rgb) / <alpha-value>)",
