@@ -44,6 +44,7 @@
  * existir.
  */
 import { randomUUID } from "node:crypto";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { lerCarrinhoCompleto, marcarCarrinhoConvertido } from "@/lib/cart/store";
 import { limparTokenDoCookie } from "@/lib/cart/token";
@@ -153,6 +154,35 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
   const orderId = randomUUID();
   const accessToken = randomUUID();
 
+  /**
+   * ATRIBUIÇÃO — de onde veio quem está comprando.
+   *
+   * Repare na divisão: cookies e UTMs vêm do NAVEGADOR (é lá que existem);
+   * IP e user-agent vêm dos CABEÇALHOS, no servidor. Nunca o contrário.
+   * IP informado pelo corpo da requisição não é IP, é opinião — e a Meta usa
+   * esse campo para casar o comprador com quem viu o anúncio.
+   *
+   * `x-forwarded-for` pode trazer uma cadeia ("cliente, proxy1, proxy2"); o
+   * primeiro é o cliente real. Na Vercel o `x-real-ip` já vem resolvido, e é
+   * a fonte preferida quando existe.
+   */
+  const cabecalhos = await headers();
+  const encadeado = cabecalhos.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const atribuicao = {
+    fbp: dados.atribuicao?.fbp ?? null,
+    fbc: dados.atribuicao?.fbc ?? null,
+    ga_client_id: dados.atribuicao?.gaClientId ?? null,
+    fbclid: dados.atribuicao?.fbclid ?? null,
+    gclid: dados.atribuicao?.gclid ?? null,
+    utm_source: dados.atribuicao?.utmSource ?? null,
+    utm_medium: dados.atribuicao?.utmMedium ?? null,
+    utm_campaign: dados.atribuicao?.utmCampaign ?? null,
+    utm_content: dados.atribuicao?.utmContent ?? null,
+    utm_term: dados.atribuicao?.utmTerm ?? null,
+    client_ip: cabecalhos.get("x-real-ip") ?? encadeado ?? null,
+    user_agent: cabecalhos.get("user-agent")?.slice(0, 500) ?? null,
+  };
+
   let orderNumber = gerarNumeroPedido();
   let pedidoCriado = false;
   for (let tentativa = 0; tentativa < 3 && !pedidoCriado; tentativa += 1) {
@@ -167,6 +197,7 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
       discount_cents: discountCents,
       shipping_cents: shippingCents,
       total_cents: totalCents,
+      ...atribuicao,
     });
 
     if (!error) {

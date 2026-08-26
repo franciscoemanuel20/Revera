@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { getPaymentProvider } from "@/lib/payments";
 import type { WebhookHint } from "@/lib/payments/provider";
 import { registrarPurchasePendente } from "@/lib/tracking/purchase";
+import { despacharPurchase } from "@/lib/tracking/despachar";
 
 /**
  * Confirmação de pagamento — a ÚNICA função do sistema que marca um pedido
@@ -135,6 +136,23 @@ export async function confirmarPagamento(
 
   // Só quem efetivamente transicionou registra o direito ao Purchase.
   await registrarPurchasePendente(supabase, pedido.id);
+
+  /**
+   * E envia, aqui, pelo servidor — não na tela de obrigado.
+   *
+   * Este é o único ponto do sistema onde um Purchase pode nascer, e ele fica
+   * DEPOIS da reconfirmação com o gateway de propósito. Quem paga por Pix sai
+   * para o aplicativo do banco e muitas vezes não volta: se a conversão
+   * dependesse da tela de obrigado, essas vendas sumiriam do relatório e as
+   * campanhas otimizariam contra elas.
+   *
+   * `await` e não "dispara e esquece": numa função serverless, o processo
+   * pode ser encerrado assim que a resposta sai, e uma promessa solta morre
+   * pela metade — a conversão se perderia de forma intermitente, o pior tipo
+   * de bug para diagnosticar. despacharPurchase engole os próprios erros, e
+   * portanto esperar por ela não arrisca a confirmação do pagamento.
+   */
+  await despacharPurchase(supabase, pedido.id);
 
   return { estado: "pago", jaEstavaPago: false };
 }

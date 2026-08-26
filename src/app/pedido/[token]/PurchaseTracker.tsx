@@ -1,22 +1,33 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { medirCompra } from "@/lib/tracking/browser";
 import type { PurchasePayload } from "@/lib/tracking/purchase";
 
 /**
- * Dispara o evento Purchase no navegador — uma única vez.
+ * Dispara o Purchase no navegador — uma única vez, e só quando mandado.
  *
- * Este componente SÓ é renderizado quando o servidor já decidiu que este
- * pedido tem direito ao evento (pagamento confirmado com o gateway e
- * `sent_web` ainda falso — ver src/lib/tracking/purchase.ts). Ele não toma
- * decisão nenhuma: se está na tela, é porque pode disparar.
+ * Este componente NÃO decide nada. Ele só é renderizado quando o servidor já
+ * verificou que o pedido está pago (reconfirmado com o gateway) e que o
+ * evento ainda não saiu para o navegador — ver consumirPurchaseParaNavegador
+ * em src/lib/tracking/purchase.ts. Abrir esta URL na mão, sem pagamento, não
+ * renderiza nada aqui.
  *
- * O `event_id` é o id do pedido. Quando a Conversions API entrar, o disparo
- * server-side usará o MESMO event_id, e a Meta deduplica: uma compra, um
- * Purchase — mesmo saindo pelos dois caminhos.
+ * ===========================================================================
+ * ESTE NÃO É O CAMINHO PRINCIPAL
+ * ===========================================================================
+ * A venda já foi contada quando o pagamento foi confirmado, pelo servidor
+ * (src/lib/tracking/despachar.ts). Este disparo existe para MELHORAR a
+ * correspondência — o navegador carrega cookies e sinais que o servidor não
+ * tem. Se ele se perder (aba fechada, bloqueador de anúncio, Pix pago e a
+ * pessoa nunca voltou), nada é perdido.
  *
- * O ref existe porque, em desenvolvimento, o React roda o efeito duas vezes
- * (StrictMode). Sem ele o pixel receberia o evento duplicado localmente.
+ * O `eventId` é o id do pedido, o MESMO usado no envio de servidor. É assim
+ * que a Meta deduplica e que o GA4 reconhece a transação: dois caminhos, uma
+ * compra só.
+ *
+ * O ref existe porque o React roda efeitos duas vezes em desenvolvimento
+ * (StrictMode) — sem ele o evento sairia dobrado localmente.
  */
 export function PurchaseTracker({ payload }: { payload: PurchasePayload }) {
   const jaDisparou = useRef(false);
@@ -25,28 +36,13 @@ export function PurchaseTracker({ payload }: { payload: PurchasePayload }) {
     if (jaDisparou.current) return;
     jaDisparou.current = true;
 
-    const fbq = (window as unknown as { fbq?: (...args: unknown[]) => void }).fbq;
-    if (typeof fbq !== "function") {
-      // Pixel ainda não instalado (META_PIXEL_ID não configurado). Não é
-      // erro: o registro no banco continua marcado como enviado, e a
-      // Conversions API poderá reenviar pelo mesmo event_id quando existir.
-      return;
-    }
-
-    fbq(
-      "track",
-      "Purchase",
-      {
-        value: payload.valueCents / 100,
-        currency: payload.currency,
-        content_type: "product",
-        content_ids: payload.contentIds,
-        contents: payload.contents,
-        num_items: payload.numItems,
-        order_id: payload.orderNumber,
-      },
-      { eventID: payload.eventId }
-    );
+    medirCompra({
+      eventId: payload.eventId,
+      valueCents: payload.valueCents,
+      orderNumber: payload.orderNumber,
+      contents: payload.contents,
+      numItems: payload.numItems,
+    });
   }, [payload]);
 
   return null;

@@ -25,6 +25,7 @@ const NOMES_SENSIVEIS = [
   "INFINITEPAY_API_KEY",
   "SUPERFRETE_TOKEN",
   "META_CAPI_TOKEN",
+  "GA4_API_SECRET",
   "WHATSAPP_POST_PURCHASE_NUMBER",
 ];
 
@@ -51,8 +52,44 @@ function* arquivosJs(dir) {
  * Testa as grafias que apareceriam num bundle: só dígitos, com DDI, e as
  * formatações comuns.
  */
+// Carrega .env.local se existir: sem os valores em mãos, este script só
+// conseguiria conferir NOMES — e nome é a metade fácil do problema.
+const envLocal = join(process.cwd(), ".env.local");
+if (existsSync(envLocal)) {
+  for (const linha of readFileSync(envLocal, "utf8").split("\n")) {
+    const m = linha.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m && !process.env[m[1]]) {
+      process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  }
+}
+
 const numeroPosCompra = process.env.WHATSAPP_POST_PURCHASE_NUMBER ?? "12981409901";
 const digitos = numeroPosCompra.replace(/\D/g, "");
+
+/**
+ * Os SEGREDOS em si.
+ *
+ * Conferir o nome da variável pega o caso comum (alguém trocou o prefixo
+ * para NEXT_PUBLIC_ sem pensar). Não pega o caso pior: o valor entrar no
+ * bundle SEM o nome junto — uma constante copiada à mão, um valor colado
+ * direto num componente cliente, ou um bundler que substituiu a referência
+ * pelo literal. É esse caso que as linhas abaixo pegam.
+ *
+ * Só entram valores com 16+ caracteres: um segredo curto demais produziria
+ * coincidência com código minificado e o teste viraria alarme falso, que é
+ * pior que teste nenhum — alarme falso ensina a ignorar.
+ */
+const SEGREDOS_REAIS = [
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "META_CAPI_TOKEN",
+  "GA4_API_SECRET",
+  "SUPERFRETE_TOKEN",
+  "PAYMENT_WEBHOOK_SECRET",
+]
+  .map((nome) => ({ nome, valor: process.env[nome] }))
+  .filter((s) => s.valor && s.valor.length >= 16);
+
 const VALORES_PROIBIDOS = [
   digitos,
   `55${digitos}`,
@@ -74,6 +111,17 @@ for (const arquivo of arquivosJs(BUNDLE_DIR)) {
         arquivo,
         achado: `telefone pós-compra ("${valor}")`,
         tipo: "VALOR — regra comercial violada",
+      });
+    }
+  }
+  for (const s of SEGREDOS_REAIS) {
+    if (conteudo.includes(s.valor)) {
+      // O valor NUNCA é impresso, nem em falha. Um segredo vazado não pode
+      // ser vazado de novo pelo log do CI.
+      achados.push({
+        arquivo,
+        achado: `o VALOR de ${s.nome} está no bundle do navegador`,
+        tipo: "SEGREDO VAZADO — rotacione esta credencial agora",
       });
     }
   }

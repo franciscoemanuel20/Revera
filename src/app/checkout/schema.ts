@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { cpfValido, limparCPF } from "@/lib/format/cpf";
 
+/**
+ * Um texto de rastreamento, ou nada.
+ *
+ * O teto de 500 caracteres não é estética: sem ele, alguém pode mandar um
+ * utm_campaign de dez megabytes e inflar a tabela de pedidos. Cinco centenas
+ * cobre com folga qualquer nome de campanha real.
+ */
+const textoCurto = z.string().max(500).nullable().optional().catch(null);
+
 // Schema único do formulário de checkout — compartilhado entre o client
 // (CheckoutForm.tsx, para tipar o payload) e a Server Action
 // (actions.ts, para validar de verdade). A validação que importa é sempre
@@ -47,6 +56,37 @@ export const checkoutSchema = z.object({
     .trim()
     .refine((v) => /^[A-Za-z]{2}$/.test(v), "UF precisa ter 2 letras (ex.: SP).")
     .transform((v) => v.toUpperCase()),
+
+  /**
+   * Atribuição — de onde veio a pessoa. Opcional em tudo: bloqueador de
+   * anúncio, navegação privada e visita orgânica deixam estes campos vazios,
+   * e nada disso pode impedir alguém de comprar.
+   *
+   * Aceitar isto do navegador é seguro porque NADA aqui vale dinheiro: são
+   * sinais de medição. O pior que alguém consegue mentindo é sujar o próprio
+   * relatório. (Compare com `total`, que jamais é aceito do cliente — ver a
+   * docstring de actions.ts.)
+   *
+   * `.catch(null)` em vez de erro de validação: um cookie estranho não pode
+   * derrubar um checkout. Perde-se a atribuição daquele pedido; não se perde
+   * a venda.
+   */
+  atribuicao: z
+    .object({
+      fbp: textoCurto,
+      fbc: textoCurto,
+      gaClientId: textoCurto,
+      fbclid: textoCurto,
+      gclid: textoCurto,
+      utmSource: textoCurto,
+      utmMedium: textoCurto,
+      utmCampaign: textoCurto,
+      utmContent: textoCurto,
+      utmTerm: textoCurto,
+    })
+    .nullable()
+    .optional()
+    .catch(null),
 });
 
 // Formato que o CLIENTE envia (antes das transformações de zod) — é o que

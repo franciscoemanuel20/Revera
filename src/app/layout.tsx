@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Fraunces, Manrope } from "next/font/google";
+import { Pixels } from "@/components/tracking/Pixels";
+import { PageViewTracker } from "@/components/tracking/PageViewTracker";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { Footer } from "@/components/ui/Footer";
 import { Header } from "@/components/ui/Header";
@@ -36,6 +39,20 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
       <body className="flex min-h-screen flex-col">
+        {/* Bases do Meta e do Google. Só carregam se o ID existir — sem
+            variável configurada, nenhum script de terceiro entra na página.
+            Ver src/components/tracking/Pixels.tsx para as duas armadilhas
+            que este componente evita de propósito. */}
+        <Pixels />
+
+        {/* PageView em toda troca de rota. Dentro de <Suspense> porque usa
+            useSearchParams, e sem o limite o Next força a página inteira a
+            virar dinâmica — as páginas estáticas do site perderiam o
+            pré-render por causa de um script de métrica. */}
+        <Suspense fallback={null}>
+          <PageViewTracker />
+        </Suspense>
+
         {/* CartProvider por fora de Header/Footer: o contador de itens do
             Header, o drawer (renderizado dentro do próprio Provider, ver
             CartProvider.tsx) e o botão "comprar agora" de qualquer página de

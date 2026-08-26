@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { medirIniciarCheckout } from "@/lib/tracking/browser";
+import { lerAtribuicao } from "@/lib/tracking/atribuicao";
 import { useCart } from "@/components/cart/CartProvider";
 import { Button } from "@/components/ui/Button";
 import { CheckoutSummary } from "@/components/ui/CheckoutSummary";
@@ -70,6 +72,36 @@ export function CheckoutForm() {
   const [enviando, setEnviando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [avisoCep, setAvisoCep] = useState<string | null>(null);
+
+  /**
+   * InitiateCheckout — uma vez por visita a esta tela.
+   *
+   * A trava com useRef existe porque o efeito reexecuta: o React monta duas
+   * vezes em desenvolvimento (StrictMode), e o estado do carrinho muda
+   * enquanto a pessoa preenche (frete cotado, quantidade). Sem a trava, o
+   * evento sairia várias vezes por checkout e o funil mostraria mais
+   * "começaram" do que pessoas — o que faz a taxa de conclusão parecer pior
+   * do que é, e leva a otimizar a campanha errada.
+   *
+   * Espera o carrinho ter itens: disparar com sacola vazia mediria alguém
+   * que nem chegou a começar.
+   */
+  const iniciouCheckout = useRef(false);
+  useEffect(() => {
+    if (iniciouCheckout.current) return;
+    if (cart.items.length === 0) return;
+    iniciouCheckout.current = true;
+
+    medirIniciarCheckout({
+      itens: cart.items.map((i) => ({
+        variantId: i.variantId,
+        nome: i.productName,
+        quantidade: i.quantity,
+        precoUnitarioCents: i.unitPriceCents,
+      })),
+      totalCents: cart.totalCents,
+    });
+  }, [cart.items, cart.totalCents]);
   // null = ainda não cotado (ou cotação falhou). NÃO é 0 — mostrar R$ 0,00
   // pareceria frete grátis, que é promessa que ninguém fez.
   const [frete, setFrete] = useState<{
@@ -198,6 +230,10 @@ export function CheckoutForm() {
     const payload: CheckoutInput = {
       ...campos,
       complement: complementoLimpo === "" ? null : complementoLimpo,
+      // Lido AQUI, no envio, e não na montagem da tela: os cookies do pixel
+      // podem só existir depois que os scripts carregaram, e no submit já
+      // carregaram com folga.
+      atribuicao: lerAtribuicao(),
     };
 
     setEnviando(true);

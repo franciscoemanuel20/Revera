@@ -116,17 +116,34 @@ const { rows: indices } = await cliente.query(
 const { rows: baldes } = await cliente.query(
   `select count(*)::int as n from storage.buckets where id = 'color-help'`
 );
+const { rows: colunas } = await cliente.query(
+  `select count(*)::int as n from information_schema.columns
+   where table_name = 'orders'
+     and column_name in ('fbp','fbc','ga_client_id','client_ip','user_agent',
+                         'utm_source','utm_medium','utm_campaign','utm_content',
+                         'utm_term','fbclid','gclid')`
+);
+const { rows: tabelas } = await cliente.query(
+  `select count(*)::int as n from information_schema.tables where table_name = 'conversion_logs'`
+);
 
 console.log(
   `  policies deste arquivo:        ${policies[0].n}/${esperadas.length}`
 );
 console.log(`  trava de etiqueta duplicada:   ${indices[0].n}/1`);
 console.log(`  balde privado das fotos:       ${baldes[0].n}/1`);
+console.log(`  colunas de atribuição:         ${colunas[0].n}/12`);
+console.log(`  tabela conversion_logs:        ${tabelas[0].n}/1`);
 if (faltando.length > 0) {
   console.log(`\n  não encontradas: ${faltando.join(", ")}`);
 }
 
-const ok = faltando.length === 0 && indices[0].n === 1 && baldes[0].n === 1;
+const ok =
+  faltando.length === 0 &&
+  indices[0].n === 1 &&
+  baldes[0].n === 1 &&
+  colunas[0].n === 12 &&
+  tabelas[0].n === 1;
 console.log(ok ? "\nTudo no lugar.\n" : "\nAlgo não bateu — confira acima.\n");
 
 await cliente.end();
