@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
+import { CartProvider } from "@/components/cart/CartProvider";
 import { Footer } from "@/components/ui/Footer";
 import { Header } from "@/components/ui/Header";
 import "./globals.css";
@@ -35,13 +36,21 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
       <body className="flex min-h-screen flex-col">
-        {/* Header é `fixed` (Header.tsx) — não entra no fluxo, então não
-            empurra o conteúdo sozinho. Cada página pública compensa com
-            padding-top próprio (HEADER_HEIGHT_PX), igual o hero da home já
-            fazia antes de o header existir. */}
-        <Header />
-        <div className="flex-1">{children}</div>
-        <Footer />
+        {/* CartProvider por fora de Header/Footer: o contador de itens do
+            Header, o drawer (renderizado dentro do próprio Provider, ver
+            CartProvider.tsx) e o botão "comprar agora" de qualquer página de
+            produto precisam do MESMO estado de carrinho, atualizado sem
+            recarregar a página — daí um Provider no layout raiz, acima de
+            tudo, em vez de estado local espalhado. */}
+        <CartProvider>
+          {/* Header é `fixed` (Header.tsx) — não entra no fluxo, então não
+              empurra o conteúdo sozinho. Cada página pública compensa com
+              padding-top próprio (HEADER_HEIGHT_PX), igual o hero da home já
+              fazia antes de o header existir. */}
+          <Header />
+          <div className="flex-1">{children}</div>
+          <Footer />
+        </CartProvider>
       </body>
     </html>
   );

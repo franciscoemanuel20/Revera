@@ -2,6 +2,7 @@
 import { Price } from "./Price";
 import { QuantitySelector } from "./QuantitySelector";
 import { Button } from "./Button";
+import { Toast } from "./Toast";
 
 export interface CartDrawerItem {
   id: string;
@@ -20,6 +21,12 @@ export interface CartDrawerProps {
   onQuantityChange: (itemId: string, quantity: number) => void;
   onRemove: (itemId: string) => void;
   onCheckout: () => void;
+  // Erro de uma mutação recente (ex.: pediu mais do que há em estoque) —
+  // string, não boolean: quem chama (CartProvider) já traz a mensagem
+  // pronta da Server Action, o drawer só exibe. Opcional porque o drawer
+  // funciona sem isso (26/08/2026, ver CartProvider.tsx).
+  erro?: string | null;
+  onDismissErro?: () => void;
 }
 
 // Painel lateral do carrinho — espelha `cart_items` (id = cart_items.id,
@@ -34,6 +41,8 @@ export function CartDrawer({
   onQuantityChange,
   onRemove,
   onCheckout,
+  erro,
+  onDismissErro,
 }: CartDrawerProps) {
   if (!open) return null;
 
@@ -46,6 +55,8 @@ export function CartDrawer({
             ✕
           </button>
         </div>
+
+        {erro ? <Toast message={erro} variant="error" onClose={onDismissErro} /> : null}
 
         <ul className="flex flex-1 flex-col gap-4 overflow-y-auto">
           {items.length === 0 ? (
@@ -73,7 +84,10 @@ export function CartDrawer({
         </ul>
 
         <div className="flex flex-col gap-3 border-t border-sand pt-4">
-          <div className="flex justify-between font-semibold text-ink">
+          {/* aria-live: quem usa leitor de tela ouve o novo subtotal assim
+              que uma quantidade muda, sem precisar navegar até aqui de
+              novo para descobrir o valor atualizado. */}
+          <div className="flex justify-between font-semibold text-ink" aria-live="polite">
             <span>Subtotal</span>
             <Price cents={subtotalCents} />
           </div>

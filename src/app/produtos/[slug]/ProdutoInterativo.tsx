@@ -5,13 +5,15 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { ColorSelector, type ColorOption } from "@/components/ui/ColorSelector";
+import { DiscountLadder } from "@/components/ui/DiscountLadder";
 import { Price } from "@/components/ui/Price";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { Reveal } from "@/components/ui/Reveal";
+import { Toast } from "@/components/ui/Toast";
 import { TrustBar } from "@/components/ui/TrustBar";
+import { useCart } from "@/components/cart/CartProvider";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { applyQuantityDiscount, type QuantityDiscountRule } from "@/lib/pricing/discount";
-import { formatarBRL } from "@/lib/format/money";
 
 interface VariantData {
   id: string;
@@ -65,6 +67,8 @@ export function ProdutoInterativo({
   discountRules,
 }: ProdutoInterativoProps) {
   const router = useRouter();
+  const { adicionarItem, abrirDrawer, pendente } = useCart();
+  const [mensagemErro, setMensagemErro] = useState<string | null>(null);
 
   const fotos = useMemo(() => fotosDoProduto(name), [name]);
   const [fotoAtivaIndex, setFotoAtivaIndex] = useState(0);
@@ -176,7 +180,11 @@ export function ProdutoInterativo({
               />
             ) : null}
 
-            <QuantitySelector value={quantidade} onChange={setQuantidade} />
+            <QuantitySelector
+              value={quantidade}
+              onChange={setQuantidade}
+              max={varianteSelecionada?.stockQty}
+            />
 
             {/* Degraus de desconto — só renderiza se existir regra
                 cadastrada de verdade (discountRules vem do banco, ver
@@ -184,52 +192,46 @@ export function ProdutoInterativo({
                 aplica à quantidade atual ganha borda dourada + o quanto se
                 economiza em destaque, para a diferença ficar óbvia sem
                 precisar fazer conta. */}
-            {discountRules.length > 0 && varianteSelecionada ? (
-              <div className="flex flex-col gap-2">
-                <span className="eyebrow-ink">Comprando mais, o preço cai</span>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {discountRules.map((regra) => {
-                    const resultadoFaixa = applyQuantityDiscount(
-                      varianteSelecionada.priceCents,
-                      regra.minQty,
-                      discountRules
-                    );
-                    // discountCents já vem calculado pela mesma função pura
-                    // que decide o preço (src/lib/pricing/discount.ts) — não
-                    // recalcula na mão aqui, para nunca divergir dela.
-                    const economiaCents = resultadoFaixa.discountCents;
-                    const faixaAtiva = resultadoDesconto?.appliedRule?.minQty === regra.minQty;
+            {varianteSelecionada ? (
+              <DiscountLadder
+                basePriceCents={varianteSelecionada.priceCents}
+                currentQuantity={quantidade}
+                rules={discountRules}
+              />
+            ) : null}
 
-                    return (
-                      <div
-                        key={regra.minQty}
-                        className={`rounded-lg border p-3 text-sm transition-colors ${
-                          faixaAtiva ? "border-gold bg-gold/5" : "border-sand"
-                        }`}
-                      >
-                        <p className="font-semibold text-ink">
-                          {regra.label ?? `A partir de ${regra.minQty} unidades`}
-                        </p>
-                        <p className="text-ink/70">{formatarBRL(resultadoFaixa.unitPriceCents)} cada</p>
-                        {economiaCents > 0 ? (
-                          <p className="mt-1 text-xs font-semibold text-gold-deep">
-                            Economize {formatarBRL(economiaCents)}
-                          </p>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            {mensagemErro ? (
+              <Toast message={mensagemErro} variant="error" onClose={() => setMensagemErro(null)} />
             ) : null}
 
             <div className="flex flex-col gap-2">
-              <Button size="lg" disabled title="Em breve">
-                Comprar agora — Em breve
-              </Button>
+              {varianteSelecionada ? (
+                <Button
+                  size="lg"
+                  disabled={pendente || varianteSelecionada.stockQty <= 0}
+                  onClick={async () => {
+                    setMensagemErro(null);
+                    const { erro } = await adicionarItem(varianteSelecionada.id, quantidade);
+                    if (erro) {
+                      setMensagemErro(erro);
+                      return;
+                    }
+                    abrirDrawer();
+                  }}
+                >
+                  {varianteSelecionada.stockQty <= 0
+                    ? "Fora de estoque"
+                    : pendente
+                      ? "Adicionando…"
+                      : "Comprar agora"}
+                </Button>
+              ) : (
+                <Button size="lg" disabled title="Em breve">
+                  Comprar agora — Em breve
+                </Button>
+              )}
               <p className="text-xs text-ink/50">
-                A compra pelo site ainda não está disponível — esta é a página
-                de apresentação do produto.
+                Frete calculado na próxima etapa, pelo CEP de entrega.
               </p>
             </div>
 

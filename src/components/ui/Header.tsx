@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { CartTriggerButton } from "@/components/cart/CartTriggerButton";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 
 const LINKS = [
@@ -102,6 +103,11 @@ export function Header() {
           />
         </Link>
 
+        {/* Agrupa nav desktop + sacola + menu mobile num único item flex à
+            direita — justify-between do container pai só espera DOIS
+            filhos (logo | resto); um terceiro filho sempre visível (a
+            sacola) quebraria esse espaçamento se ficasse solto aqui. */}
+        <div className="flex items-center gap-4">
         <nav className="hidden items-center gap-8 sm:flex">
           {LINKS.map((link) => (
             <Link
@@ -146,6 +152,8 @@ export function Header() {
           </Link>
         </nav>
 
+        <CartTriggerButton className="text-paper/85 hover:text-gold" />
+
         {/* Mobile: <details>/<summary> em vez de drawer — não há gesto de
             "arrastar para fechar" nem trava de scroll do body, mas cobre o
             caso (abrir/fechar uma lista de links) sem JS extra nem
@@ -175,6 +183,7 @@ export function Header() {
             ))}
           </nav>
         </details>
+        </div>
       </div>
     </header>
   );

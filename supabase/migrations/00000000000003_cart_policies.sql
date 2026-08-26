@@ -1,0 +1,65 @@
+-- Política de acesso ao carrinho anônimo — decisão registrada em
+-- 26/08/2026, ao implementar carrinho/checkout (ver src/lib/cart/store.ts).
+--
+-- NÃO APLICADA ainda: mesma regra das outras migrations deste repositório
+-- (00000000000001, 00000000000002, 00000000000004) — só arquivo local, para
+-- o Francisco colar no SQL Editor do projeto real quando decidir.
+--
+-- POR QUE ESTE ARQUIVO NÃO CRIA NENHUMA POLICY NOVA (e por que isso é
+-- intencional, não esquecimento):
+--
+-- O carrinho é identificado por um token opaco (carts.token, uuid) num
+-- cookie httpOnly no navegador do visitante — nunca numa sessão do
+-- Supabase Auth (não existe login de cliente nesta loja). RLS decide o que
+-- uma requisição pode ver/gravar olhando para auth.uid() ou
+-- request.jwt.claims, que vêm do JWT da chave anon — e essa chave é A
+-- MESMA para qualquer visitante do site. O cookie não viaja dentro desse
+-- JWT, só no header Cookie da requisição HTTP; RLS não tem acesso a isso.
+-- Não existe forma de escrever `using (token = <valor do cookie>)`: o
+-- Postgres, do lado de dentro da policy, não tem como saber qual token
+-- veio no cookie de quem fez a chamada.
+--
+-- A alternativa de verdade seria ligar o Supabase Anonymous Auth (cada
+-- visitante ganha um auth.uid() real) e redesenhar `carts` para guardar o
+-- dono como esse uid — mudança de arquitetura que exige um projeto
+-- Supabase real para habilitar/testar o recurso, e este ambiente não tem
+-- isso disponível; também alteraria o desenho já decidido de `carts.token`
+-- como identificador (fora do escopo desta entrega, que não altera
+-- 00000000000001_init.sql).
+--
+-- DECISÃO: carts e cart_items continuam SEM policy pública nenhuma — só a
+-- service role acessa, exatamente como já valia desde
+-- 00000000000001_init.sql ("Tudo mais: sem policy pública = só service
+-- role acessa"). A garantia de posse migra do banco para a aplicação:
+-- src/lib/cart/store.ts usa createAdminClient() e, antes de qualquer
+-- leitura/gravação de um item específico, confirma que o cart_id pertence
+-- ao carrinho cujo token está no cookie httpOnly de quem está fazendo a
+-- requisição (nunca um token/cart_id mandado pelo cliente no corpo da
+-- chamada). Um cookie httpOnly não é legível nem editável por JavaScript
+-- no navegador, e o token é um uuid v4 — praticamente impossível de
+-- adivinhar por tentativa.
+--
+-- Este NÃO é um padrão novo criado para esta entrega: src/app/cores/actions.ts
+-- já faz exatamente isso para color_help_requests (RLS ligada, sem policy
+-- pública, grava com o client de service role) — ver o comentário lá.
+--
+-- src/app/checkout (criação de pedido) segue a MESMA decisão, por um
+-- motivo adicional: orders/order_items são registro financeiro, e a chave
+-- anon é pública (fica no bundle do navegador) — uma policy pública de
+-- INSERT nessas tabelas deixaria qualquer um escrever um total_cents
+-- arbitrário direto pelo console do navegador, pulando a Server Action que
+-- recalcula o preço a partir de product_variants. Por isso customers,
+-- addresses, orders e order_items também continuam sem policy pública
+-- (comportamento herdado de 00000000000001_init.sql, sem mudança nesta
+-- migration) — a criação do pedido usa createAdminClient() só depois de
+-- validar tudo (CPF, CEP, preço recalculado do banco) com zod no servidor.
+--
+-- Registrar a decisão só em comentário de código (.ts) some para quem olha
+-- o schema pelo painel do Supabase ou por \dt+/\d+ — por isso o
+-- `comment on table` abaixo: fica anexado ao catálogo do Postgres mesmo
+-- que ninguém tenha aberto este arquivo .sql.
+comment on table carts is
+  'Sem policy pública de propósito: carrinho anônimo usa token em cookie httpOnly, que RLS não enxerga (não vem no JWT da chave anon). Posse verificada em src/lib/cart/store.ts via createAdminClient(). Ver supabase/migrations/00000000000003_cart_policies.sql para a decisão completa.';
+
+comment on table cart_items is
+  'Mesma decisão de carts (ver comment on table carts) — sem policy pública, acesso só via createAdminClient() em src/lib/cart/store.ts, com posse do carrinho verificada pelo token de cookie na aplicação, não pelo Postgres.';
