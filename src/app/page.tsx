@@ -6,6 +6,10 @@ import { SocialProof } from "@/components/ui/SocialProof";
 import { TrustBar } from "@/components/ui/TrustBar";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createClient } from "@/lib/supabase/server";
+import {
+  escolherProdutoVitrine,
+  linkDoProdutoVitrine,
+} from "@/lib/catalog/vitrine";
 
 // Home de vitrine — substitui o placeholder da fase 1 (ver git log). Sem
 // grid de catálogo geral de propósito: só existe um produto publicável até
@@ -30,11 +34,39 @@ import { createClient } from "@/lib/supabase/server";
 // redundante aqui, a RLS já resolve quem pode ver o quê.
 export default async function HomePage() {
   const supabase = await createClient();
-  const { data: avaliacoes } = await supabase
-    .from("reviews")
-    .select("customer_name, city, professional_name, rating, comment, photo_url, video_url")
-    .order("sort_order")
-    .limit(6);
+
+  // P0-1 (27/08/2026): o destino dos CTAs sai do BANCO, não de um slug fixo.
+  // A policy "public read active products" já filtra status='active', então
+  // um produto em draft simplesmente não volta desta consulta — e a home
+  // deixa de oferecer um botão que leva a 404. Ver src/lib/catalog/vitrine.ts.
+  const [{ data: avaliacoes }, { data: produtos }] = await Promise.all([
+    supabase
+      .from("reviews")
+      .select("customer_name, city, professional_name, rating, comment, photo_url, video_url")
+      .order("sort_order")
+      .limit(6),
+    supabase
+      .from("products")
+      .select(
+        "slug, name, is_featured, sort_order, product_variants(is_active, price_cents, stock_qty)"
+      ),
+  ]);
+
+  const produtoVitrine = escolherProdutoVitrine(
+    (produtos ?? []).map((p) => ({
+      slug: p.slug as string,
+      name: p.name as string,
+      isFeatured: Boolean(p.is_featured),
+      sortOrder: (p.sort_order as number | null) ?? 0,
+      variants: (p.product_variants ?? []).map((v) => ({
+        isActive: Boolean(v.is_active),
+        priceCents: (v.price_cents as number | null) ?? 0,
+        stockQty: (v.stock_qty as number | null) ?? 0,
+      })),
+    }))
+  );
+  const linkProduto = linkDoProdutoVitrine(produtoVitrine);
+  const temProduto = produtoVitrine !== null;
 
   return (
     <main className="flex flex-col">
@@ -75,19 +107,29 @@ export default async function HomePage() {
           </p>
 
           <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <Link href="/produtos/micropele-008" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full">
-                Comprar agora
-              </Button>
-            </Link>
-            <Link href="/produtos/micropele-008" className="w-full sm:w-auto">
+            {/* "Comprar agora" só aparece quando existe algo comprável. Um
+                botão de compra que leva a 404 custa mais caro que a ausência
+                dele: a pessoa clica com intenção de compra e recebe um erro.
+                Ver src/lib/catalog/vitrine.ts (P0-1). */}
+            {temProduto ? (
+              <Link href={linkProduto} className="w-full sm:w-auto">
+                <Button size="lg" className="w-full">
+                  Comprar agora
+                </Button>
+              </Link>
+            ) : null}
+            <Link href={linkProduto} className="w-full sm:w-auto">
               {/* secondary do Button é pensado para fundo claro (borda e
                   texto em --ink); sobre o preto do hero ficaria invisível,
                   então este usa borda/texto em --paper via className. */}
               <Button
-                variant="secondary"
+                variant={temProduto ? "secondary" : "primary"}
                 size="lg"
-                className="w-full border-paper/40 text-paper hover:bg-paper/10"
+                className={
+                  temProduto
+                    ? "w-full border-paper/40 text-paper hover:bg-paper/10"
+                    : "w-full"
+                }
               >
                 Conheça nossas próteses
               </Button>
@@ -144,11 +186,16 @@ export default async function HomePage() {
             Base ultrafina de 0,08mm, com acabamento natural na linha frontal —
             o carro-chefe da Reverá.
           </p>
+          {/* Sem produto publicado, este link vai para /cores — que existe e
+              mostra as cores reais — em vez de para a página do produto que
+              ainda não está no ar (P0-1). */}
           <Link
-            href="/produtos/micropele-008"
+            href={temProduto ? linkProduto : "/cores"}
             className="self-start text-ink underline decoration-gold decoration-2 underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
-            Ver detalhes e cores disponíveis
+            {temProduto
+              ? "Ver detalhes e cores disponíveis"
+              : "Ver as cores disponíveis"}
           </Link>
         </Reveal>
       </section>

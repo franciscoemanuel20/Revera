@@ -88,12 +88,34 @@ export async function adicionarItemAoCarrinho(
 
   const { data: variante } = await admin()
     .from("product_variants")
-    .select("id, is_active, stock_qty")
+    .select("id, is_active, stock_qty, price_cents")
     .eq("id", variantId)
     .maybeSingle();
 
   if (!variante || !variante.is_active) {
     return { erro: "Esta variante não está disponível para compra." };
+  }
+
+  /**
+   * Preço zero não entra no carrinho (P0-1, 27/08/2026).
+   *
+   * `price_cents` é NOT NULL no banco, então "sem preço definido" não vira
+   * null — vira ZERO. E zero atravessa o sistema inteiro sem reclamação:
+   * o subtotal soma 0, o pedido nasce com total 0, o gateway cobra nada.
+   * Na auditoria de 26/08 a variante da Micropele estava exatamente assim,
+   * e só `is_active: false` separava a loja de entregar a peça de graça.
+   *
+   * A guarda fica AQUI, e não só na vitrine, porque este é o ponto onde o
+   * preço vira intenção de compra — e é o único por onde todo item passa,
+   * venha da página do produto, do drawer ou de uma chamada direta.
+   */
+  if (!Number.isFinite(variante.price_cents as number) || (variante.price_cents as number) <= 0) {
+    console.error(
+      "[carrinho] variante ativa com preço inválido — recusando",
+      variantId,
+      variante.price_cents
+    );
+    return { erro: "Esta variante está sem preço definido e não pode ser comprada." };
   }
 
   const cartId = await obterOuCriarCarrinhoId();

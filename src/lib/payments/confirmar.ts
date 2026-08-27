@@ -152,7 +152,7 @@ export async function confirmarPagamento(
    * de bug para diagnosticar. despacharPurchase engole os próprios erros, e
    * portanto esperar por ela não arrisca a confirmação do pagamento.
    */
-  await despacharPurchase(supabase, pedido.id);
+  await despacharPurchase(supabase, pedido.id, provider.name);
 
   return { estado: "pago", jaEstavaPago: false };
 }

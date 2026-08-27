@@ -11,7 +11,8 @@
     "test": "vitest run",
     "verify:secrets": "node scripts/verify-no-secrets-in-bundle.mjs",
     "seed": "node --env-file=.env.local scripts/seed.mjs",
-    "db:aplicar": "node scripts/aplicar-migrations.mjs"
+    "db:aplicar": "node scripts/aplicar-migrations.mjs",
+    "verify:deploy": "node scripts/verify-deploy-seguro.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",

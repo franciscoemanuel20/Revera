@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Fraunces, Manrope } from "next/font/google";
 import { Pixels } from "@/components/tracking/Pixels";
 import { PageViewTracker } from "@/components/tracking/PageViewTracker";
+import { rastreamentoAtivoNesteAmbiente } from "@/lib/tracking/permissao";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { Footer } from "@/components/ui/Footer";
 import { Header } from "@/components/ui/Header";
@@ -43,14 +44,14 @@ export default function RootLayout({
             variável configurada, nenhum script de terceiro entra na página.
             Ver src/components/tracking/Pixels.tsx para as duas armadilhas
             que este componente evita de propósito. */}
-        <Pixels />
+        <Pixels ativo={rastreamentoAtivoNesteAmbiente()} />
 
         {/* PageView em toda troca de rota. Dentro de <Suspense> porque usa
             useSearchParams, e sem o limite o Next força a página inteira a
             virar dinâmica — as páginas estáticas do site perderiam o
             pré-render por causa de um script de métrica. */}
         <Suspense fallback={null}>
-          <PageViewTracker />
+          <PageViewTracker ativo={rastreamentoAtivoNesteAmbiente()} />
         </Suspense>
 
         {/* CartProvider por fora de Header/Footer: o contador de itens do

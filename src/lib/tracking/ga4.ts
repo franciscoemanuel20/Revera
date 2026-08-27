@@ -1,5 +1,6 @@
 import "server-only";
 import { GA4_MEASUREMENT_ID, MOEDA, centavosParaMoeda } from "./config";
+import { ehProducao, descricaoDoAmbiente } from "@/lib/config/ambiente";
 import type { ResultadoEnvio } from "./meta-capi";
 
 /**
@@ -31,6 +32,16 @@ export async function enviarPurchaseGa4(input: {
   orderNumber: string;
   contents: Array<{ id: string; quantity: number; item_price: number }>;
 }): Promise<ResultadoEnvio> {
+  // Guarda própria (CAMADA 3 do P0-3). O GA4 não tem equivalente ao
+  // test_event_code da Meta que sirva para este uso, então fora de produção
+  // o envio simplesmente não acontece — nunca contamina a propriedade real.
+  if (!ehProducao()) {
+    return {
+      sucesso: false,
+      motivoPulado: `envio ao GA4 bloqueado fora de produção (${descricaoDoAmbiente()})`,
+    };
+  }
+
   const apiSecret = process.env.GA4_API_SECRET;
 
   if (!GA4_MEASUREMENT_ID) {

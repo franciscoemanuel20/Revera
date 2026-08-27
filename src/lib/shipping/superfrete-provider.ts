@@ -11,6 +11,7 @@ import type {
   ShippingQuote,
 } from "./provider";
 import { ShippingUnavailable } from "./provider";
+import { ehProducao, descricaoDoAmbiente } from "@/lib/config/ambiente";
 
 /**
  * Adapter real da SuperFrete.
@@ -40,10 +41,105 @@ import { ShippingUnavailable } from "./provider";
  * trocar de plataforma um dia não obriga a mexer no resto.
  */
 
-const BASE =
-  process.env.SUPERFRETE_SANDBOX === "1"
+/**
+ * ===========================================================================
+ * QUAL AMBIENTE DA SUPERFRETE (P0-4, 27/08/2026)
+ * ===========================================================================
+ * Este trecho era:
+ *
+ *     const BASE = process.env.SUPERFRETE_SANDBOX === "1"
+ *       ? "https://sandbox.superfrete.com"
+ *       : "https://api.superfrete.com";
+ *
+ * Uma comparação com "1", e QUALQUER outra coisa caindo em produção — sem
+ * dizer nada. Em 26/08/2026 a auditoria encontrou `SUPERFRETE_SANDBOX` com
+ * 155 caracteres; em 27/08 ficou provado que era o TOKEN DE PRODUÇÃO colado
+ * na variável errada (valor idêntico a SUPERFRETE_TOKEN). Como
+ * "<token>" !== "1", o ambiente de desenvolvimento estava falando com a API
+ * de produção acreditando estar em sandbox — e `payLabel()` debita a carteira
+ * de verdade.
+ *
+ * Agora: valor reconhecido ou erro. Nunca um terceiro caminho silencioso.
+ */
+const VALORES_SANDBOX = new Set(["1", "true", "sim", "sandbox", "on"]);
+const VALORES_PRODUCAO = new Set([
+  "0",
+  "false",
+  "nao",
+  "não",
+  "producao",
+  "produção",
+  "production",
+  "off",
+]);
+
+export type ModoSuperFrete = "sandbox" | "producao";
+
+/**
+ * Lê SUPERFRETE_SANDBOX. Ausente ou irreconhecível LANÇA — é o "falha
+ * segura" pedido: melhor ficar sem cotação (a venda ainda acontece, com o
+ * motivo gravado em shipping_quotes) do que comprar etiqueta no ambiente
+ * errado.
+ */
+export function modoSuperFrete(): ModoSuperFrete {
+  const bruto = process.env.SUPERFRETE_SANDBOX?.trim().toLowerCase() ?? "";
+
+  if (!bruto) {
+    throw new ShippingUnavailable(
+      "SUPERFRETE_SANDBOX não definida. Ela decide entre a API de sandbox e " +
+        "a de produção, e não existe padrão: defina '1' (sandbox) ou '0' " +
+        "(produção). Produção emite etiqueta paga de verdade."
+    );
+  }
+
+  if (VALORES_SANDBOX.has(bruto)) return "sandbox";
+  if (VALORES_PRODUCAO.has(bruto)) return "producao";
+
+  // Não ecoa o valor: se alguém colou um token aqui (foi o que aconteceu),
+  // o log não pode virar o lugar onde esse token vaza.
+  throw new ShippingUnavailable(
+    `SUPERFRETE_SANDBOX tem um valor irreconhecível (${bruto.length} caracteres). ` +
+      "Use '1' para sandbox ou '0' para produção. Se você colou um token " +
+      "aqui, ele pertence a SUPERFRETE_TOKEN."
+  );
+}
+
+export function baseSuperFrete(): string {
+  return modoSuperFrete() === "sandbox"
     ? "https://sandbox.superfrete.com"
     : "https://api.superfrete.com";
+}
+
+/**
+ * Trava das operações que GASTAM (P0-4).
+ *
+ * Cotar é de graça e não muda nada — `/calculator` é leitura pura, e é assim
+ * que a integração foi validada em 27/08/2026. Criar e pagar etiqueta é o
+ * contrário: `POST /checkout` debita a carteira no instante da chamada, e não
+ * existe desfazer.
+ *
+ * Por isso a assimetria: a cotação pode falar com a API de produção a partir
+ * de qualquer ambiente, e o gasto SÓ acontece quando as duas coisas batem —
+ * ambiente de produção E modo de produção. Sem exceção e sem variável de
+ * escape: uma trava de dinheiro que aceita ser desligada por uma variável é
+ * exatamente a trava que alguém desliga às duas da manhã para "testar rápido".
+ *
+ * Quem quiser exercitar etiqueta fora de produção usa o sandbox — que é para
+ * isso que ele existe.
+ */
+export function exigirAmbienteParaGastar(operacao: string): void {
+  const modo = modoSuperFrete();
+  if (modo === "sandbox") return; // sandbox não debita nada
+
+  if (!ehProducao()) {
+    throw new ShippingUnavailable(
+      `"${operacao}" recusada: usaria a API de PRODUÇÃO da SuperFrete a ` +
+        `partir de ${descricaoDoAmbiente()}, e isso debita a carteira de ` +
+        "verdade. Para exercitar etiqueta fora de produção, use " +
+        "SUPERFRETE_SANDBOX=1 com um token de sandbox."
+    );
+  }
+}
 
 /**
  * OBRIGATÓRIO, e a documentação pede nome, versão e e-mail de contato
@@ -64,12 +160,38 @@ export const SERVICO = {
 } as const;
 
 /**
- * Teto de seguro por transportadora, da documentação.
+ * Teto de seguro por transportadora.
  *
  * IMPORTANTE para a Reverá: a peça vale R$ 1.600 e o teto da Jadlog e da J&T
- * é R$ 1.500. Elas NÃO cobrem o valor declarado desta prótese. Por isso não
- * entram na lista padrão de cotação — mandar sem cobertura total é transferir
- * o risco do extravio para a operação sem ninguém perceber.
+ * fica abaixo disso. Elas NÃO cobrem o valor declarado desta prótese. Por isso
+ * não entram na lista padrão de cotação — mandar sem cobertura total é
+ * transferir o risco do extravio para a operação sem ninguém perceber.
+ *
+ * ===========================================================================
+ * CONFERIDO CONTRA A API EM 27/08/2026 (P0-4)
+ * ===========================================================================
+ * A auditoria de 26/08 levantou a suspeita de que decidir cobertura por
+ * tabela fixa estivesse errado, porque a resposta da API trazia
+ * `insurance_value: 15.74` para PAC/SEDEX enquanto trazia `1600` para a
+ * Loggi. A suspeita foi INVESTIGADA E DESCARTADA — ver a prova em
+ * docs/p0-4-superfrete-seguro.md. Resumo: nos Correios aquele campo é o
+ * PREÇO do seguro, não a cobertura (R$ 0,74 + 1% do que passa de R$ 100);
+ * na Loggi é o valor declarado. Mesmo nome, significados diferentes — e por
+ * isso a resposta NÃO serve para decidir cobertura. A tabela fixa está certa.
+ *
+ * Tetos verificados pedindo cotações acima e abaixo de cada limite:
+ *   Loggi  → erro em R$ 3.500, aceita R$ 1.600 → teto R$ 3.000  (bate)
+ *   Jadlog → erro em R$ 1.600, aceita R$ 1.400 → teto R$ 1.500  (bate)
+ *   J&T    → erro dizendo "limite máximo de R$ 1000,00"         (NÃO batia)
+ *   PAC/SEDEX → aceitam R$ 3.500 sem erro → teto é MAIOR que os R$ 3.000
+ *               declarados aqui; o valor fica conservador de propósito
+ *               (errar para baixo só descarta opção, nunca deixa peça a
+ *               descoberto).
+ *
+ * O J&T foi corrigido de 150_000 para 100_000 com base na mensagem da própria
+ * API. Sem efeito prático hoje — ele não está em SERVICOS_PADRAO — mas um
+ * número errado numa tabela de cobertura é exatamente o tipo de coisa que
+ * alguém reaproveita anos depois acreditando que foi conferida.
  */
 export const TETO_SEGURO_CENTS: Record<number, number> = {
   [SERVICO.PAC]: 300_000,
@@ -77,7 +199,7 @@ export const TETO_SEGURO_CENTS: Record<number, number> = {
   [SERVICO.MINI]: 300_000,
   [SERVICO.LOGGI]: 300_000,
   [SERVICO.JADLOG]: 150_000,
-  [SERVICO.JT]: 150_000,
+  [SERVICO.JT]: 100_000,
 };
 
 /**
@@ -126,7 +248,7 @@ async function interpretar(r: Response, caminho: string): Promise<unknown> {
 async function postar(caminho: string, corpo: unknown): Promise<unknown> {
   let r: Response;
   try {
-    r = await fetch(`${BASE}/api/v0${caminho}`, {
+    r = await fetch(`${baseSuperFrete()}/api/v0${caminho}`, {
       method: "POST",
       headers: cabecalhos(),
       body: JSON.stringify(corpo),
@@ -141,7 +263,7 @@ async function postar(caminho: string, corpo: unknown): Promise<unknown> {
 async function buscar(caminho: string): Promise<unknown> {
   let r: Response;
   try {
-    r = await fetch(`${BASE}/api/v0${caminho}`, {
+    r = await fetch(`${baseSuperFrete()}/api/v0${caminho}`, {
       headers: cabecalhos(),
       cache: "no-store",
     });
@@ -261,6 +383,7 @@ export class SuperFreteShippingProvider implements ShippingProvider {
    * muda (entra o objeto `invoice` com a chave de 44 dígitos).
    */
   async createLabel(order: ShippableOrder): Promise<ShipmentResult> {
+    exigirAmbienteParaGastar("criar etiqueta");
     const d = order.recipient;
 
     const corpo = {
@@ -336,6 +459,7 @@ export class SuperFreteShippingProvider implements ShippingProvider {
    * para ninguém criar uma segunda e pagar duas.
    */
   async payLabel(providerShipmentId: string): Promise<void> {
+    exigirAmbienteParaGastar("pagar etiqueta");
     try {
       await postar("/checkout", { orders: [providerShipmentId] });
     } catch (e) {

@@ -1,5 +1,6 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/server";
+import { podeEnviarConversao } from "./permissao";
 
 /**
  * Controle do evento Purchase (Meta Pixel / futura Conversions API).
@@ -90,6 +91,41 @@ export async function consumirPurchaseParaNavegador(
     .maybeSingle();
 
   if (!pedido || pedido.status === "new" || pedido.status === "canceled") {
+    return null;
+  }
+
+  /**
+   * CAMADA 2 de 3 (P0-3, 27/08/2026) — o navegador também não pode disparar
+   * Purchase de uma compra simulada.
+   *
+   * Bloquear só o envio de servidor não bastaria: `medirCompra` chama
+   * `fbq('track','Purchase')` com o NEXT_PUBLIC_META_PIXEL_ID real, que está
+   * no bundle por natureza. Se este payload chegasse ao PurchaseTracker, o
+   * evento sairia pelo navegador mesmo com a CAPI calada — e a Meta contaria
+   * a venda do mesmo jeito.
+   *
+   * O provedor é lido de `payments` (e não recebido por parâmetro) porque
+   * esta função também roda quando o cliente volta à página do pedido dias
+   * depois, sem nenhuma confirmação acontecendo naquele momento.
+   */
+  const { data: pagamento } = await supabase
+    .from("payments")
+    .select("provider")
+    .eq("order_id", orderId)
+    .eq("status", "approved")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const permissao = podeEnviarConversao({
+    providerPagamento: (pagamento?.provider as string | null) ?? null,
+  });
+  if (!permissao.pode) {
+    console.warn(
+      "[purchase] payload de navegador recusado:",
+      orderId,
+      permissao.motivo
+    );
     return null;
   }
 

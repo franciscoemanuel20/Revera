@@ -19,7 +19,7 @@ import { guardarAtribuicaoDaUrl } from "@/lib/tracking/atribuicao";
  * mesma URL. Sem a comparação, o PageView sairia dobrado — que é exatamente o
  * bug que este arquivo existe para evitar.
  */
-export function PageViewTracker() {
+export function PageViewTracker({ ativo }: { ativo: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const ultimaUrl = useRef<string | null>(null);
@@ -43,6 +43,14 @@ export function PageViewTracker() {
      */
     guardarAtribuicaoDaUrl();
 
+    /**
+     * A atribuição acima roda SEMPRE, inclusive com rastreamento desligado:
+     * ela só grava no sessionStorage do próprio visitante e é lida na criação
+     * do pedido. Já o disparo abaixo fala com a conta de anúncios real, e por
+     * isso obedece ao ambiente (P0-3, 27/08/2026).
+     */
+    if (!ativo) return;
+
     if (META_PIXEL_ID) {
       window.fbq?.("track", "PageView");
     }
@@ -53,7 +61,7 @@ export function PageViewTracker() {
         page_title: document.title,
       });
     }
-  }, [pathname, searchParams]);
+  }, [pathname, searchParams, ativo]);
 
   return null;
 }

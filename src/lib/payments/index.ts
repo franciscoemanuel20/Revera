@@ -2,25 +2,102 @@ import "server-only";
 import type { PaymentProvider } from "./provider";
 import { MockPaymentProvider } from "./mock-provider";
 import { InfinitePayProvider } from "./infinitepay-provider";
+import { descricaoDoAmbiente, permiteSimulacao } from "@/lib/config/ambiente";
+
+/**
+ * Erro de configuração de pagamento.
+ *
+ * Tipo próprio (e não Error genérico) para quem chama conseguir distinguir
+ * "não está configurado" de "o gateway caiu" — são situações diferentes e
+ * merecem telas diferentes: a primeira é culpa nossa e não adianta o cliente
+ * tentar de novo; a segunda passa sozinha.
+ */
+export class PagamentoIndisponivel extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PagamentoIndisponivel";
+  }
+}
 
 /**
  * Factory único — checkout e webhook chamam getPaymentProvider(), nunca
- * importam um adapter direto. Decide pela env PAYMENT_PROVIDER.
+ * importam um adapter direto.
  *
- * O padrão é 'mock' de propósito: um deploy sem a variável configurada NÃO
- * pode cair silenciosamente em cobrança real, e também não pode quebrar a
- * loja — cai no simulador, que é visível e inofensivo.
+ * ===========================================================================
+ * FAIL-CLOSED (P0-2, 27/08/2026) — o que mudou e por quê
+ * ===========================================================================
+ * Este arquivo fazia:
+ *
+ *     const provider = process.env.PAYMENT_PROVIDER ?? "mock";
+ *
+ * O raciocínio original está no histórico e não era bobo: "um deploy sem a
+ * variável NÃO pode cair silenciosamente em cobrança real". O problema é que
+ * ele protegia contra o erro menor e abria a porta do maior. Sem a variável,
+ * a loja não cobrava ninguém — ela APROVAVA todo mundo, porque
+ * MockPaymentProvider.confirmPayment() devolve paid:true sempre. Prótese de
+ * R$ 1.600 entregue de graça, e um Purchase falso para a Meta em cima.
+ *
+ * Reproduzido em 27/08/2026 com VERCEL_ENV=production e a variável ausente:
+ * o provider escolhido foi 'mock'.
+ *
+ * A regra agora tem duas travas independentes:
+ *
+ *   1. PAYMENT_PROVIDER AUSENTE  → erro. Nunca há padrão. Nem mock, nem real.
+ *   2. PAYMENT_PROVIDER=mock     → só vale se o ambiente for desenvolvimento
+ *                                  (ver src/lib/config/ambiente.ts, que trata
+ *                                  ausência de sinal como produção).
+ *
+ * Ou seja: para o mock rodar é preciso pedir por ele E estar num lugar onde
+ * ele é permitido. Esquecer a variável não aprova nada; e definir mock por
+ * engano na Vercel também não.
+ *
+ * O preço disso é que um deploy mal configurado deixa a loja sem pagamento.
+ * É o desfecho certo: uma loja que não consegue cobrar perde vendas daquele
+ * dia; uma loja que aprova sem cobrar perde o estoque e a conta de anúncios.
  */
 export function getPaymentProvider(): PaymentProvider {
-  const provider = process.env.PAYMENT_PROVIDER ?? "mock";
+  const configurado = process.env.PAYMENT_PROVIDER?.trim();
 
-  switch (provider) {
+  if (!configurado) {
+    throw new PagamentoIndisponivel(
+      "PAYMENT_PROVIDER não está definida. O pagamento fica indisponível de " +
+        "propósito: sem essa variável não existe padrão, para nunca aprovar " +
+        `uma compra sem cobrar. Defina 'infinitepay' em produção. ${descricaoDoAmbiente()}`
+    );
+  }
+
+  switch (configurado) {
     case "mock":
+      if (!permiteSimulacao()) {
+        throw new PagamentoIndisponivel(
+          "PAYMENT_PROVIDER=mock foi recusado: o provedor simulado aprova " +
+            "qualquer pagamento sem cobrar, e só pode rodar em " +
+            `desenvolvimento. ${descricaoDoAmbiente()}. Use 'infinitepay'.`
+        );
+      }
       return new MockPaymentProvider();
+
     case "infinitepay":
       return new InfinitePayProvider();
+
     default:
-      throw new Error(`PAYMENT_PROVIDER desconhecido: "${provider}"`);
+      throw new PagamentoIndisponivel(
+        `PAYMENT_PROVIDER desconhecido: "${configurado}". Valores aceitos: ` +
+          "'infinitepay' (real) ou 'mock' (só em desenvolvimento)."
+      );
+  }
+}
+
+/**
+ * Se o pagamento está configurado, sem lançar. Para tela/diagnóstico decidir
+ * o que mostrar antes de tentar cobrar.
+ */
+export function pagamentoEstaDisponivel(): boolean {
+  try {
+    getPaymentProvider();
+    return true;
+  } catch {
+    return false;
   }
 }
 

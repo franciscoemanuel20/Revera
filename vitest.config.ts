@@ -11,6 +11,11 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.ts"],
   },
   resolve: {
-    alias: { "@": path.resolve(__dirname, "src") },
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+      // Ver tests/stubs/server-only.ts — permite testar módulos de servidor
+      // sem afrouxar a proteção real do bundle.
+      "server-only": path.resolve(__dirname, "tests/stubs/server-only.ts"),
+    },
   },
 });

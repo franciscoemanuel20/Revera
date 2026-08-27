@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
+import { permiteSimulacao } from "@/lib/config/ambiente";
 import { formatarBRL } from "@/lib/format/money";
 import { SimuladorAcoes } from "./SimuladorAcoes";
 
@@ -30,9 +31,16 @@ export default async function CheckoutSimuladoPage({
 }: {
   searchParams: Promise<{ pedido?: string }>;
 }) {
-  // Fecha a porta em produção com gateway real: esta tela nunca deve
-  // aparecer para um cliente de verdade.
-  if ((process.env.PAYMENT_PROVIDER ?? "mock") !== "mock") {
+  // Fecha a porta fora de desenvolvimento: esta tela nunca deve aparecer
+  // para um cliente de verdade.
+  //
+  // P0-2/P0-3 (27/08/2026): antes a condição era
+  // `(process.env.PAYMENT_PROVIDER ?? "mock") !== "mock"` — que, com a
+  // variável ausente, considerava o ambiente "mock" e ABRIA o simulador.
+  // Num deploy sem configuração, esta página de "pagar sem pagar" ficaria
+  // pública. Agora exige as duas coisas: mock pedido explicitamente E
+  // ambiente de desenvolvimento (ver src/lib/config/ambiente.ts).
+  if (!permiteSimulacao() || process.env.PAYMENT_PROVIDER?.trim() !== "mock") {
     notFound();
   }
 
