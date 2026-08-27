@@ -33,6 +33,8 @@
  * painel); perder a confirmação não é.
  */
 
+import { descricaoDoAmbiente, podeUsarServicosReais } from "@/lib/config/ambiente";
+
 export type ModoWhatsApp = "desligado" | "simulado" | "meta";
 
 export interface MensagemWhatsApp {
@@ -51,7 +53,31 @@ export type ResultadoEnvio =
 
 export function modoWhatsApp(): ModoWhatsApp {
   const bruto = (process.env.WHATSAPP_PROVIDER ?? "").trim().toLowerCase();
-  if (bruto === "meta") return "meta";
+
+  if (bruto === "meta") {
+    /**
+     * Envio real SÓ em produção, mesmo com a variável pedindo `meta`.
+     *
+     * A situação que isto previne é banal e provável: alguém copia o bloco
+     * de variáveis da produção para o staging para "deixar igual". A partir
+     * daí todo pedido de teste manda mensagem no telefone de verdade da
+     * Reverá — e as mensagens de template são cobradas.
+     *
+     * Cai para `simulado`, e não para `desligado`, porque em staging o
+     * objetivo é justamente exercitar o fluxo: a mensagem é montada,
+     * registrada no log e a trava de "avisar uma vez só" continua sendo
+     * exercida. Só não sai do servidor.
+     */
+    if (!podeUsarServicosReais()) {
+      console.warn(
+        `[whatsapp] WHATSAPP_PROVIDER=meta recusado fora de produção — ` +
+          `usando modo simulado. ${descricaoDoAmbiente()}`
+      );
+      return "simulado";
+    }
+    return "meta";
+  }
+
   if (bruto === "simulado") return "simulado";
   return "desligado";
 }

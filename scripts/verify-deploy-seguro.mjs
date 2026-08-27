@@ -45,23 +45,60 @@ function env(nome) {
   return typeof v === "string" ? v.trim() : "";
 }
 
-/** Mesma regra de src/lib/config/ambiente.ts — na dúvida, é produção. */
+/**
+ * Mesma regra de src/lib/config/ambiente.ts — na dúvida, é produção.
+ *
+ * A duplicação é proposital e conhecida: este arquivo roda como buildCommand
+ * na Vercel, ANTES do build, e não tem como importar TypeScript. Mudou lá,
+ * muda aqui. As duas versões têm o mesmo teste de matriz cobrindo-as.
+ */
 function ambienteAtual() {
   const vercel = env("VERCEL_ENV");
+  const querStaging = env("APP_ENV").toLowerCase() === "staging";
+
   if (vercel === "production") return "producao";
-  if (vercel === "preview") return "preview";
   if (vercel === "development") return "desenvolvimento";
   const node = env("NODE_ENV");
-  if (node === "development" || node === "test") return "desenvolvimento";
+  if (!vercel && (node === "development" || node === "test")) return "desenvolvimento";
+  if (querStaging) return "staging";
+  if (vercel === "preview") return "preview";
   return "producao";
 }
 
 const ambiente = ambienteAtual();
-const podeReceberComprador = ambiente !== "desenvolvimento";
+
+/**
+ * Existe risco de uma pessoa real comprar aqui?
+ *
+ * Preview entra: a URL é pública e indexável. Staging NÃO entra — é um lugar
+ * deliberado, configurado à mão, e é justamente onde sandbox e test mode
+ * precisam ser permitidos. Antes desta separação (27/08/2026) preview e
+ * staging eram a mesma coisa, e por isso um staging simplesmente não
+ * conseguia subir: a trava exigia dele configuração de produção.
+ */
+const podeReceberComprador = ambiente === "producao" || ambiente === "preview";
+const permiteSimulacao = ambiente === "desenvolvimento" || ambiente === "staging";
+
+/**
+ * Incoerência que não pode passar em silêncio: alguém pediu staging no
+ * domínio de produção. O runtime IGNORA o pedido (ver ambiente.ts), então a
+ * loja não fica insegura — mas quem configurou acha que está num staging, e
+ * pode publicar achando que testa. Recusar o deploy é como isso aparece.
+ */
+if (env("VERCEL_ENV") === "production" && env("APP_ENV").toLowerCase() === "staging") {
+  problemas.push(
+    "APP_ENV=staging no domínio de PRODUÇÃO. O pedido é ignorado pelo " +
+      "runtime (produção nunca vira staging), mas a configuração está " +
+      "errada: ou esta variável não deveria estar aqui, ou este deploy não " +
+      "deveria ser o de produção. Remova APP_ENV deste projeto."
+  );
+}
 
 console.log(`\nVerificação de deploy seguro — ambiente detectado: ${ambiente}`);
 console.log(
-  `  (VERCEL_ENV=${env("VERCEL_ENV") || "ausente"}, NODE_ENV=${env("NODE_ENV") || "ausente"})\n`
+  `  (VERCEL_ENV=${env("VERCEL_ENV") || "ausente"}, NODE_ENV=${
+    env("NODE_ENV") || "ausente"
+  }, APP_ENV=${env("APP_ENV") || "ausente"})\n`
 );
 
 // ---------------------------------------------------------------------------
@@ -84,7 +121,25 @@ if (podeReceberComprador) {
   } else if (provider !== "infinitepay") {
     problemas.push(
       `PAYMENT_PROVIDER="${provider}" não é um provedor conhecido. ` +
-        "Aceitos: 'infinitepay' (real), 'mock' (só em desenvolvimento)."
+        "Aceitos: 'infinitepay' (real), 'mock' (só em desenvolvimento e staging)."
+    );
+  }
+}
+
+// Staging: provider ainda é obrigatório (ausente continua sendo erro de
+// configuração), mas 'mock' é o valor esperado — é para isso que ele existe.
+if (permiteSimulacao && ambiente === "staging") {
+  if (!provider) {
+    problemas.push(
+      "PAYMENT_PROVIDER ausente em staging. Mesmo aqui não existe padrão: " +
+        "declare 'mock' para simular, ou o provedor de teste quando houver."
+    );
+  } else if (provider !== "mock" && provider !== "infinitepay") {
+    problemas.push(`PAYMENT_PROVIDER="${provider}" desconhecido em staging.`);
+  } else if (provider === "infinitepay") {
+    problemas.push(
+      "PAYMENT_PROVIDER=infinitepay em STAGING. Isso cobraria de verdade, " +
+        "com o gateway real, a partir de um ambiente de teste. Use 'mock'."
     );
   }
 
@@ -173,10 +228,19 @@ if (env("SUPERFRETE_TOKEN")) {
         "pertence a SUPERFRETE_TOKEN."
     );
   } else if (podeReceberComprador && VALORES_SANDBOX.has(sandboxBruto)) {
+    // Staging não cai aqui: sandbox é exatamente o que se espera dele.
     problemas.push(
       "SUPERFRETE_SANDBOX em modo sandbox num ambiente com comprador real. " +
         "As etiquetas seriam de mentira e nenhum pedido seria despachado de " +
         "verdade."
+    );
+  }
+
+  if (ambiente === "staging" && VALORES_PRODUCAO.has(sandboxBruto)) {
+    problemas.push(
+      "SUPERFRETE_SANDBOX=0 em STAGING. Apontaria para a API real da " +
+        "transportadora, e uma etiqueta criada ali é debitada da carteira de " +
+        "verdade. Use '1'."
     );
   }
 

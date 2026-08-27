@@ -11,7 +11,7 @@ import type {
   ShippingQuote,
 } from "./provider";
 import { ShippingUnavailable } from "./provider";
-import { ehProducao, descricaoDoAmbiente } from "@/lib/config/ambiente";
+import { podeGastarDinheiroReal, descricaoDoAmbiente } from "@/lib/config/ambiente";
 
 /**
  * Adapter real da SuperFrete.
@@ -131,7 +131,7 @@ export function exigirAmbienteParaGastar(operacao: string): void {
   const modo = modoSuperFrete();
   if (modo === "sandbox") return; // sandbox não debita nada
 
-  if (!ehProducao()) {
+  if (!podeGastarDinheiroReal()) {
     throw new ShippingUnavailable(
       `"${operacao}" recusada: usaria a API de PRODUÇÃO da SuperFrete a ` +
         `partir de ${descricaoDoAmbiente()}, e isso debita a carteira de ` +
