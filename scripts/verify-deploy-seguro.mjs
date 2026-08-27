@@ -14,12 +14,27 @@
  * descoberta pelo primeiro cliente que tentar comprar. Uma trava de deploy é
  * descoberta por quem publicou, no momento em que ele ainda está olhando.
  *
- * Uso:
+ * ===========================================================================
+ * COMO ELA É EXECUTADA — não depende de ninguém lembrar (27/08/2026)
+ * ===========================================================================
+ * Está ligada ao deploy em `vercel.json`:
+ *
+ *     "buildCommand": "node scripts/verify-deploy-seguro.mjs && next build"
+ *
+ * O `&&` é a trava: código de saída 1 aqui e o `next build` NÃO COMEÇA. O
+ * deploy falha na Vercel, com estas mensagens no log, antes de existir
+ * qualquer URL servindo a loja.
+ *
+ * Por que em `vercel.json` e não em `prebuild` do package.json: `prebuild`
+ * rodaria também no `npm run build` da máquina de quem desenvolve, onde não
+ * existem (nem devem existir) as variáveis de produção — e o ambiente é
+ * detectado como produção por fail-closed, então o build local quebraria
+ * sempre. Na Vercel, `VERCEL_ENV` está sempre definida, então a detecção é
+ * exata e a trava mira só onde existe comprador de verdade.
+ *
+ * Uso manual (continua valendo, para conferir antes de publicar):
  *   node scripts/verify-deploy-seguro.mjs
  *   npm run verify:deploy
- *
- * Sai com código 1 quando encontra problema — o que interrompe um
- * `npm run build && npm run verify:deploy` e qualquer CI encadeado.
  */
 
 const problemas = [];
