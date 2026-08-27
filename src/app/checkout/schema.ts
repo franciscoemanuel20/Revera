@@ -22,6 +22,27 @@ const textoCurto = z.string().max(500).nullable().optional().catch(null);
 // (não que isso mude o resultado aqui, mas a ordem importa se algum dia a
 // regra de formato ficar mais específica).
 export const checkoutSchema = z.object({
+  /**
+   * País de entrega. Default 'BR' — e hoje esse é o único valor que o
+   * checkout público oferece, porque não há como cobrar cliente
+   * estrangeiro (ver paisesDoCheckout() em src/lib/internacional/paises.ts).
+   *
+   * O campo existe assim mesmo, e não "quando abrir o internacional",
+   * porque é ele que carrega o país até o banco. Um pedido gravado sem país
+   * viraria adivinhação depois.
+   *
+   * As validações abaixo (CPF, CEP, UF, bairro) continuam BRASILEIRAS e
+   * continuam obrigatórias, exatamente como antes desta mudança: enquanto
+   * `country` for 'BR', nada no comportamento nacional muda. O caminho
+   * internacional tem validação própria, em src/lib/internacional/endereco.ts,
+   * e não passa por este schema.
+   */
+  country: z
+    .string()
+    .trim()
+    .default("BR")
+    .transform((v) => v.toUpperCase())
+    .refine((v) => v === "BR", "Ainda entregamos apenas no Brasil."),
   name: z.string().trim().min(3, "Informe seu nome completo."),
   email: z
     .string()

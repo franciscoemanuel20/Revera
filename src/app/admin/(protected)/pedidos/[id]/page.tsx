@@ -3,9 +3,26 @@ import { createClient } from "@/lib/supabase/server";
 import { formatarBRL } from "@/lib/format/money";
 import { formatarDataHora } from "@/lib/format/date";
 import { STATUS_BADGE_CLASS, STATUS_LABEL, type OrderStatusValue } from "@/lib/admin/order-status";
+import {
+  ENVIO_BADGE,
+  ENVIO_LABEL,
+  PAGAMENTO_BADGE,
+  PAGAMENTO_LABEL,
+  type PaymentStatusValue,
+  type ShippingStatusValue,
+} from "@/lib/admin/venda-status";
 import { PrintButton } from "../PrintButton";
 import { StatusActions } from "../StatusActions";
 import { BotaoEtiqueta } from "../BotaoEtiqueta";
+import { ChecklistExportacao } from "../ChecklistExportacao";
+import {
+  derivarExportStatus,
+  montarChecklist,
+  provedoresConfigurados,
+  type DadosFiscaisProduto,
+} from "@/lib/internacional/exportacao";
+import { daLinha, type LinhaEndereco } from "@/lib/internacional/endereco";
+import { ehInternacional } from "@/lib/internacional/paises";
 
 const METODO_LABEL: Record<string, string> = {
   pix: "Pix",
@@ -28,7 +45,7 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
     supabase
       .from("orders")
       .select(
-        "*, customers(full_name, email, phone, cpf), addresses(*), order_items(*), payments(*), shipments(*)"
+        "*, customers(full_name, email, phone, cpf, foreign_tax_id), addresses(*), order_items(*, product_variants(product_id, products(name, ncm, hs_code, country_of_origin, description_en, net_weight_g))), payments(*), shipments(*)"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -94,6 +111,54 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
     | undefined;
 
   const status = pedido.status as OrderStatusValue;
+  const paymentStatus = pedido.payment_status as PaymentStatusValue;
+  const shippingStatus = pedido.shipping_status as ShippingStatusValue;
+  const canceladoEm = (pedido.canceled_at as string | null) ?? null;
+
+  /**
+   * Exportação. Só é calculada para pedido internacional — um pedido
+   * brasileiro não ganha etapa que não lhe diz respeito (Fase 6 do escopo).
+   */
+  const enderecoLinha = pedido.addresses as unknown as LinhaEndereco | null;
+  const paisDoPedido = enderecoLinha?.country ?? "BR";
+  const pedidoInternacional = ehInternacional(paisDoPedido);
+
+  const produtosFiscais: DadosFiscaisProduto[] = pedidoInternacional
+    ? ((pedido.order_items ?? []) as Array<{
+        product_name_snapshot: string;
+        product_variants?: {
+          products?: {
+            ncm?: string | null;
+            hs_code?: string | null;
+            country_of_origin?: string | null;
+            description_en?: string | null;
+            net_weight_g?: number | null;
+          } | null;
+        } | null;
+      }>).map((item) => {
+        const prod = item.product_variants?.products ?? null;
+        return {
+          nome: item.product_name_snapshot,
+          ncm: prod?.ncm ?? null,
+          hsCode: prod?.hs_code ?? null,
+          paisOrigem: prod?.country_of_origin ?? null,
+          descricaoEn: prod?.description_en ?? null,
+          pesoLiquidoG: prod?.net_weight_g ?? null,
+        };
+      })
+    : [];
+
+  const etapasExportacao = pedidoInternacional
+    ? montarChecklist({
+        pago: paymentStatus === "paid",
+        endereco: enderecoLinha ? daLinha(enderecoLinha, cliente?.phone ?? "") : null,
+        clienteTemContato: Boolean(cliente?.phone || cliente?.email),
+        produtos: produtosFiscais,
+        provedores: provedoresConfigurados(),
+      })
+    : [];
+
+  const exportStatus = derivarExportStatus(pedidoInternacional, etapasExportacao);
 
   return (
     <div className="flex flex-col gap-8 pb-12">
@@ -111,11 +176,33 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         <p className="text-sm text-ink/70">Emitido em {formatarDataHora(new Date().toISOString())}</p>
       </div>
 
-      <span
-        className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${STATUS_BADGE_CLASS[status]}`}
-      >
-        {STATUS_LABEL[status] ?? status}
-      </span>
+      {/* Os DOIS eixos, lado a lado — nunca um selo só dizendo "preparando",
+          que não responde nem "recebi o dinheiro?" nem "a caixa saiu?".
+          Cor mais palavra, sempre: a palavra é que informa. */}
+      <div className="flex flex-wrap gap-2">
+        {canceladoEm ? (
+          <span className="w-fit rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-800">
+            Cancelado
+          </span>
+        ) : (
+          <>
+            <span
+              className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${PAGAMENTO_BADGE[paymentStatus]}`}
+            >
+              Pagamento: {PAGAMENTO_LABEL[paymentStatus]}
+            </span>
+            <span
+              className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${ENVIO_BADGE[shippingStatus]}`}
+            >
+              Envio: {ENVIO_LABEL[shippingStatus]}
+            </span>
+          </>
+        )}
+      </div>
+
+      {canceladoEm && pedido.cancel_reason ? (
+        <p className="text-sm text-ink/70">Motivo do cancelamento: {pedido.cancel_reason}</p>
+      ) : null}
 
       <section className="grid gap-6 sm:grid-cols-2">
         <div className="flex flex-col gap-1 rounded-lg border border-sand p-4">
@@ -239,10 +326,28 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         </div>
       </section>
 
+      {pedidoInternacional ? (
+        <ChecklistExportacao
+          pais={paisDoPedido}
+          etapas={etapasExportacao}
+          status={exportStatus}
+        />
+      ) : null}
+
       <section className="flex flex-col gap-3 print:hidden">
         <h2 className="font-display text-lg text-ink">Ações</h2>
-        <BotaoEtiqueta orderId={pedido.id} status={status} jaTemEtiqueta={Boolean(envio)} />
-        <StatusActions orderId={pedido.id} status={status} />
+        <BotaoEtiqueta
+          orderId={pedido.id}
+          paymentStatus={paymentStatus}
+          shippingStatus={shippingStatus}
+          jaTemEtiqueta={Boolean(envio?.tracking_code || envio?.label_url)}
+        />
+        <StatusActions
+          orderId={pedido.id}
+          paymentStatus={paymentStatus}
+          shippingStatus={shippingStatus}
+          canceladoEm={canceladoEm}
+        />
       </section>
 
       <section className="flex flex-col gap-2 print:hidden">

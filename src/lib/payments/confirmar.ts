@@ -4,6 +4,7 @@ import { getPaymentProvider } from "@/lib/payments";
 import type { WebhookHint } from "@/lib/payments/provider";
 import { registrarPurchasePendente } from "@/lib/tracking/purchase";
 import { despacharPurchase } from "@/lib/tracking/despachar";
+import { avisarVendaPaga } from "@/lib/notificacoes/venda-paga";
 
 /**
  * Confirmação de pagamento — a ÚNICA função do sistema que marca um pedido
@@ -137,14 +138,23 @@ export async function confirmarPagamento(
 
   await registrarTentativa(supabase, provider.name, pedido, pistas, confirmacao, "approved");
 
-  // A trava contra corrida: só transiciona quem encontrar o pedido AINDA em
-  // 'new'. Se as duas portas chegarem juntas, só uma atualiza — a outra vê
-  // zero linhas e entende que já foi.
+  // A trava contra corrida: se as duas portas chegarem juntas, só uma
+  // atualiza — a outra vê zero linhas e entende que já foi.
+  //
+  // Ela mora em payment_status desde 27/08/2026: `status` virou coluna gerada
+  // (migration 00000000000008) e não aceita escrita nem filtro de escrita.
+  // O efeito de corrida é idêntico — quem encontrar 'pending' ganha — e de
+  // quebra o pedido já sai com o eixo de envio no lugar certo: pago é o
+  // instante em que ele passa a esperar etiqueta.
   const { data: atualizado, error: erroUpdate } = await supabase
     .from("orders")
-    .update({ status: "paid", updated_at: new Date().toISOString() })
+    .update({
+      payment_status: "paid",
+      shipping_status: "awaiting_label",
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", pedido.id)
-    .eq("status", "new")
+    .eq("payment_status", "pending")
     .select("id")
     .maybeSingle();
 
@@ -177,6 +187,25 @@ export async function confirmarPagamento(
    * portanto esperar por ela não arrisca a confirmação do pagamento.
    */
   await despacharPurchase(supabase, pedido.id, provider.name);
+
+  /**
+   * O histórico do pedido e o aviso, nesta ordem e nos dois casos com
+   * `await`, pelo mesmo motivo do Purchase acima: numa função serverless a
+   * promessa solta morre pela metade quando a resposta sai.
+   *
+   * Nenhum dos dois lança — avisarVendaPaga engole os próprios erros de
+   * propósito. Um aviso perdido é recuperável (a venda está no painel); uma
+   * confirmação de pagamento perdida não é.
+   */
+  await supabase.from("audit_logs").insert({
+    admin_user_id: null,
+    action: "pedido.pagamento_confirmado",
+    entity_type: "orders",
+    entity_id: pedido.id,
+    diff: { por: provider.name },
+  });
+
+  await avisarVendaPaga(supabase, pedido.id);
 
   return { estado: "pago", jaEstavaPago: false };
 }

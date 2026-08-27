@@ -5,25 +5,56 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Toast } from "@/components/ui/Toast";
-import { STATUS_LABEL, transicoesDisponiveis, type OrderStatusValue } from "@/lib/admin/order-status";
-import { mudarStatusPedidoAction } from "./actions";
+import {
+  ENVIO_LABEL,
+  transicoesEnvioDisponiveis,
+  type PaymentStatusValue,
+  type ShippingStatusValue,
+} from "@/lib/admin/venda-status";
+import { cancelarPedidoAction, marcarEnvioAction } from "./actions";
 
-// print:hidden no wrapper (ver page.tsx do detalhe): quem imprime o pedido
-// não precisa ver botão de ação, só o conteúdo do pedido em si.
-export function StatusActions({ orderId, status }: { orderId: string; status: OrderStatusValue }) {
+/**
+ * As ações possíveis para ESTE pedido, e só elas.
+ *
+ * Botão que não faz sentido no estado atual não aparece desabilitado com
+ * explicação: some. Quem opera a loja não precisa aprender por que uma coisa
+ * é impossível — precisa ver as duas ou três coisas que dá para fazer agora.
+ *
+ * Nada aqui usa palavra de sistema. A versão anterior desta tela explicava
+ * que "o pagamento só é confirmado pelo webhook do provedor, ver
+ * src/app/api/.../route.ts", com caminho de arquivo e tudo. Estava correto e
+ * era ilegível para a pessoa que precisa despachar cinco caixas hoje.
+ *
+ * print:hidden no wrapper (ver page.tsx do detalhe): quem imprime o pedido
+ * quer o conteúdo, não os botões.
+ */
+export function StatusActions({
+  orderId,
+  paymentStatus,
+  shippingStatus,
+  canceladoEm,
+}: {
+  orderId: string;
+  paymentStatus: PaymentStatusValue;
+  shippingStatus: ShippingStatusValue;
+  canceladoEm: string | null;
+}) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState<OrderStatusValue | null>(null);
+  const [ocupado, setOcupado] = useState(false);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+  const [motivo, setMotivo] = useState("");
 
-  const disponiveis = transicoesDisponiveis(status);
+  const disponiveis = canceladoEm ? [] : transicoesEnvioDisponiveis(shippingStatus);
+  // Enviado ou entregue não volta por botão: seria "descancelar" a realidade.
+  const podeCancelar =
+    !canceladoEm && !["shipped", "delivered"].includes(shippingStatus);
 
-  async function aplicar(destino: OrderStatusValue) {
+  async function aplicarEnvio(destino: ShippingStatusValue) {
     setErro(null);
-    setEnviando(destino);
-    const resultado = await mudarStatusPedidoAction({ orderId, novoStatus: destino });
-    setEnviando(null);
-    setConfirmandoCancelamento(false);
+    setOcupado(true);
+    const resultado = await marcarEnvioAction({ orderId, novoEnvio: destino });
+    setOcupado(false);
     if ("error" in resultado) {
       setErro(resultado.error);
       return;
@@ -31,56 +62,69 @@ export function StatusActions({ orderId, status }: { orderId: string; status: Or
     router.refresh();
   }
 
+  async function cancelar() {
+    setErro(null);
+    setOcupado(true);
+    const resultado = await cancelarPedidoAction({ orderId, motivo });
+    setOcupado(false);
+    if ("error" in resultado) {
+      setErro(resultado.error);
+      return;
+    }
+    setConfirmandoCancelamento(false);
+    setMotivo("");
+    router.refresh();
+  }
+
+  if (canceladoEm) {
+    return (
+      <p className="text-sm text-ink/60">
+        Pedido cancelado. O histórico fica guardado — nada mais a fazer por aqui.
+      </p>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {erro ? <Toast message={erro} variant="error" onClose={() => setErro(null)} /> : null}
 
-      {/* A transição para "pago" nunca aparece na lista de disponíveis (ver
-          transicoesDisponiveis) — o botão abaixo é só para deixar EXPLÍCITO,
-          na tela, por que ele não existe, em vez de um pedido "new" parecer
-          travado sem explicação nenhuma. */}
-      {status === "new" ? (
-        <div className="flex flex-col items-start gap-2 rounded-md border border-sand bg-sand/40 p-3 text-sm text-ink/70">
-          <Button type="button" variant="secondary" disabled className="cursor-not-allowed opacity-50">
-            Marcar como pago
-          </Button>
-          <p>
-            Este botão fica sempre indisponível: o pagamento só é confirmado pelo webhook do
-            provedor, depois de consultar o gateway de verdade (ver
-            src/app/api/webhooks/pagamento/route.ts). Marcar manualmente abriria brecha para
-            liberar um pedido sem o dinheiro ter entrado — por isso não existe aqui.
-          </p>
-        </div>
+      {paymentStatus !== "paid" ? (
+        <p className="text-sm text-ink/70">
+          Esta venda ainda não foi paga. Assim que o pagamento entrar, ela aparece aqui como
+          paga sozinha — não é preciso marcar nada à mão.
+        </p>
       ) : null}
 
-      {disponiveis.length === 0 ? (
-        <p className="text-sm text-ink/60">Este pedido não tem mais transições manuais disponíveis.</p>
-      ) : (
-        <div className="flex flex-wrap gap-3">
-          {disponiveis.map((destino) =>
-            destino === "canceled" ? (
-              <Button
-                key={destino}
-                type="button"
-                variant="secondary"
-                disabled={enviando !== null}
-                onClick={() => setConfirmandoCancelamento(true)}
-              >
-                Cancelar pedido
-              </Button>
-            ) : (
-              <Button
-                key={destino}
-                type="button"
-                disabled={enviando !== null}
-                onClick={() => aplicar(destino)}
-              >
-                {enviando === destino ? "Salvando..." : `Mover para: ${STATUS_LABEL[destino]}`}
-              </Button>
-            )
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-3">
+        {disponiveis.map((destino) => (
+          <Button
+            key={destino}
+            type="button"
+            disabled={ocupado}
+            onClick={() => aplicarEnvio(destino)}
+            className="min-h-12"
+          >
+            {destino === "shipped" ? "Marcar como enviado" : null}
+            {destino === "delivered" ? "Marcar como entregue" : null}
+            {destino === "awaiting_label" ? "Tentar etiqueta de novo" : null}
+            {!["shipped", "delivered", "awaiting_label"].includes(destino)
+              ? ENVIO_LABEL[destino]
+              : null}
+          </Button>
+        ))}
+
+        {podeCancelar ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={ocupado}
+            onClick={() => setConfirmandoCancelamento(true)}
+            className="min-h-12"
+          >
+            Cancelar pedido
+          </Button>
+        ) : null}
+      </div>
 
       <Modal
         open={confirmandoCancelamento}
@@ -88,15 +132,25 @@ export function StatusActions({ orderId, status }: { orderId: string; status: Or
         title="Cancelar pedido"
       >
         <p className="text-sm text-ink/80">
-          Cancelar tira o pedido do fluxo normal e não tem transição de volta. Confirma o
-          cancelamento?
+          O pedido continua guardado no histórico, na aba de cancelados. Escreva o motivo — é
+          o que vai explicar essa venda daqui a três meses.
         </p>
+        <label className="flex flex-col gap-1 text-sm text-ink">
+          Motivo
+          <input
+            type="text"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Cliente desistiu, endereço errado, produto sem estoque..."
+            className="min-h-12 rounded-md border border-sand bg-white px-3 text-ink"
+          />
+        </label>
         <div className="flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={() => setConfirmandoCancelamento(false)}>
             Voltar
           </Button>
-          <Button type="button" onClick={() => aplicar("canceled")} disabled={enviando !== null}>
-            {enviando === "canceled" ? "Cancelando..." : "Confirmar cancelamento"}
+          <Button type="button" onClick={cancelar} disabled={ocupado || motivo.trim().length < 3}>
+            {ocupado ? "Cancelando..." : "Confirmar cancelamento"}
           </Button>
         </div>
       </Modal>

@@ -136,6 +136,9 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
     id: addressId,
     customer_id: customerId,
     recipient_name: dados.name,
+    // Explícito, não pelo default da coluna: o pedido carrega de onde ele é,
+    // e depender do default esconderia a informação de quem lê o insert.
+    country: dados.country,
     cep: dados.cep,
     street: dados.street,
     number: dados.number,
@@ -221,7 +224,13 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
       access_token: accessToken,
       customer_id: customerId,
       address_id: addressId,
-      status: "new",
+      // Moeda da COBRANÇA. Hoje sempre BRL, porque o checkout só aceita
+      // Brasil — mas gravada no pedido em vez de presumida na leitura, para
+      // o dia em que houver mais de uma.
+      currency: "BRL",
+      // `status` não entra mais: virou coluna gerada (migration
+      // 00000000000008) e o Postgres recusa escrita nela. O pedido nasce
+      // pending/not_ready pelos defaults, que é exatamente o antigo 'new'.
       subtotal_cents: subtotalCents,
       discount_cents: discountCents,
       shipping_cents: shippingCents,

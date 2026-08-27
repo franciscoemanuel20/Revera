@@ -48,6 +48,20 @@ export default async function EditarProdutoPage({ params }: { params: Promise<{ 
           status: produto.status,
           seoTitle: produto.seo_title ?? "",
           seoDescription: produto.seo_description ?? "",
+          // Sem isto, salvar um produto pelo formulário apagaria os dados
+          // fiscais já preenchidos: o payload manda o estado do formulário
+          // inteiro, e um campo que nasce vazio grava vazio.
+          exportacao: {
+            descriptionEn: produto.description_en ?? "",
+            countryOfOrigin: produto.country_of_origin ?? "",
+            ncm: produto.ncm ?? "",
+            hsCode: produto.hs_code ?? "",
+            netWeightG: produto.net_weight_g != null ? String(produto.net_weight_g) : "",
+            grossWeightG: produto.gross_weight_g != null ? String(produto.gross_weight_g) : "",
+            lengthMm: produto.length_mm != null ? String(produto.length_mm) : "",
+            widthMm: produto.width_mm != null ? String(produto.width_mm) : "",
+            heightMm: produto.height_mm != null ? String(produto.height_mm) : "",
+          },
           variants: (variantes ?? []).map((v) => ({
             key: v.id,
             id: v.id,

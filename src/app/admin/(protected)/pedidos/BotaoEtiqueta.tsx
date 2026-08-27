@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Toast } from "@/components/ui/Toast";
-import type { OrderStatusValue } from "@/lib/admin/order-status";
+import type { PaymentStatusValue, ShippingStatusValue } from "@/lib/admin/venda-status";
 import { gerarEtiquetaAction } from "./etiqueta";
 
 /**
@@ -18,11 +18,14 @@ import { gerarEtiquetaAction } from "./etiqueta";
  */
 export function BotaoEtiqueta({
   orderId,
-  status,
+  paymentStatus,
+  shippingStatus,
   jaTemEtiqueta,
 }: {
   orderId: string;
-  status: OrderStatusValue;
+  paymentStatus: PaymentStatusValue;
+  shippingStatus: ShippingStatusValue;
+  /** Etiqueta CONCLUÍDA (com rastreio ou PDF). Meia-etiqueta não conta. */
   jaTemEtiqueta: boolean;
 }) {
   const router = useRouter();
@@ -38,9 +41,17 @@ export function BotaoEtiqueta({
     servicoAgora: string;
   } | null>(null);
 
-  // Só faz sentido a partir de pago, e some depois que a etiqueta existe.
+  /**
+   * Some depois que a etiqueta existe de verdade, e nunca aparece em pedido
+   * não pago — as duas perguntas ficaram separadas na migration 8.
+   *
+   * 'shipping_error' MANTÉM o botão: é o "tentar novamente". A ação do
+   * servidor sabe distinguir uma emissão do zero de uma retomada de etiqueta
+   * já criada, então clicar aqui depois de um erro não gasta duas vezes.
+   */
   if (jaTemEtiqueta) return null;
-  if (status !== "paid" && status !== "preparing") return null;
+  if (paymentStatus !== "paid") return null;
+  if (shippingStatus !== "awaiting_label" && shippingStatus !== "shipping_error") return null;
 
   async function gerar(confirmarDiferenca = false) {
     setErro(null);

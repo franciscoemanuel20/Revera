@@ -37,7 +37,7 @@ import { registrarAuditoria } from "@/lib/admin/audit";
 import { getShippingProvider, ShippingUnavailable } from "@/lib/shipping";
 import { caixaPara, escolherServico } from "@/lib/shipping/regras";
 import { cotarFrete } from "@/lib/shipping/cotar";
-import type { OrderStatusValue } from "@/lib/admin/order-status";
+import { ENVIO_LABEL, type ShippingStatusValue } from "@/lib/admin/venda-status";
 
 const schema = z.object({
   orderId: z.string().uuid(),
@@ -81,7 +81,7 @@ export async function gerarEtiquetaAction(
   const { data: pedido, error: erroLeitura } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal_cents, shipping_cents, customer_id, address_id"
+      "id, order_number, payment_status, shipping_status, subtotal_cents, shipping_cents, customer_id, address_id"
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -90,13 +90,30 @@ export async function gerarEtiquetaAction(
     return { error: "Pedido não encontrado. Confira se você tem permissão de admin." };
   }
 
-  const statusAtual = pedido.status as OrderStatusValue;
-  if (statusAtual !== "paid" && statusAtual !== "preparing") {
+  /**
+   * As duas perguntas ficaram separadas (27/08/2026, migration 8): antes um
+   * campo só respondia "pagou?" e "já enviou?" ao mesmo tempo, e a condição
+   * `status !== paid && status !== preparing` misturava as duas.
+   *
+   * Agora dinheiro é dinheiro: sem `payment_status = 'paid'` não se gasta
+   * etiqueta, ponto — e a mensagem diz exatamente o que falta.
+   */
+  if (pedido.payment_status !== "paid") {
     return {
       error:
-        statusAtual === "new"
+        pedido.payment_status === "pending"
           ? "Este pedido ainda não foi pago — etiqueta só depois do pagamento confirmado."
-          : `Este pedido está como "${statusAtual}"; a etiqueta se gera a partir de pago ou preparando.`,
+          : "Este pedido não está pago (pagamento recusado ou estornado). Etiqueta não pode ser emitida.",
+    };
+  }
+
+  const envioAtual = pedido.shipping_status as ShippingStatusValue;
+  if (envioAtual !== "awaiting_label" && envioAtual !== "shipping_error") {
+    return {
+      error:
+        envioAtual === "label_processing"
+          ? "A emissão desta etiqueta já está em andamento. Aguarde alguns segundos e recarregue a página."
+          : `Este pedido já passou da etapa de etiqueta (está como "${ENVIO_LABEL[envioAtual]}").`,
     };
   }
 
@@ -105,15 +122,54 @@ export async function gerarEtiquetaAction(
   // decente em vez de um erro de banco.
   const { data: envioExistente } = await supabase
     .from("shipments")
-    .select("id, tracking_code, label_url")
+    .select("id, provider_shipment_id, tracking_code, label_url")
     .eq("order_id", orderId)
     .maybeSingle();
 
   if (envioExistente) {
-    return {
-      error:
-        "Este pedido já tem etiqueta. Use o link de impressão em vez de gerar outra — cada etiqueta é cobrada da carteira da SuperFrete.",
-    };
+    /**
+     * Etiqueta CONCLUÍDA: tem rastreio ou tem PDF. Não se gera outra —
+     * cada etiqueta é cobrada da carteira da SuperFrete.
+     */
+    if (envioExistente.tracking_code || envioExistente.label_url) {
+      return {
+        error:
+          "Este pedido já tem etiqueta. Use o link de impressão em vez de gerar outra — cada etiqueta é cobrada da carteira da SuperFrete.",
+      };
+    }
+
+    /**
+     * Etiqueta PELA METADE: existe na SuperFrete, não foi paga (é o estado
+     * em que o PASSO 3 falha). Sem este ramo o pedido fica morto — recriar
+     * é impossível (índice único em shipments.order_id) e concluir também,
+     * então "tentar novamente" devolveria "já tem etiqueta" para sempre,
+     * com o cliente pago e esperando.
+     *
+     * Retomar é o único caminho que não gasta duas vezes: paga a etiqueta
+     * que JÁ existe, em vez de criar outra.
+     */
+    if (!envioExistente.provider_shipment_id) {
+      return {
+        error:
+          "Existe um registro de etiqueta incompleto para este pedido, sem identificação na transportadora. Isso precisa de conferência manual no painel da SuperFrete antes de tentar de novo.",
+      };
+    }
+
+    const travouRetomada = await travarEmissao(supabase, orderId, envioAtual);
+    if (!travouRetomada) {
+      return {
+        error:
+          "Outra pessoa (ou outra aba) está gerando a etiqueta deste pedido agora. Recarregue a página em instantes.",
+      };
+    }
+
+    return concluirEtiqueta(supabase, {
+      orderId,
+      shipmentId: envioExistente.id as string,
+      providerShipmentId: envioExistente.provider_shipment_id as string,
+      envioAtual,
+      auditoriaExtra: { retomada: true },
+    });
   }
 
   const [{ data: endereco }, { data: cliente }, { data: cotacao }] =
@@ -215,29 +271,49 @@ export async function gerarEtiquetaAction(
     };
   }
 
-  // TRAVA — antes de gastar. O `.eq("status", statusAtual)` faz com que só
-  // um chamador passe daqui: o segundo encontra zero linhas afetadas e para.
-  const { data: travado, error: erroTrava } = await supabase
-    .from("orders")
-    .update({ status: "preparing", updated_at: new Date().toISOString() })
-    .eq("id", orderId)
-    .eq("status", statusAtual)
-    .select("id")
-    .maybeSingle();
+  // TRAVA — antes de gastar. Ver travarEmissao(). Desde a migration 8 o
+  // cadeado mora no eixo de ENVIO e tem nome próprio ('label_processing'),
+  // em vez de emprestar o 'preparing' do campo misto.
+  const travou = await travarEmissao(supabase, orderId, envioAtual);
 
-  if (erroTrava || !travado) {
+  if (!travou) {
     return {
       error:
         "Outra pessoa (ou outra aba) está gerando a etiqueta deste pedido agora. Recarregue a página em instantes.",
     };
   }
 
-  async function devolverStatus() {
+  // Devolve o pedido ao estado anterior quando a emissão não completa. O
+  // `.eq("shipping_status","label_processing")` garante que só desfazemos o
+  // cadeado que NÓS colocamos.
+  /**
+   * Solta o cadeado quando a emissão não completa.
+   *
+   * O pedido vai para 'shipping_error', e NÃO de volta para
+   * 'awaiting_label'. Os dois deixariam a pessoa tentar de novo — o botão
+   * reaparece nos dois casos — mas só um deles CONTA o que aconteceu. Voltar
+   * para "aguardando etiqueta" faz a falha desaparecer da tela, e uma falha
+   * que some é uma falha que ninguém investiga: o pedido fica parado
+   * parecendo normal no meio da fila.
+   *
+   * O `.eq("shipping_status","label_processing")` garante que só soltamos o
+   * cadeado que nós mesmos colocamos.
+   */
+  async function devolverStatus(motivo: string) {
     await supabase
       .from("orders")
-      .update({ status: statusAtual, updated_at: new Date().toISOString() })
+      .update({ shipping_status: "shipping_error", updated_at: new Date().toISOString() })
       .eq("id", orderId)
-      .eq("status", "preparing");
+      .eq("shipping_status", "label_processing");
+
+    // Vai para o histórico do pedido, que é onde a responsável (ou eu, num
+    // suporte futuro) vai procurar "por que esta etiqueta não saiu?".
+    await registrarAuditoria(supabase, {
+      action: "pedido.etiqueta_falhou",
+      entityType: "orders",
+      entityId: orderId,
+      diff: { motivo: motivo.slice(0, 500) },
+    });
   }
 
   const provider = getShippingProvider();
@@ -280,7 +356,9 @@ export async function gerarEtiquetaAction(
       },
     });
   } catch (e) {
-    await devolverStatus();
+    await devolverStatus(
+      e instanceof ShippingUnavailable ? e.message : "falha ao criar a etiqueta"
+    );
     // A mensagem da SuperFrete sobe INTEIRA de propósito. "Saldo
     // insuficiente na carteira" é acionável; "falhou ao gerar etiqueta" não
     // é, e deixaria a operação adivinhando.
@@ -307,19 +385,98 @@ export async function gerarEtiquetaAction(
   });
 
   if (erroEnvio) {
-    await devolverStatus();
+    await devolverStatus(
+      `etiqueta ${resultado.providerShipmentId} criada na SuperFrete mas nao registrada aqui; nao foi paga`
+    );
     return {
       error: `A etiqueta ${resultado.providerShipmentId} foi criada na SuperFrete mas não conseguimos registrá-la aqui — e por isso ela NÃO foi paga, então nada foi cobrado. Tente de novo.`,
     };
   }
 
-  // PASSO 3 — aqui o dinheiro sai.
+  // PASSO 3 e 4 — pagar e ler o resultado. Extraídos para concluirEtiqueta()
+  // porque a retomada (etiqueta criada e não paga) precisa executar
+  // exatamente estes passos, sem repetir a criação.
+  return concluirEtiqueta(supabase, {
+    orderId,
+    shipmentId,
+    providerShipmentId: resultado.providerShipmentId,
+    envioAtual,
+    auditoriaExtra: {
+      servico: serviceId,
+      servico_pago_no_checkout: servicoPago,
+      // Quando o frete mudou de preço entre a compra e o despacho, o número
+      // fica registrado. É a diferença que a operação absorveu neste pedido.
+      cobrado_cents: pedido.shipping_cents,
+      pago_agora_cents: servico.priceCents,
+    },
+  });
+}
+
+/**
+ * O cadeado. Só um chamador consegue mover o pedido para 'label_processing';
+ * quem chegar depois encontra zero linhas e sabe que perdeu a corrida.
+ *
+ * Vale para duplo clique, duas abas, refresh e request repetido — todos
+ * viram a MESMA disputa por esta única linha. O frontend desabilitar o botão
+ * é conforto, não garantia: a garantia é esta cláusula.
+ */
+async function travarEmissao(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orderId: string,
+  envioAtual: ShippingStatusValue
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("orders")
+    .update({ shipping_status: "label_processing", updated_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .eq("shipping_status", envioAtual)
+    .select("id")
+    .maybeSingle();
+  return Boolean(data);
+}
+
+/**
+ * Paga a etiqueta que já existe na transportadora e registra o desfecho.
+ *
+ * Chamada por dois caminhos: a emissão normal (logo depois de criar) e a
+ * retomada (etiqueta criada numa tentativa anterior cujo pagamento falhou).
+ * Nos dois casos a etiqueta JÁ EXISTE lá — esta função nunca cria, só paga.
+ * É essa separação que torna "tentar novamente" seguro.
+ */
+async function concluirEtiqueta(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  args: {
+    orderId: string;
+    shipmentId: string;
+    providerShipmentId: string;
+    envioAtual: ShippingStatusValue;
+    auditoriaExtra?: Record<string, unknown>;
+  }
+): Promise<GerarEtiquetaResultado> {
+  const { orderId, shipmentId, providerShipmentId, envioAtual } = args;
+  const provider = getShippingProvider();
+
   try {
-    await provider.payLabel(resultado.providerShipmentId);
+    await provider.payLabel(providerShipmentId);
   } catch (e) {
-    // O registro fica, com status pending: a etiqueta existe, não foi paga, e
-    // o painel mostra isso. Não devolve o status do pedido, porque "preparing"
-    // com envio pendente é exatamente o estado real.
+    // A etiqueta continua existindo, não paga. O pedido vai para
+    // 'shipping_error' — e não fica preso em 'label_processing', que
+    // bloquearia a retentativa para sempre.
+    await supabase
+      .from("orders")
+      .update({ shipping_status: "shipping_error", updated_at: new Date().toISOString() })
+      .eq("id", orderId)
+      .eq("shipping_status", "label_processing");
+    await registrarAuditoria(supabase, {
+      action: "pedido.etiqueta_falhou",
+      entityType: "orders",
+      entityId: orderId,
+      diff: {
+        etapa: "pagamento da etiqueta",
+        etiqueta: providerShipmentId,
+        motivo: e instanceof ShippingUnavailable ? e.message.slice(0, 500) : "falha ao pagar",
+      },
+    });
     return {
       error:
         e instanceof ShippingUnavailable
@@ -328,12 +485,12 @@ export async function gerarEtiquetaAction(
     };
   }
 
-  // PASSO 4 — o rastreio só existe depois de paga; agora dá para perguntar.
+  // O rastreio só existe depois de paga; agora dá para perguntar.
   let rastreio: string | null = null;
   let etiquetaUrl: string | null = null;
   let statusFinal = "released";
   try {
-    const info = await provider.getShipmentStatus(resultado.providerShipmentId);
+    const info = await provider.getShipmentStatus(providerShipmentId);
     rastreio = info.trackingCode;
     statusFinal = info.status;
   } catch {
@@ -341,7 +498,7 @@ export async function gerarEtiquetaAction(
     // transformar isto em erro para quem já conseguiu comprar.
   }
   try {
-    etiquetaUrl = await provider.getLabelUrl(resultado.providerShipmentId);
+    etiquetaUrl = await provider.getLabelUrl(providerShipmentId);
   } catch {
     etiquetaUrl = null;
   }
@@ -358,25 +515,20 @@ export async function gerarEtiquetaAction(
 
   await supabase
     .from("orders")
-    .update({ status: "label_ready", updated_at: new Date().toISOString() })
+    .update({ shipping_status: "label_created", updated_at: new Date().toISOString() })
     .eq("id", orderId)
-    .eq("status", "preparing");
+    .eq("shipping_status", "label_processing");
 
   await registrarAuditoria(supabase, {
     action: "pedido.gerar_etiqueta",
     entityType: "orders",
     entityId: orderId,
     diff: {
-      de: statusAtual,
-      para: "label_ready",
-      etiqueta: resultado.providerShipmentId,
+      de: envioAtual,
+      para: "label_created",
+      etiqueta: providerShipmentId,
       rastreio,
-      servico: serviceId,
-      servico_pago_no_checkout: servicoPago,
-      // Quando o frete mudou de preço entre a compra e o despacho, o número
-      // fica registrado. É a diferença que a operação absorveu neste pedido.
-      cobrado_cents: pedido.shipping_cents,
-      pago_agora_cents: servico.priceCents,
+      ...(args.auditoriaExtra ?? {}),
     },
   });
 

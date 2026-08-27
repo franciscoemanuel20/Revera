@@ -50,9 +50,39 @@ export interface ProductFormInitialData {
   status: "draft" | "active" | "archived";
   seoTitle: string;
   seoDescription: string;
+  exportacao?: DadosExportacaoForm;
   variants: VariantRow[];
   discountRules: DiscountRuleRow[];
 }
+
+/**
+ * Os campos de exportação vivem num objeto só, e não em nove `useState`
+ * soltos: eles são um bloco — ou o produto tem dados fiscais, ou não tem —
+ * e tratá-los junto deixa óbvio, na leitura, que nada aqui é obrigatório.
+ */
+export interface DadosExportacaoForm {
+  descriptionEn: string;
+  countryOfOrigin: string;
+  ncm: string;
+  hsCode: string;
+  netWeightG: string;
+  grossWeightG: string;
+  lengthMm: string;
+  widthMm: string;
+  heightMm: string;
+}
+
+export const EXPORTACAO_VAZIA: DadosExportacaoForm = {
+  descriptionEn: "",
+  countryOfOrigin: "",
+  ncm: "",
+  hsCode: "",
+  netWeightG: "",
+  grossWeightG: "",
+  lengthMm: "",
+  widthMm: "",
+  heightMm: "",
+};
 
 export interface ProductFormProps {
   sizes: Opcao[];
@@ -105,6 +135,12 @@ export function ProductForm({ sizes, colors, grayLevels, initialData }: ProductF
   const [slug, setSlug] = useState(initialData?.slug ?? "");
   const [slugTocado, setSlugTocado] = useState(Boolean(initialData));
   const [description, setDescription] = useState(initialData?.description ?? "");
+  const [exportacao, setExportacao] = useState<DadosExportacaoForm>(
+    initialData?.exportacao ?? EXPORTACAO_VAZIA
+  );
+  const campoExportacao = (campo: keyof DadosExportacaoForm) => (valor: string) =>
+    setExportacao((atual) => ({ ...atual, [campo]: valor }));
+  const inteiroOuNulo = (v: string) => (v.trim() ? Number(v.trim()) : null);
   const [baseType, setBaseType] = useState(initialData?.baseType ?? "");
   const [baseThicknessMm, setBaseThicknessMm] = useState(initialData?.baseThicknessMm ?? "");
   const [isFeatured, setIsFeatured] = useState(initialData?.isFeatured ?? false);
@@ -154,6 +190,15 @@ export function ProductForm({ sizes, colors, grayLevels, initialData }: ProductF
       status,
       seoTitle: seoTitle.trim() ? seoTitle : null,
       seoDescription: seoDescription.trim() ? seoDescription : null,
+      descriptionEn: exportacao.descriptionEn.trim() || null,
+      countryOfOrigin: exportacao.countryOfOrigin.trim() || null,
+      ncm: exportacao.ncm.trim() || null,
+      hsCode: exportacao.hsCode.trim() || null,
+      netWeightG: inteiroOuNulo(exportacao.netWeightG),
+      grossWeightG: inteiroOuNulo(exportacao.grossWeightG),
+      lengthMm: inteiroOuNulo(exportacao.lengthMm),
+      widthMm: inteiroOuNulo(exportacao.widthMm),
+      heightMm: inteiroOuNulo(exportacao.heightMm),
       variants: variants.map((v) => ({
         id: v.id,
         sizeId: v.sizeId || null,
@@ -312,6 +357,124 @@ export function ProductForm({ sizes, colors, grayLevels, initialData }: ProductF
             />
           )}
         </FormField>
+      </section>
+
+      {/* ===================================================================
+          DADOS INTERNACIONAIS / EXPORTAÇÃO
+          ===================================================================
+          Tudo opcional. Vazio é o estado correto até o contador responder —
+          a tela diz isso em vez de deixar a pessoa achar que esqueceu de
+          preencher. NCM e HS Code preenchidos "por parecer com o outro
+          produto" viram mercadoria declarada errada na alfândega, e o erro
+          aparece com a caixa retida no exterior.
+      =================================================================== */}
+      <section className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="font-display text-xl text-ink">Dados internacionais</h2>
+          <p className="text-sm text-ink/60">
+            Usados só em venda para fora do Brasil. Pode deixar em branco: enquanto faltar
+            algo aqui, os pedidos internacionais aparecem como{" "}
+            <strong>configuração fiscal pendente</strong> e nenhum documento é gerado.
+          </p>
+        </div>
+
+        <FormField label="Descrição comercial em inglês" error={null}>
+          {(props) => (
+            <input
+              {...props}
+              value={exportacao.descriptionEn}
+              onChange={(e) => campoExportacao("descriptionEn")(e.target.value)}
+              placeholder="Human hair prosthesis, micro-skin base"
+              className={inputClass}
+            />
+          )}
+        </FormField>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FormField label="NCM (8 dígitos)" error={null}>
+            {(props) => (
+              <input
+                {...props}
+                value={exportacao.ncm}
+                onChange={(e) => campoExportacao("ncm")(e.target.value)}
+                placeholder="aguardando contador"
+                inputMode="numeric"
+                className={inputClass}
+              />
+            )}
+          </FormField>
+          <FormField label="HS Code" error={null}>
+            {(props) => (
+              <input
+                {...props}
+                value={exportacao.hsCode}
+                onChange={(e) => campoExportacao("hsCode")(e.target.value)}
+                placeholder="aguardando contador"
+                inputMode="numeric"
+                className={inputClass}
+              />
+            )}
+          </FormField>
+          <FormField label="País de origem (2 letras)" error={null}>
+            {(props) => (
+              <input
+                {...props}
+                value={exportacao.countryOfOrigin}
+                onChange={(e) => campoExportacao("countryOfOrigin")(e.target.value)}
+                placeholder="CN"
+                maxLength={2}
+                className={inputClass}
+              />
+            )}
+          </FormField>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Peso líquido (gramas)" error={null}>
+            {(props) => (
+              <input
+                {...props}
+                value={exportacao.netWeightG}
+                onChange={(e) => campoExportacao("netWeightG")(e.target.value)}
+                inputMode="numeric"
+                className={inputClass}
+              />
+            )}
+          </FormField>
+          <FormField label="Peso bruto (gramas)" error={null}>
+            {(props) => (
+              <input
+                {...props}
+                value={exportacao.grossWeightG}
+                onChange={(e) => campoExportacao("grossWeightG")(e.target.value)}
+                inputMode="numeric"
+                className={inputClass}
+              />
+            )}
+          </FormField>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          {(
+            [
+              ["lengthMm", "Comprimento (mm)"],
+              ["widthMm", "Largura (mm)"],
+              ["heightMm", "Altura (mm)"],
+            ] as Array<[keyof DadosExportacaoForm, string]>
+          ).map(([campo, rotulo]) => (
+            <FormField key={campo} label={rotulo} error={null}>
+              {(props) => (
+                <input
+                  {...props}
+                  value={exportacao[campo]}
+                  onChange={(e) => campoExportacao(campo)(e.target.value)}
+                  inputMode="numeric"
+                  className={inputClass}
+                />
+              )}
+            </FormField>
+          ))}
+        </div>
       </section>
 
       <section className="flex flex-col gap-4">

@@ -37,6 +37,16 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     .eq("id", user.id)
     .maybeSingle();
 
+  // Vendas pagas que ainda ninguém abriu — o marcador do menu. Consulta com
+  // head:true: traz o número, não as linhas.
+  const { count: vendasNovasCount } = await supabase
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("payment_status", "paid")
+    .is("seen_at", null)
+    .is("canceled_at", null);
+  const vendasNovas = vendasNovasCount ?? 0;
+
   if (!adminUser) {
     return (
       <main className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center gap-4 px-6 text-center">
@@ -78,9 +88,22 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               <Link
                 key={item.href}
                 href={item.href}
-                className="block rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-sand"
+                className="flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-ink hover:bg-sand"
               >
                 {item.label}
+                {/* Vendas pagas que ninguém abriu ainda. Dourado, não
+                    vermelho: vermelho neste painel significa erro, e venda
+                    nova é a melhor notícia do dia. O número some quando ela
+                    abre a tela — e abrir NÃO muda a situação de venda
+                    nenhuma (ver marcarVendasVistasAction). */}
+                {item.href === "/admin/pedidos" && vendasNovas > 0 ? (
+                  <span
+                    className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-gold px-2 py-0.5 text-xs font-semibold text-ink"
+                    aria-label={`${vendasNovas} venda(s) nova(s)`}
+                  >
+                    {vendasNovas}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </div>
@@ -99,7 +122,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 // módulo mais importante" do escopo.
 const NAV_ITEMS = [
   { href: "/admin", label: "Painel" },
-  { href: "/admin/pedidos", label: "Pedidos" },
+  { href: "/admin/pedidos", label: "Vendas" },
   { href: "/admin/produtos", label: "Produtos" },
   { href: "/admin/precos", label: "Preços" },
   { href: "/admin/solicitacoes", label: "Solicitações" },

@@ -49,6 +49,44 @@ const produtoSchema = z.object({
     .min(1, "Slug é obrigatório")
     .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Slug só pode ter letras minúsculas, números e hífen"),
   description: z.string().trim().nullable(),
+
+  /**
+   * DADOS DE EXPORTAÇÃO (27/08/2026)
+   *
+   * Todos opcionais, e vazio é o estado CORRETO hoje: NCM, HS Code e país de
+   * origem dependem do contador e do fornecedor. Preencher por analogia com
+   * outro produto é declarar mercadoria errada na alfândega.
+   *
+   * A validação abaixo confere FORMATO, nunca conteúdo — o sistema sabe que
+   * NCM tem oito dígitos, e não sabe (nem deve opinar sobre) qual é o certo.
+   */
+  descriptionEn: z.string().trim().nullable(),
+  countryOfOrigin: z
+    .string()
+    .trim()
+    .nullable()
+    .refine((v) => v === null || /^[A-Za-z]{2}$/.test(v), "Use o código de 2 letras do país (ex.: CN, BR).")
+    .transform((v) => (v ? v.toUpperCase() : null)),
+  ncm: z
+    .string()
+    .trim()
+    .nullable()
+    .transform((v) => (v ? v.replace(/\D/g, "") : null))
+    .refine((v) => v === null || v.length === 8, "NCM tem 8 dígitos."),
+  hsCode: z
+    .string()
+    .trim()
+    .nullable()
+    .transform((v) => (v ? v.replace(/\D/g, "") : null))
+    .refine(
+      (v) => v === null || (v.length >= 6 && v.length <= 10),
+      "HS Code tem de 6 a 10 dígitos."
+    ),
+  netWeightG: z.number().int().positive().nullable(),
+  grossWeightG: z.number().int().positive().nullable(),
+  lengthMm: z.number().int().positive().nullable(),
+  widthMm: z.number().int().positive().nullable(),
+  heightMm: z.number().int().positive().nullable(),
   baseType: z.string().trim().nullable(),
   baseThicknessMm: z.number().nonnegative().nullable(),
   isFeatured: z.boolean(),
@@ -93,6 +131,15 @@ export async function salvarProdutoAction(input: SalvarProdutoInput): Promise<Sa
     status: dados.status,
     seo_title: dados.seoTitle,
     seo_description: dados.seoDescription,
+    description_en: dados.descriptionEn,
+    country_of_origin: dados.countryOfOrigin,
+    ncm: dados.ncm,
+    hs_code: dados.hsCode,
+    net_weight_g: dados.netWeightG,
+    gross_weight_g: dados.grossWeightG,
+    length_mm: dados.lengthMm,
+    width_mm: dados.widthMm,
+    height_mm: dados.heightMm,
     updated_at: new Date().toISOString(),
   };
 
