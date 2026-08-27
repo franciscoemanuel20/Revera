@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 // Página que responde à objeção nº 1 de quem nunca comprou: "vai parecer
 // artificial?" — pedida pela auditoria de 26/08/2026.
 //
@@ -47,6 +48,19 @@ const FATORES = [
       "O mesmo material aplicado por técnicas diferentes produz resultados diferentes. É a parte que depende inteiramente do profissional, não do produto.",
   },
 ];
+
+export const metadata: Metadata = {
+  title: "Naturalidade fio a fio",
+  description:
+    "O que faz uma prótese capilar parecer cabelo de verdade: base, linha frontal, implantação e o trabalho do profissional.",
+  alternates: { canonical: "/naturalidade" },
+  openGraph: {
+    title: "Naturalidade fio a fio — Reverá",
+    description:
+      "O que faz uma prótese capilar parecer cabelo de verdade: base, linha frontal, implantação e o trabalho do profissional.",
+    url: "/naturalidade",
+  },
+};
 
 export default function NaturalidadePage() {
   return (

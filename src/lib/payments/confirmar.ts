@@ -50,7 +50,31 @@ export async function confirmarPagamento(
   pistas?: Partial<Pick<WebhookHint, "transactionId" | "invoiceSlug" | "eventId">>
 ): Promise<ResultadoConfirmacao> {
   const supabase = createAdminClient();
-  const provider = getPaymentProvider();
+
+  /**
+   * P0-2, segunda passagem (27/08/2026).
+   *
+   * `getPaymentProvider()` passou a LANÇAR quando o pagamento não está
+   * configurado — que é o comportamento certo. Mas aqui a chamada estava
+   * solta, e esta função é chamada por `/pedido/[token]` SEM try/catch
+   * (page.tsx:60). O resultado seria uma tela de erro do Next para quem
+   * acabou de pagar e só quer ver o próprio pedido.
+   *
+   * `indisponivel` já existe no contrato desta função exatamente para isto:
+   * "não consegui decidir agora". O pedido continua 'new', a outra porta
+   * continua valendo, e a tela mostra o estado real em vez de quebrar.
+   *
+   * Falhar fechado é sobre não aprovar pagamento indevido. Não é desculpa
+   * para tratar mal quem estava comprando — o mesmo raciocínio já escrito
+   * em src/app/checkout/pagamento/page.tsx.
+   */
+  let provider;
+  try {
+    provider = getPaymentProvider();
+  } catch (erro) {
+    console.error("[confirmar] pagamento não configurado", erro);
+    return { estado: "indisponivel", motivo: "pagamento não configurado" };
+  }
 
   const { data: pedido, error: erroPedido } = await supabase
     .from("orders")

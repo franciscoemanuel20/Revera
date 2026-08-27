@@ -7,6 +7,7 @@ import { rastreamentoAtivoNesteAmbiente } from "@/lib/tracking/permissao";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { Footer } from "@/components/ui/Footer";
 import { Header } from "@/components/ui/Header";
+import { baseUrl } from "@/lib/config/urls";
 import "./globals.css";
 
 // Fraunces: display serifado com itálico óptico, para headline e nome de
@@ -26,10 +27,59 @@ const manrope = Manrope({
   display: "swap",
 });
 
+/**
+ * Base de SEO (P1, 27/08/2026).
+ *
+ * A auditoria de 26/08 mediu nove páginas públicas servindo o MESMO <title>
+ * ("Reverá") e a MESMA description. Para o Google, isso não é um site com
+ * nove páginas — é uma página repetida nove vezes, e ele escolhe sozinho
+ * qual mostrar. Zero tags og: também significava que todo link colado no
+ * WhatsApp aparecia sem título e sem imagem, justamente no canal por onde
+ * esta marca é compartilhada.
+ *
+ * `title.template` faz cada página declarar só o próprio nome; o sufixo da
+ * marca é aplicado aqui, num lugar só. `title.default` cobre a home.
+ *
+ * `metadataBase` é obrigatório para o Next resolver caminhos relativos em
+ * openGraph.images — sem ele a imagem de compartilhamento sai com URL
+ * relativa, que nenhum crawler resolve.
+ */
 export const metadata: Metadata = {
-  title: "Reverá",
+  metadataBase: new URL(baseUrl()),
+  title: {
+    default: "Reverá — Prótese capilar com acabamento natural",
+    template: "%s — Reverá",
+  },
   description:
-    "Próteses capilares premium. Base ultrafina, acabamento natural.",
+    "Próteses capilares premium. Base ultrafina de 0,08mm, acabamento natural na linha frontal. Envio para todo o Brasil.",
+  applicationName: "Reverá",
+  authors: [{ name: "Reverá" }],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "pt_BR",
+    siteName: "Reverá",
+    title: "Reverá — Prótese capilar com acabamento natural",
+    description:
+      "Base ultrafina de 0,08mm, acabamento natural na linha frontal. Envio para todo o Brasil.",
+    images: [
+      {
+        // Foto real do produto (public/media/hero), não arte gerada.
+        url: "/media/hero/produto-close-1.jpeg",
+        width: 1200,
+        height: 630,
+        alt: "Prótese capilar Reverá — acabamento da linha frontal",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Reverá — Prótese capilar com acabamento natural",
+    description:
+      "Base ultrafina de 0,08mm, acabamento natural na linha frontal.",
+    images: ["/media/hero/produto-close-1.jpeg"],
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({

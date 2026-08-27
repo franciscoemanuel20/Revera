@@ -1,8 +1,22 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { ColorHelpForm } from "./ColorHelpForm";
+
+export const metadata: Metadata = {
+  title: "Cores disponíveis",
+  description:
+    "As oito cores reais da linha Reverá, fotografadas. Não sabe qual é a sua? A gente ajuda a descobrir pela foto.",
+  alternates: { canonical: "/cores" },
+  openGraph: {
+    title: "Cores disponíveis — Reverá",
+    description:
+      "As oito cores reais da linha Reverá, fotografadas. Não sabe qual é a sua? A gente ajuda a descobrir pela foto.",
+    url: "/cores",
+  },
+};
 
 // Página pública de cores — as 8 fotos reais baixadas do Drive em
 // 25/08/2026 (ver seeds/colors.json), servidas via colors.photo_url, que já

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 // Página de confiança — pedida pela auditoria de 26/08/2026. Cada item
 // abaixo tem uma fonte: ver o comentário ao lado da seção correspondente.
 // Nada de "atendimento 24h", contagem de clientes ou selo — não existe
@@ -5,6 +6,19 @@
 // explícita: só os itens abaixo, nada além.
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+
+export const metadata: Metadata = {
+  title: "Por que Reverá",
+  description:
+    "Teste de qualidade antes do envio, garantia de 7 dias úteis e acabamento na linha frontal. O que nos separa do genérico.",
+  alternates: { canonical: "/por-que-revera" },
+  openGraph: {
+    title: "Por que Reverá — Reverá",
+    description:
+      "Teste de qualidade antes do envio, garantia de 7 dias úteis e acabamento na linha frontal. O que nos separa do genérico.",
+    url: "/por-que-revera",
+  },
+};
 
 export default function PorQueReveraPage() {
   return (

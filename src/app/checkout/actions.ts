@@ -46,7 +46,11 @@
 import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { lerCarrinhoCompleto, marcarCarrinhoConvertido } from "@/lib/cart/store";
+import {
+  devolverCarrinhoParaAberto,
+  lerCarrinhoCompleto,
+  reivindicarCarrinhoParaPedido,
+} from "@/lib/cart/store";
 import { limparTokenDoCookie } from "@/lib/cart/token";
 import { createAdminClient } from "@/lib/supabase/server";
 import { cotarFrete } from "@/lib/shipping/cotar";
@@ -88,7 +92,32 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
     return { erro: "Sua sacola está vazia — volte e adicione algo antes de finalizar." };
   }
 
+  /**
+   * A TRAVA DO DUPLO CLIQUE (P1, 27/08/2026) — antes de gravar qualquer coisa.
+   *
+   * Reivindica o carrinho num update atômico. Só um envio passa daqui; o
+   * segundo encontra zero linhas e para, sem ter criado cliente, endereço ou
+   * pedido. Ver reivindicarCarrinhoParaPedido() em src/lib/cart/store.ts para
+   * o porquê de a decisão ser do Postgres e não de um `if`.
+   */
+  if (!(await reivindicarCarrinhoParaPedido(carrinho.cartId))) {
+    return {
+      erro:
+        "Este pedido já está sendo finalizado. Aguarde um instante — se a tela " +
+        "não avançar sozinha, confira seu e-mail antes de tentar de novo.",
+    };
+  }
+
   const admin = createAdminClient();
+
+  /**
+   * A partir daqui o carrinho está reivindicado. Toda saída por erro precisa
+   * devolvê-lo para 'open', senão a pessoa fica sem sacola E sem pedido.
+   */
+  async function falhar(mensagem: string): Promise<CheckoutResult> {
+    await devolverCarrinhoParaAberto(carrinho.cartId as string);
+    return { erro: mensagem };
+  }
 
   const customerId = randomUUID();
   const { error: erroCustomer } = await admin.from("customers").insert({
@@ -99,7 +128,7 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
     cpf: dados.cpf,
   });
   if (erroCustomer) {
-    return { erro: "Não foi possível registrar seus dados. Tente novamente." };
+    return falhar("Não foi possível registrar seus dados. Tente novamente.");
   }
 
   const addressId = randomUUID();
@@ -116,7 +145,7 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
     state: dados.state,
   });
   if (erroAddress) {
-    return { erro: "Não foi possível registrar o endereço. Tente novamente." };
+    return falhar("Não foi possível registrar o endereço. Tente novamente.");
   }
 
   const subtotalCents = carrinho.subtotalSemDescontoCents;
@@ -208,12 +237,12 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
       // inteiro por causa disso.
       orderNumber = gerarNumeroPedido();
     } else {
-      return { erro: "Não foi possível criar o pedido agora. Tente novamente em instantes." };
+      return falhar("Não foi possível criar o pedido agora. Tente novamente em instantes.");
     }
   }
 
   if (!pedidoCriado) {
-    return { erro: "Não foi possível criar o pedido agora. Tente novamente em instantes." };
+    return falhar("Não foi possível criar o pedido agora. Tente novamente em instantes.");
   }
 
   const itensPayload = carrinho.items.map((item) => ({
@@ -229,7 +258,7 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
 
   const { error: erroItens } = await admin.from("order_items").insert(itensPayload);
   if (erroItens) {
-    return { erro: "Não foi possível registrar os itens do pedido. Tente novamente." };
+    return falhar("Não foi possível registrar os itens do pedido. Tente novamente.");
   }
 
   /**
@@ -271,7 +300,7 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
     console.error("[checkout] cotação não gravada para", orderNumber, erroCotacao);
   }
 
-  await marcarCarrinhoConvertido(carrinho.cartId);
+  // O carrinho já foi convertido na reivindicação, no topo desta função.
   await limparTokenDoCookie();
 
   redirect(`/checkout/pagamento?pedido=${accessToken}`);

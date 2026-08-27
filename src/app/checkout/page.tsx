@@ -3,7 +3,7 @@ import { CheckoutForm } from "./CheckoutForm";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 
 export const metadata: Metadata = {
-  title: "Checkout — Reverá",
+  title: "Checkout",
 };
 
 // Só a casca da página (metadata + layout) — o formulário em si

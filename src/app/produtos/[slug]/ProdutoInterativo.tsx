@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -11,6 +11,7 @@ import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { Reveal } from "@/components/ui/Reveal";
 import { Toast } from "@/components/ui/Toast";
 import { TrustBar } from "@/components/ui/TrustBar";
+import { medirAdicionarAoCarrinho, medirVerProduto } from "@/lib/tracking/browser";
 import { useCart } from "@/components/cart/CartProvider";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { applyQuantityDiscount, type QuantityDiscountRule } from "@/lib/pricing/discount";
@@ -96,9 +97,38 @@ export function ProdutoInterativo({
     (corSelecionadaId ? variantePorCor.get(corSelecionadaId) : undefined) ??
     varianteGenerica;
 
+  /**
+   * ViewContent — uma vez por visita à página do produto (P1, 27/08/2026).
+   *
+   * As funções `medirVerProduto` e `medirAdicionarAoCarrinho` existiam
+   * completas em src/lib/tracking/browser.ts desde a primeira entrega de
+   * rastreamento e NUNCA eram chamadas — a auditoria de 26/08 encontrou o
+   * funil com um buraco no meio: PageView e InitiateCheckout saíam, os dois
+   * passos entre eles não. Sem AddToCart não existe público de remarketing de
+   * carrinho, que costuma ser o que mais converte.
+   *
+   * O ref existe porque o React roda efeitos duas vezes em desenvolvimento
+   * (StrictMode) e porque trocar de cor ou de quantidade re-renderiza — nada
+   * disso é uma nova visualização de produto.
+   */
+  const jaMediuVisualizacao = useRef(false);
+
   const resultadoDesconto = varianteSelecionada
     ? applyQuantityDiscount(varianteSelecionada.priceCents, quantidade, discountRules)
     : null;
+
+  useEffect(() => {
+    if (jaMediuVisualizacao.current) return;
+    if (!varianteSelecionada) return;
+    jaMediuVisualizacao.current = true;
+
+    medirVerProduto({
+      variantId: varianteSelecionada.id,
+      nome: name,
+      quantidade: 1,
+      precoUnitarioCents: varianteSelecionada.priceCents,
+    });
+  }, [varianteSelecionada, name]);
 
   return (
     <main
@@ -216,6 +246,17 @@ export function ProdutoInterativo({
                       setMensagemErro(erro);
                       return;
                     }
+                    // AddToCart só DEPOIS de o servidor confirmar (P1,
+                    // 27/08/2026). Medir no clique contaria estoque esgotado e
+                    // erro de rede como intenção de compra, e o público de
+                    // remarketing nasceria com gente que nunca conseguiu
+                    // colocar nada na sacola.
+                    medirAdicionarAoCarrinho({
+                      variantId: varianteSelecionada.id,
+                      nome: name,
+                      quantidade,
+                      precoUnitarioCents: resultadoDesconto?.unitPriceCents ?? varianteSelecionada.priceCents,
+                    });
                     abrirDrawer();
                   }}
                 >

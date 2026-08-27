@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 // Página para barbeiros e profissionais — pedida pela auditoria de
 // 26/08/2026. A FAQ interna ainda marca "Vendemos para profissionais?"
 // como TODO (seeds/faq.json, sort_order 15, is_visible=false) — o
@@ -10,6 +11,19 @@
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { ProfessionalLeadForm } from "./ProfessionalLeadForm";
+
+export const metadata: Metadata = {
+  title: "Para profissionais",
+  description:
+    "Barbeiros, cabeleireiros e clínicas: condições para quem trabalha com prótese capilar e quer fornecer Reverá.",
+  alternates: { canonical: "/para-profissionais" },
+  openGraph: {
+    title: "Para profissionais — Reverá",
+    description:
+      "Barbeiros, cabeleireiros e clínicas: condições para quem trabalha com prótese capilar e quer fornecer Reverá.",
+    url: "/para-profissionais",
+  },
+};
 
 export default function ParaProfissionaisPage() {
   return (

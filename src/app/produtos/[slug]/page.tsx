@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { baseUrl } from "@/lib/config/urls";
 import { ProdutoInterativo } from "./ProdutoInterativo";
 
 // Página pública de produto — client de servidor com a chave anon
@@ -15,6 +17,54 @@ import { ProdutoInterativo } from "./ProdutoInterativo";
 // seeds/products.json e docs/fundacao-25-08-2026.md) — então visitar esta
 // rota mostra 404 até o Francisco definir o preço e ativar o produto pelo
 // painel admin (/admin/produtos), que já faz isso. Não é bug desta página.
+/**
+ * Título e descrição próprios do produto (P1, 27/08/2026).
+ *
+ * Antes desta entrega, esta página herdava o título genérico do layout — a
+ * página que mais importa para busca ("micropele", "prótese capilar") era
+ * indistinguível das outras nove no índice do Google.
+ *
+ * Consulta separada e enxuta de propósito: `generateMetadata` roda ANTES do
+ * componente e não compartilha resultado com ele. Reusar a consulta grande
+ * (com variantes, cores e regras de desconto) só para montar um título
+ * dobraria o trabalho do banco em toda visita.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("products")
+    .select("name, description, seo_title, seo_description")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (!data) return { title: "Produto não encontrado" };
+
+  // seo_title/seo_description são editáveis pela dona no painel; o nome e a
+  // descrição do produto são o padrão quando ela não preencheu.
+  const titulo = (data.seo_title as string | null) || (data.name as string);
+  const descricao =
+    (data.seo_description as string | null) ||
+    (data.description as string | null) ||
+    "Prótese capilar Reverá — acabamento natural, envio para todo o Brasil.";
+
+  return {
+    title: titulo,
+    description: descricao,
+    alternates: { canonical: `/produtos/${slug}` },
+    openGraph: {
+      type: "website",
+      title: `${titulo} — Reverá`,
+      description: descricao,
+      url: `/produtos/${slug}`,
+    },
+  };
+}
+
 export default async function ProdutoPage({
   params,
 }: {
@@ -73,7 +123,53 @@ export default async function ProdutoPage({
       isActive: true,
     }));
 
+  /**
+   * Product structured data (schema.org), em JSON-LD.
+   *
+   * É o que permite ao Google entender que esta página é um PRODUTO com
+   * preço e disponibilidade, e não um artigo — pré-requisito para aparecer
+   * com preço no resultado de busca.
+   *
+   * O preço vem da variante ativa mais barata, lida do banco. NUNCA de
+   * constante: um preço errado aqui é o Google anunciando um valor que a
+   * loja não pratica, e a correção depois de indexado é lenta.
+   *
+   * Sem variante com preço válido, o bloco não é emitido — declarar
+   * `price: 0` diria ao Google que a peça é grátis.
+   */
+  const varianteMaisBarata = variantes
+    .filter((v) => v.priceCents > 0 && v.stockQty > 0)
+    .sort((a, b) => a.priceCents - b.priceCents)[0];
+
+  const jsonLd = varianteMaisBarata
+    ? {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: produto.name,
+        description: produto.description ?? undefined,
+        sku: varianteMaisBarata.sku,
+        brand: { "@type": "Brand", name: "Reverá" },
+        offers: {
+          "@type": "Offer",
+          priceCurrency: "BRL",
+          price: (varianteMaisBarata.priceCents / 100).toFixed(2),
+          availability: "https://schema.org/InStock",
+          url: `${baseUrl()}/produtos/${produto.slug}`,
+        },
+      }
+    : null;
+
   return (
+    <>
+      {jsonLd ? (
+        <script
+          type="application/ld+json"
+          // O conteúdo é montado aqui a partir de dados do banco, não de
+          // entrada de usuário; ainda assim o JSON.stringify escapa o que
+          // precisa ser escapado.
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      ) : null}
     <ProdutoInterativo
       name={produto.name}
       description={produto.description}
@@ -88,5 +184,6 @@ export default async function ProdutoPage({
       }))}
       discountRules={regrasVigentes}
     />
+    </>
   );
 }

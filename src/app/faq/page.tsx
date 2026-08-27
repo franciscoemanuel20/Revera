@@ -1,7 +1,21 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { FAQ } from "@/components/ui/FAQ";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+
+export const metadata: Metadata = {
+  title: "Perguntas frequentes",
+  description:
+    "Durabilidade, manutenção, garantia, envio e escolha de cor — as dúvidas que mais chegam, respondidas direto.",
+  alternates: { canonical: "/faq" },
+  openGraph: {
+    title: "Perguntas frequentes — Reverá",
+    description:
+      "Durabilidade, manutenção, garantia, envio e escolha de cor — as dúvidas que mais chegam, respondidas direto.",
+    url: "/faq",
+  },
+};
 
 // Página pública de FAQ — as perguntas vêm direto de faq_items via a policy
 // pública "public read faq" (is_visible = true, ver

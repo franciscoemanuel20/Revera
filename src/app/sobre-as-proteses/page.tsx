@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 // Página educativa "o que é uma prótese capilar" — pedida pela auditoria de
 // 26/08/2026 (páginas públicas que faltavam). Segue o mesmo molde de
 // src/app/cuidados/page.tsx: blocos curtos com subtítulo, não parágrafo
@@ -20,6 +21,19 @@
 import Image from "next/image";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+
+export const metadata: Metadata = {
+  title: "Sobre as próteses",
+  description:
+    "Tipos de base, espessuras, para quem serve cada uma e como escolher a que combina com a sua rotina.",
+  alternates: { canonical: "/sobre-as-proteses" },
+  openGraph: {
+    title: "Sobre as próteses — Reverá",
+    description:
+      "Tipos de base, espessuras, para quem serve cada uma e como escolher a que combina com a sua rotina.",
+    url: "/sobre-as-proteses",
+  },
+};
 
 export default function SobreAsProtesesPage() {
   return (
