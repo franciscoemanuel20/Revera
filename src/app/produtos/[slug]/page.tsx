@@ -76,7 +76,7 @@ export default async function ProdutoPage({
   const { data: produto } = await supabase
     .from("products")
     .select(
-      "id, slug, name, description, base_thickness_mm, is_featured, product_variants(id, color_id, price_cents, compare_at_price_cents, sku, stock_qty)"
+      "id, slug, name, description, base_thickness_mm, is_featured, product_variants(id, color_id, price_cents, compare_at_price_cents, sku, stock_qty), product_media(url, alt_text, type, is_primary, sort_order)"
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -105,6 +105,20 @@ export default async function ProdutoPage({
     sku: v.sku as string,
     stockQty: v.stock_qty as number,
   }));
+
+  // Galeria do produto: a principal primeiro, depois a ordem cadastrada.
+  // Só imagem — `product_media` também aceita 'video', que a galeria da
+  // página ainda não sabe tocar (o <Image> do Next quebraria com um .mp4).
+  const fotos = (produto.product_media ?? [])
+    .filter((m) => m.type === "image")
+    .sort((a, b) => {
+      if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+      return (a.sort_order as number) - (b.sort_order as number);
+    })
+    .map((m) => ({
+      src: m.url as string,
+      alt: (m.alt_text as string | null) ?? produto.name,
+    }));
 
   const agora = new Date();
   const regrasVigentes = (regras ?? [])
@@ -174,6 +188,7 @@ export default async function ProdutoPage({
       name={produto.name}
       description={produto.description}
       baseThicknessMm={produto.base_thickness_mm}
+      fotos={fotos}
       variants={variantes}
       colors={(colors ?? []).map((c) => ({
         id: c.id as string,

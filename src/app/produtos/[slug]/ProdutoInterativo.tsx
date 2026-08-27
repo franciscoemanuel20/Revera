@@ -25,10 +25,21 @@ interface VariantData {
   stockQty: number;
 }
 
+export interface FotoProduto {
+  src: string;
+  alt: string;
+}
+
 export interface ProdutoInterativoProps {
   name: string;
   description: string | null;
   baseThicknessMm: number | null;
+  /**
+   * Fotos vindas de `product_media` (ordenadas por is_primary, sort_order).
+   * Vazio para produto que ainda não tem foto cadastrada — aí cai no par
+   * genérico de `/media/hero`, ver `fotosDoProduto()`.
+   */
+  fotos: FotoProduto[];
   variants: VariantData[];
   colors: ColorOption[];
   // `label` não faz parte de QuantityDiscountRule (a função de cálculo não
@@ -37,12 +48,17 @@ export interface ProdutoInterativoProps {
   discountRules: Array<QuantityDiscountRule & { label: string | null }>;
 }
 
-// As duas fotos de close reais (public/media/hero) — hoje é sempre este par
-// fixo, para qualquer produto, porque só existe uma sessão de fotos feita
-// (ver seeds/products.json). Vira galeria de verdade (por produto, no
-// banco) quando existir mais de uma sessão — até lá, hard-code aqui é mais
-// honesto que inventar um campo `gallery_urls` que nada preenche ainda.
-function fotosDoProduto(name: string) {
+// Galeria do produto. Desde 27/08/2026 as fotos vêm de `product_media`, uma
+// por produto — antes disso era um par FIXO de `/media/hero` para qualquer
+// produto, o que faria a Afro aparecer com a foto da Micropele assim que
+// existisse mais de um produto publicado.
+//
+// O par de `/media/hero` continua como fallback para o produto que ainda não
+// tem foto cadastrada (hoje as duas Micropele): mostrar o close genérico da
+// marca é melhor que uma área vazia, e some sozinho quando alguém cadastrar
+// a foto de verdade pelo admin.
+function fotosDoProduto(name: string, doBanco: FotoProduto[]): FotoProduto[] {
+  if (doBanco.length > 0) return doBanco;
   return [
     { src: "/media/hero/produto-close-1.jpeg", alt: `Close da base ${name}` },
     { src: "/media/hero/produto-close-2.jpeg", alt: `Detalhe da linha frontal — ${name}` },
@@ -63,6 +79,7 @@ export function ProdutoInterativo({
   name,
   description,
   baseThicknessMm,
+  fotos: fotosDoBanco,
   variants,
   colors,
   discountRules,
@@ -71,7 +88,10 @@ export function ProdutoInterativo({
   const { adicionarItem, abrirDrawer, pendente } = useCart();
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
 
-  const fotos = useMemo(() => fotosDoProduto(name), [name]);
+  const fotos = useMemo(
+    () => fotosDoProduto(name, fotosDoBanco),
+    [name, fotosDoBanco]
+  );
   const [fotoAtivaIndex, setFotoAtivaIndex] = useState(0);
   // noUncheckedIndexedAccess (tsconfig) trata fotos[i] como possivelmente
   // undefined — cai para a primeira foto se o índice guardado no estado
