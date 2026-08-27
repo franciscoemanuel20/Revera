@@ -3,6 +3,7 @@
 import { notFound, redirect } from "next/navigation";
 import { segredoDoCaminho } from "@/lib/payments/webhook-url";
 import { baseUrl } from "@/lib/config/urls";
+import { permiteSimulacao } from "@/lib/config/ambiente";
 
 /**
  * Simula o aviso que o gateway mandaria — batendo no MESMO webhook de
@@ -14,7 +15,9 @@ import { baseUrl } from "@/lib/config/urls";
  * página — Server Action é um endpoint, e endpoint se protege sozinho).
  */
 export async function simularPagamentoAction(formData: FormData) {
-  if ((process.env.PAYMENT_PROVIDER ?? "mock") !== "mock") {
+  // Mesma trava dupla da página (P0-2): Server Action é endpoint e se
+  // protege sozinha. Ausência de variável NÃO significa mais "modo mock".
+  if (!permiteSimulacao() || process.env.PAYMENT_PROVIDER?.trim() !== "mock") {
     notFound();
   }
 

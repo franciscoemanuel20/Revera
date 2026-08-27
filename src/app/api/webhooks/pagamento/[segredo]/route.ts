@@ -38,7 +38,24 @@ export async function POST(
   }
 
   const rawBody = await request.text();
-  const provider = getPaymentProvider();
+
+  /**
+   * P0-2 (27/08/2026): getPaymentProvider() agora lança quando o pagamento
+   * não está configurado. Aqui isso vira 503, não 500 — e a distinção
+   * importa: a InfinitePay reenvia o aviso depois de um 5xx, então um
+   * webhook que chegar durante uma janela de má configuração não se perde.
+   * O pedido continua 'new' e a porta 2 (retorno do cliente) ainda cobre.
+   */
+  let provider;
+  try {
+    provider = getPaymentProvider();
+  } catch (erro) {
+    console.error("[webhook] pagamento não configurado — recusando aviso", erro);
+    return NextResponse.json(
+      { erro: "pagamento não configurado" },
+      { status: 503 }
+    );
+  }
 
   const hint = provider.parseWebhookHint(rawBody);
   if (!hint) {

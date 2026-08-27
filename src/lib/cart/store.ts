@@ -88,12 +88,34 @@ export async function adicionarItemAoCarrinho(
 
   const { data: variante } = await admin()
     .from("product_variants")
-    .select("id, is_active, stock_qty")
+    .select("id, is_active, stock_qty, price_cents")
     .eq("id", variantId)
     .maybeSingle();
 
   if (!variante || !variante.is_active) {
     return { erro: "Esta variante não está disponível para compra." };
+  }
+
+  /**
+   * Preço zero não entra no carrinho (P0-1, 27/08/2026).
+   *
+   * `price_cents` é NOT NULL no banco, então "sem preço definido" não vira
+   * null — vira ZERO. E zero atravessa o sistema inteiro sem reclamação:
+   * o subtotal soma 0, o pedido nasce com total 0, o gateway cobra nada.
+   * Na auditoria de 26/08 a variante da Micropele estava exatamente assim,
+   * e só `is_active: false` separava a loja de entregar a peça de graça.
+   *
+   * A guarda fica AQUI, e não só na vitrine, porque este é o ponto onde o
+   * preço vira intenção de compra — e é o único por onde todo item passa,
+   * venha da página do produto, do drawer ou de uma chamada direta.
+   */
+  if (!Number.isFinite(variante.price_cents as number) || (variante.price_cents as number) <= 0) {
+    console.error(
+      "[carrinho] variante ativa com preço inválido — recusando",
+      variantId,
+      variante.price_cents
+    );
+    return { erro: "Esta variante está sem preço definido e não pode ser comprada." };
   }
 
   const cartId = await obterOuCriarCarrinhoId();
@@ -357,8 +379,56 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
   };
 }
 
-/** Marca o carrinho como convertido (pedido criado) — chamado só pela
- * Server Action de checkout, nunca por leitura/edição comum. */
-export async function marcarCarrinhoConvertido(cartId: string): Promise<void> {
-  await admin().from("carts").update({ status: "converted", updated_at: new Date().toISOString() }).eq("id", cartId);
+/**
+ * Reivindica o carrinho para virar pedido — a trava contra o duplo clique.
+ *
+ * ===========================================================================
+ * POR QUE ISTO EXISTE (P1, 27/08/2026)
+ * ===========================================================================
+ * `criarPedidoAction` convertia o carrinho no FIM, depois de gravar cliente,
+ * endereço, pedido e itens. Entre ler o carrinho e convertê-lo havia uma
+ * janela — e é dentro dela que o segundo clique entra.
+ *
+ * Reproduzido em 27/08/2026 contra o banco real: dois envios simultâneos do
+ * mesmo carrinho criaram DOIS pedidos, dois clientes e dois endereços. Não
+ * cobra duas vezes (cada pedido tem sua própria cobrança), mas suja o painel
+ * da dona, e dois pedidos pagos do mesmo carrinho viram duas etiquetas —
+ * cada uma debitando a carteira da SuperFrete.
+ *
+ * A trava é a MESMA de `confirmarPagamento` e de `gerarEtiquetaAction`:
+ * um update condicional que só acerta quem ainda estava no estado esperado.
+ * Quem encontra zero linhas entende que perdeu a corrida. Quem decide é o
+ * Postgres, num comando atômico — não um `if` no meio de duas consultas,
+ * que teria exatamente a mesma janela que estamos fechando.
+ *
+ * Fica ANTES de qualquer gravação de propósito: o perdedor da corrida não
+ * pode deixar cliente nem endereço órfãos para trás.
+ */
+export async function reivindicarCarrinhoParaPedido(cartId: string): Promise<boolean> {
+  const { data } = await admin()
+    .from("carts")
+    .update({ status: "converted", updated_at: new Date().toISOString() })
+    .eq("id", cartId)
+    .eq("status", "open")
+    .select("id")
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
+/**
+ * Devolve o carrinho para 'open' quando a criação do pedido falhou depois da
+ * reivindicação.
+ *
+ * Sem isto, um erro no meio do caminho deixaria a pessoa com a sacola
+ * "convertida" e nenhum pedido: ela veria o carrinho vazio, sem pedido
+ * nenhum, e sem entender o que aconteceu com as peças que escolheu. Mesmo
+ * raciocínio do `devolverStatus()` em src/app/admin/(protected)/pedidos/etiqueta.ts.
+ */
+export async function devolverCarrinhoParaAberto(cartId: string): Promise<void> {
+  await admin()
+    .from("carts")
+    .update({ status: "open", updated_at: new Date().toISOString() })
+    .eq("id", cartId)
+    .eq("status", "converted");
 }

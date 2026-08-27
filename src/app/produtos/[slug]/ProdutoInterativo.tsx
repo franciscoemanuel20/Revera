@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -11,6 +11,7 @@ import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { Reveal } from "@/components/ui/Reveal";
 import { Toast } from "@/components/ui/Toast";
 import { TrustBar } from "@/components/ui/TrustBar";
+import { medirAdicionarAoCarrinho, medirVerProduto } from "@/lib/tracking/browser";
 import { useCart } from "@/components/cart/CartProvider";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { applyQuantityDiscount, type QuantityDiscountRule } from "@/lib/pricing/discount";
@@ -24,10 +25,21 @@ interface VariantData {
   stockQty: number;
 }
 
+export interface FotoProduto {
+  src: string;
+  alt: string;
+}
+
 export interface ProdutoInterativoProps {
   name: string;
   description: string | null;
   baseThicknessMm: number | null;
+  /**
+   * Fotos vindas de `product_media` (ordenadas por is_primary, sort_order).
+   * Vazio para produto que ainda não tem foto cadastrada — aí cai no par
+   * genérico de `/media/hero`, ver `fotosDoProduto()`.
+   */
+  fotos: FotoProduto[];
   variants: VariantData[];
   colors: ColorOption[];
   // `label` não faz parte de QuantityDiscountRule (a função de cálculo não
@@ -36,12 +48,17 @@ export interface ProdutoInterativoProps {
   discountRules: Array<QuantityDiscountRule & { label: string | null }>;
 }
 
-// As duas fotos de close reais (public/media/hero) — hoje é sempre este par
-// fixo, para qualquer produto, porque só existe uma sessão de fotos feita
-// (ver seeds/products.json). Vira galeria de verdade (por produto, no
-// banco) quando existir mais de uma sessão — até lá, hard-code aqui é mais
-// honesto que inventar um campo `gallery_urls` que nada preenche ainda.
-function fotosDoProduto(name: string) {
+// Galeria do produto. Desde 27/08/2026 as fotos vêm de `product_media`, uma
+// por produto — antes disso era um par FIXO de `/media/hero` para qualquer
+// produto, o que faria a Afro aparecer com a foto da Micropele assim que
+// existisse mais de um produto publicado.
+//
+// O par de `/media/hero` continua como fallback para o produto que ainda não
+// tem foto cadastrada (hoje as duas Micropele): mostrar o close genérico da
+// marca é melhor que uma área vazia, e some sozinho quando alguém cadastrar
+// a foto de verdade pelo admin.
+function fotosDoProduto(name: string, doBanco: FotoProduto[]): FotoProduto[] {
+  if (doBanco.length > 0) return doBanco;
   return [
     { src: "/media/hero/produto-close-1.jpeg", alt: `Close da base ${name}` },
     { src: "/media/hero/produto-close-2.jpeg", alt: `Detalhe da linha frontal — ${name}` },
@@ -62,6 +79,7 @@ export function ProdutoInterativo({
   name,
   description,
   baseThicknessMm,
+  fotos: fotosDoBanco,
   variants,
   colors,
   discountRules,
@@ -70,7 +88,10 @@ export function ProdutoInterativo({
   const { adicionarItem, abrirDrawer, pendente } = useCart();
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
 
-  const fotos = useMemo(() => fotosDoProduto(name), [name]);
+  const fotos = useMemo(
+    () => fotosDoProduto(name, fotosDoBanco),
+    [name, fotosDoBanco]
+  );
   const [fotoAtivaIndex, setFotoAtivaIndex] = useState(0);
   // noUncheckedIndexedAccess (tsconfig) trata fotos[i] como possivelmente
   // undefined — cai para a primeira foto se o índice guardado no estado
@@ -96,9 +117,38 @@ export function ProdutoInterativo({
     (corSelecionadaId ? variantePorCor.get(corSelecionadaId) : undefined) ??
     varianteGenerica;
 
+  /**
+   * ViewContent — uma vez por visita à página do produto (P1, 27/08/2026).
+   *
+   * As funções `medirVerProduto` e `medirAdicionarAoCarrinho` existiam
+   * completas em src/lib/tracking/browser.ts desde a primeira entrega de
+   * rastreamento e NUNCA eram chamadas — a auditoria de 26/08 encontrou o
+   * funil com um buraco no meio: PageView e InitiateCheckout saíam, os dois
+   * passos entre eles não. Sem AddToCart não existe público de remarketing de
+   * carrinho, que costuma ser o que mais converte.
+   *
+   * O ref existe porque o React roda efeitos duas vezes em desenvolvimento
+   * (StrictMode) e porque trocar de cor ou de quantidade re-renderiza — nada
+   * disso é uma nova visualização de produto.
+   */
+  const jaMediuVisualizacao = useRef(false);
+
   const resultadoDesconto = varianteSelecionada
     ? applyQuantityDiscount(varianteSelecionada.priceCents, quantidade, discountRules)
     : null;
+
+  useEffect(() => {
+    if (jaMediuVisualizacao.current) return;
+    if (!varianteSelecionada) return;
+    jaMediuVisualizacao.current = true;
+
+    medirVerProduto({
+      variantId: varianteSelecionada.id,
+      nome: name,
+      quantidade: 1,
+      precoUnitarioCents: varianteSelecionada.priceCents,
+    });
+  }, [varianteSelecionada, name]);
 
   return (
     <main
@@ -216,6 +266,17 @@ export function ProdutoInterativo({
                       setMensagemErro(erro);
                       return;
                     }
+                    // AddToCart só DEPOIS de o servidor confirmar (P1,
+                    // 27/08/2026). Medir no clique contaria estoque esgotado e
+                    // erro de rede como intenção de compra, e o público de
+                    // remarketing nasceria com gente que nunca conseguiu
+                    // colocar nada na sacola.
+                    medirAdicionarAoCarrinho({
+                      variantId: varianteSelecionada.id,
+                      nome: name,
+                      quantidade,
+                      precoUnitarioCents: resultadoDesconto?.unitPriceCents ?? varianteSelecionada.priceCents,
+                    });
                     abrirDrawer();
                   }}
                 >

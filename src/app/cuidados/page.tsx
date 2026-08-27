@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 // Página pública de cuidados — os quatro fatos reais confirmados no
 // material da marca (mesmos textos usados na FAQ, ver seeds/faq.json,
 // perguntas "Posso lavar normalmente?", "Posso usar secador?", "Posso usar
@@ -25,6 +26,19 @@ const BLOCOS = [
       "Próteses grisalhas de até 50% possuem fios sintéticos, para permitir o processo de tonalização sem alterar os fios brancos.",
   },
 ];
+
+export const metadata: Metadata = {
+  title: "Como cuidar da sua prótese",
+  description:
+    "Lavagem, secagem, o que evitar e a rotina de manutenção que faz a peça durar. Escrito para quem usa, não para técnico.",
+  alternates: { canonical: "/cuidados" },
+  openGraph: {
+    title: "Como cuidar da sua prótese — Reverá",
+    description:
+      "Lavagem, secagem, o que evitar e a rotina de manutenção que faz a peça durar. Escrito para quem usa, não para técnico.",
+    url: "/cuidados",
+  },
+};
 
 export default function CuidadosPage() {
   return (

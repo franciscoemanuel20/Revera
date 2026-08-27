@@ -3,6 +3,7 @@ import type { createAdminClient } from "@/lib/supabase/server";
 import { baseUrl } from "@/lib/config/urls";
 import { enviarPurchaseMeta } from "./meta-capi";
 import { enviarPurchaseGa4 } from "./ga4";
+import { podeEnviarConversao } from "./permissao";
 import type { ResultadoEnvio } from "./meta-capi";
 
 type Cliente = ReturnType<typeof createAdminClient>;
@@ -36,10 +37,17 @@ type Cliente = ReturnType<typeof createAdminClient>;
  */
 export async function despacharPurchase(
   supabase: Cliente,
-  orderId: string
+  orderId: string,
+  /**
+   * payments.provider do pagamento que acabou de confirmar este pedido.
+   * OBRIGATÓRIO desde o P0-3 (27/08/2026): sem saber quem confirmou, não dá
+   * para distinguir uma venda de uma simulação — e era exatamente por essa
+   * fresta que um Purchase de mock chegava à conta de anúncios real.
+   */
+  providerPagamento: string | null
 ): Promise<void> {
   try {
-    await despachar(supabase, orderId);
+    await despachar(supabase, orderId, providerPagamento);
   } catch (e) {
     // Rede de segurança do princípio nº 1 acima: nada aqui pode escapar e
     // derrubar quem confirmou o pagamento.
@@ -70,7 +78,33 @@ async function registrar(
   }
 }
 
-async function despachar(supabase: Cliente, orderId: string): Promise<void> {
+async function despachar(
+  supabase: Cliente,
+  orderId: string,
+  providerPagamento: string | null
+): Promise<void> {
+  /**
+   * CAMADA 1 de 3 (P0-3) — a permissão é checada ANTES de ler o pedido.
+   *
+   * Fica no topo de propósito: nenhuma linha de dado pessoal precisa ser
+   * carregada para descobrir que este evento não vai sair. E a recusa vira
+   * linha em conversion_logs com o motivo, porque "a venda não apareceu na
+   * Meta" precisa ser uma consulta, não uma investigação.
+   */
+  const permissao = podeEnviarConversao({ providerPagamento });
+  if (!permissao.pode) {
+    console.warn("[purchase] envio recusado:", orderId, permissao.motivo);
+    const recusa: ResultadoEnvio = {
+      sucesso: false,
+      motivoPulado: permissao.motivo ?? "envio não permitido",
+    };
+    await Promise.all([
+      registrar(supabase, orderId, orderId, "meta", recusa),
+      registrar(supabase, orderId, orderId, "ga4", recusa),
+    ]);
+    return;
+  }
+
   const { data: pedido } = await supabase
     .from("orders")
     .select(
@@ -145,6 +179,7 @@ async function despachar(supabase: Cliente, orderId: string): Promise<void> {
           motivoPulado: "já enviado antes (sent_capi)",
         })
       : enviarPurchaseMeta({
+          comoTeste: permissao.comoTeste,
           eventId: orderId,
           eventTimeSegundos: agoraSegundos,
           valorCents: pedido.total_cents,

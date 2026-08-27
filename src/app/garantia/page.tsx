@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 // Página pública de garantia — os três fatos confirmados (mesmo texto de
 // seeds/faq.json, pergunta "Como funciona a garantia?", só desdobrado em
 // parágrafos). Não adicione cláusula nova aqui sem confirmar o fato
@@ -5,6 +6,19 @@
 // antes de virar política definitiva (ver nota abaixo e docs do projeto).
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+
+export const metadata: Metadata = {
+  title: "Garantia",
+  description:
+    "O que a garantia Reverá cobre, por quanto tempo e como acionar. Sem letra miúda.",
+  alternates: { canonical: "/garantia" },
+  openGraph: {
+    title: "Garantia — Reverá",
+    description:
+      "O que a garantia Reverá cobre, por quanto tempo e como acionar. Sem letra miúda.",
+    url: "/garantia",
+  },
+};
 
 export default function GarantiaPage() {
   return (

@@ -27,7 +27,17 @@ import { GOOGLE_TAG_ID, META_PIXEL_ID } from "@/lib/tracking/config";
  * que precisa vender; e não é `lazyOnload` porque aí o PageView chegaria tarde
  * demais para quem sai rápido.
  */
-export function Pixels() {
+export function Pixels({ ativo }: { ativo: boolean }) {
+  // CAMADA 0 do P0-3 (27/08/2026): fora de produção o Pixel nem CARREGA.
+  //
+  // As camadas de dentro já impedem um Purchase falso, mas o pixel base
+  // dispara PageView e ViewContent em toda navegação — e em desenvolvimento
+  // isso ia para a MESMA conta de anúncios de produção, inflando o topo do
+  // funil com tráfego de quem está programando. Quem decide é o servidor
+  // (ver src/lib/tracking/permissao.ts): este componente é client e só
+  // enxergaria variáveis NEXT_PUBLIC_, que não distinguem ambiente.
+  if (!ativo) return null;
+
   return (
     <>
       {META_PIXEL_ID ? (

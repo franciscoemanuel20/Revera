@@ -8,7 +8,7 @@ import { CarrinhoPageClient } from "./CarrinhoPageClient";
 // primeiro render criaria duas fontes de verdade momentâneas (a do SSR e a
 // do Provider, que sempre recarrega no mount) — melhor uma só.
 export const metadata: Metadata = {
-  title: "Sua sacola — Reverá",
+  title: "Sua sacola",
 };
 
 export default function CarrinhoPage() {

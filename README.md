@@ -1,25 +1,43 @@
 # Reverá
 
-E-commerce da Reverá — marca de próteses capilares premium. Este repositório
-é a **fundação** do projeto: schema de banco, sistema de design, esqueleto
-de componentes e as duas integrações externas (pagamento e frete) desenhadas
-como interface + implementação MOCK. Não há vitrine real, checkout
-funcionando nem conta em serviço nenhum criada ainda — isso é greenfield,
-scaffold de fase 1.
+E-commerce da Reverá — marca de próteses capilares premium.
+
+**Estado em 27/08/2026.** O sistema está construído e roda: vitrine, carrinho,
+checkout, criação de pedido, cotação de frete real, painel administrativo com
+sete módulos e rastreamento de conversão. O que falta para vender **não é
+código** — é preço, fotos, faixas de desconto e a conexão do gateway.
+
+Duas leituras obrigatórias antes de mexer em qualquer coisa:
+
+- `docs/auditoria-completa-26-08-2026.md` — o diagnóstico completo, com o que
+  está provado, o que não está, e por quê.
+- `docs/p0-4-superfrete-seguro.md` — a investigação do `insurance_value`, que
+  descartou uma suspeita da própria auditoria.
 
 **Não fazer deploy nem criar contas externas sem autorização explícita do
-Francisco.** Nenhum projeto Vercel, nenhum projeto Supabase na nuvem,
-nenhum `git push` para remoto — nada disso foi feito por este scaffold e
-nada disso deve ser feito sem o Francisco decidir primeiro.
+Francisco.** Nenhum projeto Vercel foi criado, nenhum `git push` foi feito.
+
+## O que trava a loja hoje
+
+O único produto está em `status='draft'`, com `price_cents = 0`, variante
+inativa e nenhuma foto cadastrada. Enquanto isso não mudar, não há o que
+vender — e o código impede vender por engano:
+
+- a home só oferece "Comprar agora" quando existe produto vendável
+  (`src/lib/catalog/vitrine.ts`);
+- o carrinho recusa variante com preço zero (`src/lib/cart/store.ts`).
+
+Depende de decisão do Francisco: **preço**, faixas de desconto, fotos,
+confirmação de estoque, peso/dimensões reais e as 8 perguntas ocultas da FAQ.
 
 ## Stack
 
 - Next.js `14.2.15` (App Router, `src/app`), React `18.3.1`, TypeScript
 - Tailwind CSS, com tokens de marca em `src/styles/tokens.css`
-- `@supabase/ssr` + `@supabase/supabase-js` — sem projeto real conectado
-  ainda (ver "decisões pendentes")
-- `zod` para validação de schema de input (ainda não usado em rota nenhuma,
-  porque não há rota de escrita real ainda)
+- `@supabase/ssr` + `@supabase/supabase-js` — projeto Supabase real
+  conectado, com as 7 migrations aplicadas
+- `zod` para validação de schema de input, na fronteira de toda escrita
+  (checkout, admin, formulários públicos)
 - `vitest` para teste unitário
 - npm (não pnpm/yarn) — mesma convenção do projeto irmão
   `saas-metodo-francisco`
@@ -27,16 +45,10 @@ nada disso deve ser feito sem o Francisco decidir primeiro.
 ## Como rodar localmente
 
 ```bash
-npm install     # AINDA NÃO RODADO NESTE AMBIENTE — ver nota abaixo
+npm install
 cp .env.example .env.local   # preencher com valores reais quando existirem
 npm run dev
 ```
-
-> **`npm install` não foi executado neste scaffold.** O ambiente em que ele
-> foi criado não tem acesso à rede que o `npm install` precisa. O
-> `package.json` está correto e completo — rodar `npm install` num ambiente
-> com rede deve funcionar sem ajuste. `package-lock.json` também não existe
-> ainda por causa disso; ele nasce no primeiro `npm install` bem-sucedido.
 
 Sem `.env.local` preenchido, `src/lib/supabase/client.ts` e
 `src/lib/supabase/server.ts` lançam erro em runtime de propósito (falha
@@ -48,18 +60,23 @@ alta, não silenciosa) — não há projeto Supabase real para apontar ainda.
 npm run test
 ```
 
-Só existe `tests/unit/discount.test.ts` por enquanto (cálculo de desconto
-por quantidade, `src/lib/pricing/discount.ts`). `tests/integration` e
-`tests/e2e` existem como pasta vazia — a estrutura está pronta, o conteúdo
-vem em fase seguinte.
+**127 testes**, em 11 arquivos, rodando em menos de um segundo. Cobrem as
+regras que decidem dinheiro: desconto por quantidade, seguro do frete,
+máquina de estados do pedido, CPF, atribuição de campanha, e as travas
+introduzidas na correção dos P0 (falha fechada do pagamento, isolamento do
+Purchase, ambiente da SuperFrete, preço zero, duplo clique).
+
+`tests/integration` e `tests/e2e` continuam vazios — não há teste de
+integração nem E2E automatizado.
 
 ## Banco de dados
 
 Schema completo em `supabase/migrations/00000000000001_init.sql` — uma
 migration única, decisão de arquitetura já tomada antes deste scaffold.
-**Não foi aplicada em servidor nenhum.** É só o arquivo SQL local. Quando
-existir um projeto Supabase real, aplica-se com `supabase db push` (ou pela
-UI do Supabase) — nunca rodado por este scaffold.
+**As 7 migrations estão aplicadas** no Supabase do projeto (conferido em
+26/08/2026 — inclusive `conversion_logs`, da migration 7). Quando
+Migration nova se aplica com `npm run db:aplicar` (conexão direta) ou pela
+UI do Supabase.
 
 RLS está habilitado em toda tabela, com policy pública só de leitura no que
 é seguro mostrar na vitrine (produtos ativos, variantes ativas, mídia,
@@ -85,9 +102,9 @@ service role (backend) — CRUD de admin com policy própria checando
   definição"` e o item nasce `is_visible: false`, para que o texto "TODO"
   nunca apareça sem querer numa FAQ pública.
 
-`scripts/seed.mjs` lê esses JSONs e faz upsert via client admin do
-Supabase. **Não foi executado** — não existe projeto Supabase real para
-rodar contra. Está pronto para quando existir.
+`scripts/seed.mjs` lê esses JSONs e faz upsert via client admin do Supabase.
+**Já rodou**: cores, níveis de grisalho e FAQ estão no banco. O produto entrou
+com `price_cents = 0` — e é por isso que a loja não vende ainda.
 
 ## Sistema de design
 
@@ -118,48 +135,58 @@ ShippingCalculator, CartDrawer, CheckoutSummary, OrderStatus, AdminTable,
 Modal, Toast, FormField). Tipados, com props mínimas e sensatas, sem
 Storybook nem teste visual ainda — não são pixel-perfect, são a fundação.
 
-## Pagamento e frete — desacoplados, só MOCK
+## Pagamento e frete
 
 `src/lib/payments/` e `src/lib/shipping/` definem a interface
-(`PaymentProvider`, `ShippingProvider`) e uma implementação `Mock*` que
-retorna dado fake determinístico, sem chamar rede nenhuma. Isto é
-deliberado e não é escopo em aberto: **implementação real de pagamento
-(InfinitePay) e frete (SuperFrete) não faz parte deste scaffold** — é
-linha que só se cruza na conversa principal com o Francisco, por ser
-regra comercial crítica (preço cobrado do cliente, aprovação/recusa de
-pagamento).
+(`PaymentProvider`, `ShippingProvider`). Os dois adapters reais **existem**:
+InfinitePay e SuperFrete, escritos contra a documentação oficial.
 
-- `getPaymentProvider()` decide pela env `PAYMENT_PROVIDER` (`mock` hoje;
-  `infinitepay` lança erro "não implementado — aguardando decisão do
-  Francisco").
-- `getShippingProvider()` decide pela presença de `SUPERFRETE_TOKEN`
-  (ausente = mock; presente = lança "não implementado — Fase 3").
+**Pagamento — falha fechada (corrigido em 27/08/2026).** `getPaymentProvider()`
+exige `PAYMENT_PROVIDER` explícita. Ausente → lança, e o pagamento fica
+indisponível. `mock` só roda em desenvolvimento — ele aprova qualquer
+pagamento sem cobrar, e um deploy que caísse nele entregaria as peças de
+graça. `npm run verify:deploy` recusa uma configuração insegura antes de
+subir.
+
+**Frete — ambiente explícito.** `SUPERFRETE_SANDBOX` aceita `"1"` (sandbox) ou
+`"0"` (produção) e mais nada; ausente ou irreconhecível lança. Criar e pagar
+etiqueta é bloqueado fora de produção, sem variável de escape — `payLabel()`
+debita a carteira de verdade. A **cotação** é real e foi exercitada
+(PAC/SEDEX/Loggi respondendo). A **compra de etiqueta nunca foi feita**.
 
 ## Decisões pendentes (não inventadas aqui)
 
-- **Gateway de pagamento**: InfinitePay é o nome citado no projeto, mas a
-  integração real não foi decidida nem implementada.
+- **Gateway de pagamento**: o adapter da InfinitePay está escrito e **nunca
+  processou um centavo**. Falta conta confirmada e um pagamento real de valor
+  baixo, ponta a ponta.
 - **Plano de hospedagem**: Vercel é a convenção do projeto irmão, mas
   nenhum projeto Vercel foi criado para a Reverá.
 - **Domínio**: não definido.
 - **Aprovação de wordmark/identidade visual final**: os tokens de cor e
   tipografia neste scaffold seguem a direção descrita na missão, mas não
   houve aprovação formal de peça de marca (logo, wordmark) ainda.
-- **Preços reais**: nenhum preço foi inventado. `seeds/products.json` tem
-  `price_cents: null` de propósito.
-- **Número de WhatsApp pós-compra**: existe como comentário em
-  `.env.example` (`WHATSAPP_POST_PURCHASE_NUMBER`), mas não está
-  implementado em componente nenhum ainda — quando for, só em fluxo
-  pós-compra, nunca em página pré-compra ou metadata.
+- **Preços reais**: nenhum preço foi inventado. É a decisão que destrava
+  metade da lista.
+- **Número de WhatsApp pós-compra**: `SuportePosCompra.tsx` está implementado
+  e só renderiza com pagamento confirmado (Server Component, variável sem
+  `NEXT_PUBLIC_`, conferido por `npm run verify:secrets`). A variável
+  `WHATSAPP_POST_PURCHASE_NUMBER` está **vazia** — sem ela a seção não
+  aparece.
 
-## O que este scaffold NÃO fez (por desenho, não por esquecimento)
+## O que ainda NÃO existe
 
-- Nenhum `npm install` — sem rede no ambiente em que foi criado.
-- Nenhuma migration aplicada em Supabase real.
-- Nenhuma conta externa criada (Supabase, Vercel, InfinitePay,
-  SuperFrete, Meta, GTM/GA4).
-- Nenhum `git push` — só `git init` local.
-- Nenhuma integração real de pagamento, frete, ou rastreamento de
-  conversão.
-- Nenhum teste E2E — só a estrutura de pastas (`tests/e2e`) e um teste
-  unitário de exemplo.
+Verificado na auditoria de 26/08/2026 e não alterado desde então:
+
+- **Nenhum e-mail é enviado.** O comprador não recebe confirmação; a dona não
+  recebe aviso de venda. Não há biblioteca de envio no projeto.
+- **Nenhum pagamento real jamais foi processado.** O adapter da InfinitePay
+  está escrito conforme a documentação oficial e nunca rodou.
+  `PAYMENT_PROVIDER` precisa ser `infinitepay` em produção — sem a variável, o
+  pagamento fica indisponível de propósito (falha fechada).
+- **Nenhuma etiqueta foi comprada.** A cotação da SuperFrete é real e foi
+  exercitada; a compra de etiqueta não.
+- **Sem política de privacidade, termos ou consentimento de cookies** — apesar
+  de o checkout coletar CPF.
+- **Sem gestão de fotos no painel.** `product_media` existe no banco e não é
+  lida nem escrita por nenhum código.
+- **Sem deploy.** Não existe projeto Vercel nem domínio.

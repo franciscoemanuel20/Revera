@@ -1,6 +1,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { META_PIXEL_ID, MOEDA, centavosParaMoeda } from "./config";
+import { ehProducao, descricaoDoAmbiente } from "@/lib/config/ambiente";
+import { codigoDeEventoDeTeste } from "./permissao";
 
 /**
  * Conversions API da Meta — o Purchase que sai do SERVIDOR.
@@ -89,6 +91,13 @@ function semNulos(obj: Record<string, unknown>): Record<string, unknown> {
 }
 
 export async function enviarPurchaseMeta(input: {
+  /**
+   * CAMADA 3 de 3 (P0-3): envio marcado como TESTE na Meta. Quem decide é
+   * src/lib/tracking/permissao.ts — aqui só se obedece. Eventos com
+   * `test_event_code` aparecem no Gerenciador de Eventos para conferência e
+   * NÃO entram na otimização das campanhas.
+   */
+  comoTeste?: boolean;
   eventId: string;
   eventTimeSegundos: number;
   valorCents: number;
@@ -106,6 +115,19 @@ export async function enviarPurchaseMeta(input: {
   }
   if (!token) {
     return { sucesso: false, motivoPulado: "META_CAPI_TOKEN vazia" };
+  }
+
+  /**
+   * Guarda própria, redundante de propósito. Esta função é exportada e
+   * qualquer código futuro pode chamá-la direto, pulando despachar.ts. Um
+   * envio para a conta real a partir de desenvolvimento não pode depender de
+   * quem chamou ter lembrado de checar.
+   */
+  if (!ehProducao() && !input.comoTeste) {
+    return {
+      sucesso: false,
+      motivoPulado: `envio à Meta bloqueado fora de produção (${descricaoDoAmbiente()}) e sem test_event_code`,
+    };
   }
 
   const { fn, ln } = partesDoNome(input.pessoa.fullName);
@@ -151,6 +173,11 @@ export async function enviarPurchaseMeta(input: {
         },
       },
     ],
+    // Só existe quando o envio foi autorizado como teste. A Meta separa
+    // esses eventos e não os usa para otimizar.
+    ...(input.comoTeste && codigoDeEventoDeTeste()
+      ? { test_event_code: codigoDeEventoDeTeste() }
+      : {}),
   };
 
   let res: Response;

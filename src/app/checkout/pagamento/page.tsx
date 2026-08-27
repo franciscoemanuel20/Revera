@@ -62,11 +62,23 @@ export default async function PagamentoPage({
       : Promise.resolve({ data: null }),
   ]);
 
-  const provider = getPaymentProvider();
   const base = baseUrl();
 
   let checkoutUrl: string;
   try {
+    /**
+     * DENTRO do try de propósito (P0-2, 27/08/2026).
+     *
+     * getPaymentProvider() passou a LANÇAR quando o pagamento não está
+     * configurado, em vez de cair em mock. Se a chamada ficasse fora daqui,
+     * uma variável faltando derrubaria esta página numa tela de erro do
+     * Next — e o cliente, que JÁ TEM UM PEDIDO CRIADO neste ponto, veria um
+     * crash em vez do aviso de que nada foi cobrado e o pedido está guardado.
+     *
+     * Falhar fechado é sobre não aprovar pagamento indevido; não é desculpa
+     * para tratar mal quem estava comprando.
+     */
+    const provider = getPaymentProvider();
     const resultado = await provider.createCharge({
       orderId: pedido.id,
       orderNumber: pedido.order_number,
