@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { formatarBRL } from "@/lib/format/money";
+import { formatarTotais, totalizarPorMoeda } from "@/lib/internacional/moeda";
 import { STATUS_VENDA_CONFIRMADA } from "@/lib/admin/order-status";
 
 // Dashboard do admin — 26/08/2026, substitui o redirect direto para
@@ -38,7 +38,7 @@ export default async function AdminDashboardPage() {
   ] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, status, total_cents, created_at")
+      .select("id, status, total_cents, currency, created_at")
       .gte("created_at", desde30Dias),
     supabase
       .from("orders")
@@ -63,10 +63,24 @@ export default async function AdminDashboardPage() {
   const pedidosConfirmados = (pedidos30 ?? []).filter((p) => statusVendaConfirmada.includes(p.status));
   const pedidosHoje = pedidosConfirmados.filter((p) => diaBR(p.created_at) === hojeBR);
 
-  const vendasHojeCents = pedidosHoje.reduce((soma, p) => soma + p.total_cents, 0);
-  const vendasPeriodoCents = pedidosConfirmados.reduce((soma, p) => soma + p.total_cents, 0);
+  /**
+   * Agrupado por moeda, nunca somado entre elas. Ver totalizarPorMoeda():
+   * somar BRL com USD produz um número que não existe em moeda nenhuma, e
+   * converter exigiria uma taxa com data e fonte que ainda não foi decidida.
+   */
+  const totaisHoje = totalizarPorMoeda(pedidosHoje);
+  const totaisPeriodo = totalizarPorMoeda(pedidosConfirmados);
   const numeroPedidosPeriodo = pedidosConfirmados.length;
-  const ticketMedioCents = numeroPedidosPeriodo > 0 ? Math.round(vendasPeriodoCents / numeroPedidosPeriodo) : 0;
+  /**
+   * Ticket médio também é por moeda: a média entre 650 reais e 320 dólares
+   * não significa nada. Com uma moeda só no período, sai um número só — que
+   * é o caso da operação hoje.
+   */
+  const ticketPorMoeda = totaisPeriodo.map((t) => ({
+    moeda: t.moeda,
+    minor: t.pedidos > 0 ? Math.round(t.minor / t.pedidos) : 0,
+    pedidos: t.pedidos,
+  }));
 
   const semVendaNenhuma = numeroPedidosPeriodo === 0;
 
@@ -90,10 +104,10 @@ export default async function AdminDashboardPage() {
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Cartao titulo="Vendas hoje" valor={formatarBRL(vendasHojeCents)} />
-        <Cartao titulo="Vendas nos últimos 30 dias" valor={formatarBRL(vendasPeriodoCents)} />
+        <Cartao titulo="Vendas hoje" valor={formatarTotais(totaisHoje)} />
+        <Cartao titulo="Vendas nos últimos 30 dias" valor={formatarTotais(totaisPeriodo)} />
         <Cartao titulo="Pedidos (30 dias)" valor={String(numeroPedidosPeriodo)} />
-        <Cartao titulo="Ticket médio (30 dias)" valor={formatarBRL(ticketMedioCents)} />
+        <Cartao titulo="Ticket médio (30 dias)" valor={formatarTotais(ticketPorMoeda)} />
         <Cartao
           titulo="Aguardando envio"
           valor={String(aguardandoEnvio ?? 0)}

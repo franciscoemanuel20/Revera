@@ -10,9 +10,8 @@ import {
   type PaymentStatusValue,
   type ShippingStatusValue,
 } from "@/lib/admin/venda-status";
-import { formatarBRL } from "@/lib/format/money";
 import { bandeira, nomeDoPais } from "@/lib/internacional/paises";
-import { dinheiro, ehMoedaSuportada, formatarDinheiro } from "@/lib/internacional/moeda";
+import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
 import { EXPORT_STATUS_BADGE, EXPORT_STATUS_LABEL, type ExportStatus } from "@/lib/internacional/exportacao";
 import { formatarDataHora } from "@/lib/format/date";
 
@@ -38,17 +37,6 @@ export interface VendaCardProps {
   internacional: boolean;
   moeda: string;
   exportStatus: ExportStatus;
-}
-
-/**
- * O valor sai SEMPRE na moeda em que o cliente foi cobrado. Converter para
- * real na tela do admin pareceria uma gentileza e seria um erro: a
- * responsável precisa reconhecer o número que aparece no extrato e na
- * Commercial Invoice, e nenhum dos dois está em reais numa venda em dólar.
- */
-function formatarValor(minor: number, moeda: string): string {
-  if (!ehMoedaSuportada(moeda)) return formatarBRL(minor);
-  return formatarDinheiro(dinheiro(minor, moeda));
 }
 
 /**
@@ -101,7 +89,7 @@ export function VendaCard(props: VendaCardProps) {
           </div>
         </div>
         <p className="font-display text-lg text-ink">
-          {formatarValor(props.totalCents, props.moeda)}
+          {formatarValorNaMoeda(props.totalCents, props.moeda)}
         </p>
       </div>
 

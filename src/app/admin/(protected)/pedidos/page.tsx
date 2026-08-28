@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { formatarBRL } from "@/lib/format/money";
+import { formatarTotais, totalizarPorMoeda } from "@/lib/internacional/moeda";
 import {
   ABA_LABEL,
   ORDEM_DAS_ABAS,
@@ -126,7 +126,7 @@ export default async function VendasPage({
       {/* RESUMO — o que a pessoa quer saber antes de qualquer clique. */}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <CardResumo titulo="Vendas hoje" valor={String(resumo.vendasHoje)} />
-        <CardResumo titulo="Faturamento hoje" valor={formatarBRL(resumo.faturamentoHoje)} />
+        <CardResumo titulo="Faturamento hoje" valor={resumo.faturamentoHoje} />
         <CardResumo titulo="Aguardando pagamento" valor={String(contadores.pendentes)} />
         <CardResumo
           titulo="Para preparar"
@@ -335,14 +335,14 @@ async function contarPorAba(
 async function resumoDeHoje(
   supabase: Awaited<ReturnType<typeof createClient>>,
   agora: Date
-): Promise<{ vendasHoje: number; faturamentoHoje: number; enviadasHoje: number }> {
+): Promise<{ vendasHoje: number; faturamentoHoje: string; enviadasHoje: number }> {
   const inicio = inicioDoPeriodo("hoje", agora)?.toISOString();
-  if (!inicio) return { vendasHoje: 0, faturamentoHoje: 0, enviadasHoje: 0 };
+  if (!inicio) return { vendasHoje: 0, faturamentoHoje: formatarTotais([]), enviadasHoje: 0 };
 
   const [{ data: pagasHoje }, { count: enviadasHoje }] = await Promise.all([
     supabase
       .from("orders")
-      .select("total_cents")
+      .select("total_cents, currency")
       .eq("payment_status", "paid")
       .is("canceled_at", null)
       .gte("created_at", inicio),
@@ -353,10 +353,11 @@ async function resumoDeHoje(
       .gte("updated_at", inicio),
   ]);
 
-  const linhas = (pagasHoje ?? []) as Array<{ total_cents: number }>;
+  // Por moeda, não somado: mesmo motivo do painel (bug 3, 28/08/2026).
+  const linhas = (pagasHoje ?? []) as Array<{ total_cents: number; currency: string | null }>;
   return {
     vendasHoje: linhas.length,
-    faturamentoHoje: linhas.reduce((s, l) => s + l.total_cents, 0),
+    faturamentoHoje: formatarTotais(totalizarPorMoeda(linhas)),
     enviadasHoje: enviadasHoje ?? 0,
   };
 }

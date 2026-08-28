@@ -107,6 +107,34 @@ export async function gerarEtiquetaAction(
     };
   }
 
+  /**
+   * TRAVA DE PAÍS (bug 4, 28/08/2026).
+   *
+   * A SuperFrete é transportadora NACIONAL: a cotação e a etiqueta exigem
+   * CEP de origem e destino, e endereço estrangeiro não tem CEP. Sem esta
+   * verificação a ação seguiria adiante e falharia lá na frente, com uma
+   * mensagem da transportadora que não explica nada — ou pior, encontraria
+   * algum caminho de gastar.
+   *
+   * Fica no SERVIDOR, e não só no botão: esconder o botão resolve o clique
+   * acidental, não a chamada direta da action. A tela também esconde (ver
+   * BotaoEtiqueta.tsx), mas a garantia é esta.
+   */
+  const { data: enderecoPedido } = await supabase
+    .from("addresses")
+    .select("country")
+    .eq("id", pedido.address_id)
+    .maybeSingle();
+
+  const paisDestino = (enderecoPedido?.country as string | null) ?? "BR";
+  if (paisDestino !== "BR") {
+    return {
+      error:
+        `Este pedido vai para fora do Brasil (${paisDestino}). A etiqueta da SuperFrete ` +
+        "é só nacional — envio internacional sai pela DHL, que ainda não está configurada.",
+    };
+  }
+
   const envioAtual = pedido.shipping_status as ShippingStatusValue;
   if (envioAtual !== "awaiting_label" && envioAtual !== "shipping_error") {
     return {

@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Toast } from "@/components/ui/Toast";
-import type { PaymentStatusValue, ShippingStatusValue } from "@/lib/admin/venda-status";
+import {
+  podeOferecerEtiquetaNacional,
+  type PaymentStatusValue,
+  type ShippingStatusValue,
+} from "@/lib/admin/venda-status";
 import { gerarEtiquetaAction } from "./etiqueta";
 
 /**
@@ -20,11 +24,14 @@ export function BotaoEtiqueta({
   orderId,
   paymentStatus,
   shippingStatus,
+  paisDestino,
   jaTemEtiqueta,
 }: {
   orderId: string;
   paymentStatus: PaymentStatusValue;
   shippingStatus: ShippingStatusValue;
+  /** ISO-2 do destino. A SuperFrete só atende o Brasil. */
+  paisDestino: string;
   /** Etiqueta CONCLUÍDA (com rastreio ou PDF). Meia-etiqueta não conta. */
   jaTemEtiqueta: boolean;
 }) {
@@ -49,9 +56,10 @@ export function BotaoEtiqueta({
    * servidor sabe distinguir uma emissão do zero de uma retomada de etiqueta
    * já criada, então clicar aqui depois de um erro não gasta duas vezes.
    */
-  if (jaTemEtiqueta) return null;
-  if (paymentStatus !== "paid") return null;
-  if (shippingStatus !== "awaiting_label" && shippingStatus !== "shipping_error") return null;
+  // A regra mora em podeOferecerEtiquetaNacional() para poder ser testada —
+  // dentro do JSX, nenhum teste a alcançava. Ver bug 4, 28/08/2026.
+  if (!podeOferecerEtiquetaNacional({ paisDestino, paymentStatus, shippingStatus, jaTemEtiqueta }))
+    return null;
 
   async function gerar(confirmarDiferenca = false) {
     setErro(null);

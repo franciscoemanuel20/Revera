@@ -53,7 +53,7 @@ export const MOEDAS: Record<Moeda, InfoMoeda> = {
   EUR: { codigo: "EUR", simbolo: "€", nome: "Euro", expoente: 2, locale: "pt-PT" },
   GBP: { codigo: "GBP", simbolo: "£", nome: "Libra", expoente: 2, locale: "en-GB" },
   AUD: { codigo: "AUD", simbolo: "A$", nome: "Dólar australiano", expoente: 2, locale: "en-AU" },
-  CAD: { codigo: "CAD", simbolo: "C$", nome: "Dólar canadense", expoente: 2, locale: "en-CA" },
+  CAD: { codigo: "CAD", simbolo: "CA$", nome: "Dólar canadense", expoente: 2, locale: "en-CA" },
 };
 
 export function ehMoedaSuportada(v: string): v is Moeda {
@@ -103,14 +103,54 @@ export function multiplicar(valor: Dinheiro, quantidade: number): Dinheiro {
   return { minor: valor.minor * quantidade, moeda: valor.moeda };
 }
 
+/**
+ * O símbolo vem da NOSSA tabela, não do Intl.
+ *
+ * Deixando o Intl escolher, `en-US`, `en-CA` e `en-AU` devolvem todos "$"
+ * — e numa lista com pedidos dos três países ninguém distingue US$ 320 de
+ * A$ 320, que são valores bem diferentes. Foi o bug 5 encontrado no teste
+ * vivo de 27/08/2026.
+ *
+ * Alguns locales resolveriam isso hoje (pt-BR devolve "US$", "CA$"), mas
+ * isso depende dos dados de locale da versão do Node ou do navegador, e
+ * mudança silenciosa de símbolo em tela de dinheiro é o tipo de regressão
+ * que ninguém percebe. Com a tabela nossa, o símbolo é decisão, não sorte.
+ *
+ * A formatação do NÚMERO continua com Intl em pt-BR — quem opera a loja é
+ * brasileiro e lê "1.234,56", não "1,234.56".
+ */
 export function formatarDinheiro(valor: Dinheiro): string {
   const info = MOEDAS[valor.moeda];
-  return new Intl.NumberFormat(info.locale, {
-    style: "currency",
-    currency: valor.moeda,
+  const numero = new Intl.NumberFormat("pt-BR", {
     minimumFractionDigits: info.expoente,
     maximumFractionDigits: info.expoente,
   }).format(valor.minor / fatorDaMoeda(valor.moeda));
+  return `${info.simbolo} ${numero}`;
+}
+
+/**
+ * A porta única para dinheiro na tela do admin.
+ *
+ * Recebe a moeda como texto solto — que é como ela chega do banco — e nunca
+ * lança: uma tela de pedido não pode quebrar porque alguém gravou um código
+ * de moeda estranho. Moeda desconhecida sai com o próprio código na frente
+ * ("XYZ 320,00"), o que é feio de propósito: sinaliza o problema sem
+ * esconder o número nem fingir que é real.
+ *
+ * Criada em 28/08/2026 para os bugs 2 e 3: o detalhe do pedido e o painel
+ * formatavam TUDO com formatarBRL, e um pedido de US$ 320 aparecia como
+ * "R$ 320,00".
+ */
+export function formatarValorNaMoeda(minor: number, moeda: string): string {
+  const codigo = (moeda ?? "").toUpperCase();
+  if (ehMoedaSuportada(codigo)) {
+    return formatarDinheiro({ minor, moeda: codigo });
+  }
+  const numero = new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(minor / 100);
+  return `${codigo || "???"} ${numero}`;
 }
 
 /** Sem símbolo, para a Commercial Invoice, onde a moeda vai em coluna própria. */
@@ -184,4 +224,59 @@ export function precoNaMoeda(
 ): Dinheiro | null {
   const achado = precos.find((p) => p.moeda === moeda);
   return achado ? dinheiro(achado.precoMinor, moeda) : null;
+}
+
+/* =========================================================================
+ * TOTAIS POR MOEDA
+ * =======================================================================*/
+
+/**
+ * Soma pedidos AGRUPANDO por moeda, em vez de somar tudo num número só.
+ *
+ * ===========================================================================
+ * POR QUE NÃO EXISTE "FATURAMENTO TOTAL" (bug 3, 28/08/2026)
+ * ===========================================================================
+ * O painel somava `total_cents` de todos os pedidos e mostrava o resultado
+ * em reais. Com um pedido de US$ 320 no período, ele exibia "R$ 320,00" —
+ * um número que não existe: não é o faturamento em real, não é em dólar, e
+ * ninguém consegue conferir contra extrato nenhum.
+ *
+ * A correção óbvia seria converter tudo para real. Só que converter exige
+ * uma taxa, e taxa exige data e fonte — senão o faturamento de agosto muda
+ * sozinho quando alguém abre a tela em outubro. Enquanto não houver decisão
+ * sobre qual câmbio usar (é uma das perguntas ao contador), somar moedas
+ * diferentes é errado de um jeito silencioso.
+ *
+ * Então o painel mostra o que ele realmente sabe: quanto entrou em cada
+ * moeda. Uma linha por moeda, e nenhuma soma entre elas.
+ */
+export interface TotalPorMoeda {
+  moeda: string;
+  minor: number;
+  pedidos: number;
+}
+
+export function totalizarPorMoeda(
+  linhas: Array<{ total_cents: number; currency?: string | null }>
+): TotalPorMoeda[] {
+  const mapa = new Map<string, TotalPorMoeda>();
+  for (const l of linhas) {
+    const moeda = (l.currency ?? "BRL").toUpperCase();
+    const atual = mapa.get(moeda) ?? { moeda, minor: 0, pedidos: 0 };
+    atual.minor += l.total_cents;
+    atual.pedidos += 1;
+    mapa.set(moeda, atual);
+  }
+  // Real primeiro (é a maior parte da operação), o resto em ordem alfabética.
+  return [...mapa.values()].sort((a, b) => {
+    if (a.moeda === "BRL") return -1;
+    if (b.moeda === "BRL") return 1;
+    return a.moeda.localeCompare(b.moeda);
+  });
+}
+
+/** "R$ 650,00 · US$ 320,00" — para caber num cartão de resumo. */
+export function formatarTotais(totais: TotalPorMoeda[]): string {
+  if (totais.length === 0) return formatarValorNaMoeda(0, "BRL");
+  return totais.map((t) => formatarValorNaMoeda(t.minor, t.moeda)).join(" · ");
 }

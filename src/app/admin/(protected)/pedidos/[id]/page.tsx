@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { formatarBRL } from "@/lib/format/money";
+import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
 import { formatarDataHora } from "@/lib/format/date";
 import { STATUS_BADGE_CLASS, STATUS_LABEL, type OrderStatusValue } from "@/lib/admin/order-status";
 import {
@@ -21,7 +21,7 @@ import {
   provedoresConfigurados,
   type DadosFiscaisProduto,
 } from "@/lib/internacional/exportacao";
-import { daLinha, type LinhaEndereco } from "@/lib/internacional/endereco";
+import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacional/endereco";
 import { ehInternacional } from "@/lib/internacional/paises";
 
 const METODO_LABEL: Record<string, string> = {
@@ -116,11 +116,26 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
   const canceladoEm = (pedido.canceled_at as string | null) ?? null;
 
   /**
+   * TODO valor desta tela sai na moeda do PEDIDO — nunca em real por padrão.
+   * Um pedido de US$ 320 aparecia como "R$ 320,00" antes desta correção
+   * (bug 2, 28/08/2026), o que é pior que não mostrar: parecia um número
+   * plausível e errado.
+   */
+  const moedaDoPedido = (pedido.currency as string | null) ?? "BRL";
+  const dinheiroDoPedido = (minor: number) => formatarValorNaMoeda(minor, moedaDoPedido);
+
+  /**
    * Exportação. Só é calculada para pedido internacional — um pedido
    * brasileiro não ganha etapa que não lhe diz respeito (Fase 6 do escopo).
    */
   const enderecoLinha = pedido.addresses as unknown as LinhaEndereco | null;
   const paisDoPedido = enderecoLinha?.country ?? "BR";
+
+  // O endereço já formatado no padrão do país, uma linha por linha.
+  const enderecoDominio = enderecoLinha
+    ? daLinha(enderecoLinha, (cliente?.phone as string) ?? "")
+    : null;
+  const linhasDoEndereco = enderecoDominio ? formatarEndereco(enderecoDominio) : [];
   const pedidoInternacional = ehInternacional(paisDoPedido);
 
   const produtosFiscais: DadosFiscaisProduto[] = pedidoInternacional
@@ -215,18 +230,21 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
 
         <div className="flex flex-col gap-1 rounded-lg border border-sand p-4">
           <h2 className="font-display text-lg text-ink">Endereço de entrega</h2>
-          {endereco ? (
-            <>
-              <p className="text-sm text-ink/80">{endereco.recipient_name}</p>
-              <p className="text-sm text-ink/60">
-                {endereco.street}, {endereco.number}
-                {endereco.complement ? ` — ${endereco.complement}` : ""}
+          {/* Uma linha por linha, no formato do PAÍS — não no brasileiro.
+              Antes desta correção (bug 1, 28/08/2026) esta tela montava
+              "rua, número / bairro — cidade/UF / CEP" para qualquer pedido, e
+              um endereço americano saía como "Michael Smith , — Washington/
+              CEP": vírgulas e traços separando campos vazios.
+              formatarEndereco() já existia para isso e não estava ligado. */}
+          {linhasDoEndereco.length > 0 ? (
+            linhasDoEndereco.map((linha, i) => (
+              <p
+                key={`${linha}-${i}`}
+                className={i === 0 ? "text-sm text-ink/80" : "text-sm text-ink/60"}
+              >
+                {linha}
               </p>
-              <p className="text-sm text-ink/60">
-                {endereco.neighborhood} — {endereco.city}/{endereco.state}
-              </p>
-              <p className="text-sm text-ink/60">CEP {endereco.cep}</p>
-            </>
+            ))
           ) : (
             <p className="text-sm text-ink/60">Sem endereço registrado.</p>
           )}
@@ -251,8 +269,8 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
                 <td className="px-3 py-2">{item.product_name_snapshot}</td>
                 <td className="px-3 py-2 text-ink/70">{item.variant_label_snapshot ?? "—"}</td>
                 <td className="px-3 py-2">{item.quantity}</td>
-                <td className="px-3 py-2">{formatarBRL(item.unit_price_cents)}</td>
-                <td className="px-3 py-2">{formatarBRL(item.subtotal_cents)}</td>
+                <td className="px-3 py-2">{dinheiroDoPedido(item.unit_price_cents)}</td>
+                <td className="px-3 py-2">{dinheiroDoPedido(item.subtotal_cents)}</td>
               </tr>
             ))}
           </tbody>
@@ -261,19 +279,19 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         <div className="ml-auto flex w-full max-w-xs flex-col gap-1 text-sm text-ink/80 sm:text-right">
           <div className="flex justify-between">
             <span>Subtotal</span>
-            <span>{formatarBRL(pedido.subtotal_cents)}</span>
+            <span>{dinheiroDoPedido(pedido.subtotal_cents)}</span>
           </div>
           <div className="flex justify-between">
             <span>Desconto</span>
-            <span>-{formatarBRL(pedido.discount_cents)}</span>
+            <span>-{dinheiroDoPedido(pedido.discount_cents)}</span>
           </div>
           <div className="flex justify-between">
             <span>Frete</span>
-            <span>{formatarBRL(pedido.shipping_cents)}</span>
+            <span>{dinheiroDoPedido(pedido.shipping_cents)}</span>
           </div>
           <div className="flex justify-between font-display text-lg text-ink">
             <span>Total</span>
-            <span>{formatarBRL(pedido.total_cents)}</span>
+            <span>{dinheiroDoPedido(pedido.total_cents)}</span>
           </div>
         </div>
       </section>
@@ -291,7 +309,7 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
                     {p.provider} · {METODO_LABEL[p.method ?? ""] ?? p.method ?? "método não informado"}
                   </span>
                   <span className="text-ink/60">
-                    {PAGAMENTO_STATUS_LABEL[p.status] ?? p.status} — {formatarBRL(p.amount_cents)} —{" "}
+                    {PAGAMENTO_STATUS_LABEL[p.status] ?? p.status} — {dinheiroDoPedido(p.amount_cents)} —{" "}
                     {formatarDataHora(p.created_at)}
                   </span>
                 </li>
@@ -336,12 +354,23 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
 
       <section className="flex flex-col gap-3 print:hidden">
         <h2 className="font-display text-lg text-ink">Ações</h2>
-        <BotaoEtiqueta
-          orderId={pedido.id}
-          paymentStatus={paymentStatus}
-          shippingStatus={shippingStatus}
-          jaTemEtiqueta={Boolean(envio?.tracking_code || envio?.label_url)}
-        />
+        {pedidoInternacional ? (
+          <div className="rounded-md border border-sand bg-sand/40 p-3 text-sm text-ink/70">
+            <p className="font-medium text-ink">Envio internacional</p>
+            <p>
+              DHL — <strong>não configurado</strong>. A etiqueta da SuperFrete é só nacional
+              e não atende este destino.
+            </p>
+          </div>
+        ) : (
+          <BotaoEtiqueta
+            orderId={pedido.id}
+            paymentStatus={paymentStatus}
+            shippingStatus={shippingStatus}
+            paisDestino={paisDoPedido}
+            jaTemEtiqueta={Boolean(envio?.tracking_code || envio?.label_url)}
+          />
+        )}
         <StatusActions
           orderId={pedido.id}
           paymentStatus={paymentStatus}

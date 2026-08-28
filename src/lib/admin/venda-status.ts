@@ -199,3 +199,29 @@ export function contaComoVenda(
 ): boolean {
   return paymentStatus === "paid" && !canceladoEm;
 }
+
+/**
+ * O botão de etiqueta da SuperFrete deve aparecer?
+ *
+ * Extraída do componente em 28/08/2026 (bug 4) para poder ser TESTADA. A
+ * regra morava dentro de um `return null` no meio do JSX, onde teste
+ * nenhum alcança — e foi exatamente por isso que a etiqueta nacional
+ * apareceu num pedido para os Estados Unidos.
+ *
+ * Esta função decide a TELA. A garantia mora no servidor: gerarEtiquetaAction
+ * recusa pedido internacional mesmo que alguém chame a action direto.
+ */
+export function podeOferecerEtiquetaNacional(args: {
+  paisDestino: string;
+  paymentStatus: PaymentStatusValue;
+  shippingStatus: ShippingStatusValue;
+  /** Etiqueta CONCLUÍDA (com rastreio ou PDF). Meia-etiqueta não conta. */
+  jaTemEtiqueta: boolean;
+}): boolean {
+  // A SuperFrete é nacional: sem CEP de destino não há cotação nem etiqueta.
+  if (args.paisDestino.toUpperCase() !== "BR") return false;
+  if (args.jaTemEtiqueta) return false;
+  if (args.paymentStatus !== "paid") return false;
+  // 'shipping_error' mantém o botão: é o "tentar novamente".
+  return args.shippingStatus === "awaiting_label" || args.shippingStatus === "shipping_error";
+}
