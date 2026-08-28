@@ -9,13 +9,13 @@ verdade** deste bloco da estrutura internacional da Reverá.
 
 | área | situação |
 |---|---|
-| Decisões comerciais | **parcialmente definidas** |
+| Decisões comerciais | **parcialmente definidas** (faltam: preços reais por mercado, cotação DHL real, conta Stripe de produção) |
 | DHL API | **não configurada** |
 | NF-e exportação | **não configurada** |
 | Commercial Invoice | **não configurada** |
-| Gateway internacional | **não configurado** |
+| Gateway internacional | **Stripe em TEST MODE, provado no staging (28/08)** — produção não configurada |
 | Fiscal/aduaneiro | **aguardando validação** |
-| Checkout internacional real | **ainda não liberado** |
+| Checkout internacional real | **construído e provado em staging (test mode)** — produção segue fechada até preço + frete + chaves live |
 
 Este bloco existe para evitar qualquer ilusão de prontidão: enquanto uma
 linha acima disser "não configurado" ou "aguardando", nenhuma tela, texto ou
@@ -27,7 +27,7 @@ ainda é planejamento. Cada item carrega uma etiqueta:
 
 | etiqueta | significado |
 |---|---|
-| `JÁ IMPLEMENTADO` | existe no código, com commit e teste (branch `fundacao-internacional-27-08`, migrations 8 e 9 ainda **não aplicadas** no banco, nada pushado) |
+| `JÁ IMPLEMENTADO` | existe no código, com commit e teste (branch `fundacao-internacional-27-08`; migrations 8–10 **aplicadas no STAGING** e provadas ao vivo em 28/08; **produção segue sem elas** — ver docs/go-live-internacional.md; nada pushado) |
 | `DECISÃO FECHADA` | o Francisco decidiu; falta só implementar |
 | `AGUARDANDO IMPLEMENTAÇÃO` | decidido ou especificado, sem código ainda |
 | `DEPENDE DA DHL` | precisa de conta/da operação/da API da DHL |
@@ -37,6 +37,14 @@ ainda é planejamento. Cada item carrega uma etiqueta:
 ---
 
 ## 0. Pré-requisito que sequencia tudo
+
+`RESOLVIDO TECNICAMENTE em 28/08/2026 — resta a decisão da CONTA de
+produção.` O gateway internacional é a **Stripe** (doc oficial: conta BR
+cobra cartão estrangeiro em USD/EUR/GBP/AUD/CAD e liquida em BRL; cartão
+brasileiro segue obrigado a BRL — e esse cliente compra pela InfinitePay).
+Compra real em test mode + reembolso provados no staging com o sandbox
+"OneMark IA". Pende do Francisco: decidir a conta Stripe DE PRODUÇÃO da
+Reverá e ativá-la. O texto abaixo é o registro histórico do bloqueio:
 
 `DEPENDE DE DECISÃO COMERCIAL` — **não existe hoje como COBRAR um cliente no
 exterior.** A InfinitePay não vende para fora do Brasil (central de ajuda
@@ -58,18 +66,21 @@ e mostra o total antes do gateway. Nunca houve frete embutido no preço.
 **subtotal / shipping / tax / total**. Nenhuma delas se esconde dentro de
 outra.
 
-`AGUARDANDO IMPLEMENTAÇÃO` — a tela do checkout internacional exibindo
-"Produto / Frete internacional — DHL / Total" com a mesma separação. Herda o
-desenho nacional; não cria estrutura nova.
+`JÁ IMPLEMENTADO` (28/08/2026) — a tela do checkout internacional exibe
+"Produtos / Frete internacional — DHL / Total" na moeda do mercado, provada
+de ponta a ponta no staging com a Stripe real em test mode (pedido
+REV-A8D6FD68, US$ 850 + 120 = 970).
 
 ## 2. Cotação por destino
 
-`AGUARDANDO IMPLEMENTAÇÃO` — **não existe** tabela de cotações. A estrutura
-futura deve registrar: país, postal code, peso, dimensões, serviço,
-transportadora, moeda, data da cotação e **validade** — a cotação precisa
-poder expirar. O pedido internacional deve gravar QUAL cotação usou.
+`JÁ IMPLEMENTADO` (28/08/2026, migration 10) — tabela `intl_shipping_quotes`
+com país, serviço, transportadora, moeda, peso máximo em GRAMAS, prazo
+min/máx, data da cotação e **validade** (cotação vencida fecha o país
+sozinha); administrada em `/admin/internacional`; o pedido grava QUAL
+cotação usou em `orders.intl_shipping_quote_id`. O que segue pendente da
+fase DHL: dimensões por cotação e valor declarado/seguro por pedido.
 
-Regras já definidas para quando for implementada:
+Regras que continuam valendo (a segunda entra na fase DHL):
 
 - **Peso internamente em gramas, sempre.** A Reverá inteira usa gramas
   (`SUPERFRETE_CAIXA_PESO_GRAMAS`, `products.net_weight_g`); o irmão
@@ -127,10 +138,9 @@ Proibido: "você será taxado", "todos os pedidos são taxados", "você não ser
 taxado". Proibido calcular imposto sem fonte/integrador confiável. Proibido
 inventar porcentagem por país ou afirmar que país X sempre/nunca cobra.
 
-`AGUARDANDO IMPLEMENTAÇÃO` — o aviso no checkout internacional (discreto,
-logo abaixo do frete) e o bloco informativo "Seu pedido será enviado pela
-DHL" (porta a porta, rastreio, comprovante, prazo estimado no momento da
-contratação, possibilidade de tributos no destino).
+`JÁ IMPLEMENTADO` (28/08/2026) — o aviso no checkout internacional e o
+bloco informativo "Seu pedido será enviado pela DHL", com a linguagem
+condicional desta seção, ao vivo no staging.
 
 **Atenção a um campo que já existe**: `orders.tax_cents` (migration 9,
 default 0). Ele foi criado para o dia em que houver DDP — **não** é convite
@@ -165,8 +175,10 @@ obrigatório e específico (não um checkbox genérico) deixando claro que:
 O botão de finalizar permanece desabilitado até o aceite. O aceite é
 **versionado e auditável**: gravar `terms_version` e `accepted_at` no pedido.
 
-`AGUARDANDO IMPLEMENTAÇÃO` — nada disso existe: nem colunas no banco, nem
-componente. Entra na migration da fase de checkout internacional.
+`JÁ IMPLEMENTADO` (28/08/2026, migration 10) — `orders.terms_version` +
+`orders.terms_accepted_at` (relógio do servidor, CHECK de coerência),
+checkbox obrigatória que trava o botão E é revalidada no servidor
+(`literal(true)`). Versão atual: `2026-08-28.v1.pre-juridico`.
 
 `DEPENDE DO CONTADOR/FISCAL` — o texto jurídico definitivo não sai sem
 revisão apropriada. O texto acima é requisito de conteúdo, não redação final.
@@ -177,8 +189,10 @@ revisão apropriada. O texto acima é requisito de conteúdo, não redação fin
 **prazo estimado da transportadora**. Nunca prometer data de entrega
 absoluta em envio internacional; o desembaraço aduaneiro pode afetar o prazo.
 
-`AGUARDANDO IMPLEMENTAÇÃO` — hoje não há modelagem de prazo separada em
-lugar nenhum (nem no fluxo nacional o prazo de preparação é um campo).
+`PARCIALMENTE IMPLEMENTADO` (28/08/2026) — o prazo da TRANSPORTADORA vive
+na cotação (eta min/máx) e a tela diz explicitamente que ele "não inclui o
+tempo de preparação nem o desembaraço aduaneiro". O prazo de PREPARAÇÃO da
+Reverá continua sem número — `DEPENDE DE DECISÃO COMERCIAL`.
 
 ## 8. Admin → Vendas: bloco "Envio internacional"
 
@@ -186,12 +200,13 @@ lugar nenhum (nem no fluxo nacional o prazo de preparação é um campo).
 (brasil/internacional), país e moeda; o pedido já guarda moeda, câmbio
 (taxa, fonte, data) e `export_status` com rótulo em linguagem de operação.
 
-`AGUARDANDO IMPLEMENTAÇÃO` — a visão detalhada do pedido internacional:
-transportadora (DHL), frete cobrado do cliente, **cotação utilizada + data
-da cotação**, peso, dimensões, destino, responsabilidade por impostos
-conforme modalidade configurada, status da documentação e do rastreio.
-Documentação e rastreio dependem das fases DHL/fiscal para terem conteúdo
-real — até lá exibem o estado do checklist (`nao_configurado`).
+`JÁ IMPLEMENTADO` (base, 28/08/2026) — o detalhe internacional mostra
+gateway (stripe), frete cobrado, moeda, destino formatado por país,
+checklist com NF-e/Invoice/DHL `NÃO CONFIGURADO` e o SuperFrete bloqueado
+para destino estrangeiro (tela E servidor). A cotação usada está GRAVADA no
+pedido (`intl_shipping_quote_id`); exibi-la com data na tela do pedido é
+refinamento pendente. Documentação e rastreio seguem com o checklist até as
+fases DHL/fiscal.
 
 ## 9. Preparar para DAP/DDP sem oferecer
 
