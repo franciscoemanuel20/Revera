@@ -81,9 +81,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         </div>
       </header>
 
-      <div className="flex flex-1">
-        <nav className="w-56 shrink-0 border-r border-sand px-4 py-6 print:hidden">
-          <div className="flex flex-col gap-1">
+      {/* No celular a navegação vira uma faixa horizontal rolável no topo —
+          a coluna fixa de 224px espremia o conteúdo em ~150px de largura
+          útil (visto no teste mobile de 28/08). Em md+ nada muda. */}
+      <div className="flex flex-1 flex-col md:flex-row">
+        <nav className="shrink-0 overflow-x-auto border-b border-sand px-4 py-3 md:w-56 md:border-b-0 md:border-r md:px-4 md:py-6 print:hidden">
+          <div className="flex flex-row gap-1 md:flex-col">
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.href}
