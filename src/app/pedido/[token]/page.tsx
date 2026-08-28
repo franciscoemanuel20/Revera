@@ -4,7 +4,8 @@ import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
 import { confirmarPagamento } from "@/lib/payments/confirmar";
 import { consumirPurchaseParaNavegador } from "@/lib/tracking/purchase";
-import { formatarBRL } from "@/lib/format/money";
+import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
+import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacional/endereco";
 import { PurchaseTracker } from "./PurchaseTracker";
 import { SuportePosCompra } from "./SuportePosCompra";
 
@@ -48,7 +49,7 @@ export default async function PedidoPage({
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal_cents, discount_cents, shipping_cents, total_cents, created_at, address_id"
+      "id, order_number, status, subtotal_cents, discount_cents, shipping_cents, total_cents, currency, created_at, address_id"
     )
     .eq("access_token", token)
     .maybeSingle();
@@ -68,6 +69,13 @@ export default async function PedidoPage({
     .maybeSingle();
 
   const status = (atual?.status ?? pedido.status) as string;
+  /**
+   * Todo dinheiro desta página sai na MOEDA DO PEDIDO (bug pego no E2E de
+   * 28/08: pedido de US$ 970 aparecia como "R$ 970,00" para o cliente — a
+   * mesma classe de defeito corrigida no admin em e636f0e, que ninguém
+   * tinha ligado aqui). `na()` é o único formatador da página.
+   */
+  const na = (cents: number) => formatarValorNaMoeda(cents, (pedido.currency as string) ?? "BRL");
   const pago = status !== "new" && status !== "canceled";
 
   const [{ data: itens }, { data: endereco }, { data: envio }] = await Promise.all([
@@ -78,7 +86,9 @@ export default async function PedidoPage({
     pedido.address_id
       ? supabase
           .from("addresses")
-          .select("recipient_name, street, number, complement, neighborhood, city, state, cep")
+          .select(
+            "recipient_name, company, country, street, number, complement, neighborhood, city, state, cep, line1, line2, postal_code, region"
+          )
           .eq("id", pedido.address_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -162,29 +172,29 @@ export default async function PedidoPage({
                 ) : null}
               </span>
               <span className="tabular-nums text-ink">
-                {formatarBRL(item.subtotal_cents as number)}
+                {na(item.subtotal_cents as number)}
               </span>
             </li>
           ))}
         </ul>
 
         <dl className="flex flex-col gap-1 border-t border-sand pt-3 text-sm">
-          <Linha rotulo="Subtotal" valor={formatarBRL(pedido.subtotal_cents)} />
+          <Linha rotulo="Subtotal" valor={na(pedido.subtotal_cents)} />
           {pedido.discount_cents > 0 ? (
-            <Linha rotulo="Desconto" valor={`− ${formatarBRL(pedido.discount_cents)}`} />
+            <Linha rotulo="Desconto" valor={`− ${na(pedido.discount_cents)}`} />
           ) : null}
           <Linha
             rotulo="Frete"
             valor={
               (atual?.shipping_cents ?? pedido.shipping_cents) > 0
-                ? formatarBRL(atual?.shipping_cents ?? pedido.shipping_cents)
+                ? na(atual?.shipping_cents ?? pedido.shipping_cents)
                 : "a combinar"
             }
           />
           <div className="flex justify-between pt-1 font-display text-lg text-ink">
             <dt>Total</dt>
             <dd className="tabular-nums">
-              {formatarBRL(atual?.total_cents ?? pedido.total_cents)}
+              {na(atual?.total_cents ?? pedido.total_cents)}
             </dd>
           </div>
         </dl>
@@ -194,14 +204,22 @@ export default async function PedidoPage({
         <section className="flex flex-col gap-1">
           <h2 className="font-display text-xl text-ink">Entrega</h2>
           <p className="text-sm text-ink/80">
-            {endereco.recipient_name}
-            <br />
-            {endereco.street}, {endereco.number}
-            {endereco.complement ? ` — ${endereco.complement}` : ""}
-            <br />
-            {endereco.neighborhood} · {endereco.city}/{endereco.state}
-            <br />
-            CEP {endereco.cep}
+            {/* formatarEndereco decide o layout pelo PAÍS (bug do E2E de
+                28/08: endereço americano saía no molde brasileiro, com
+                vírgulas soltas e "CEP" vazio). daLinha devolve null para
+                linha incoerente — aí o fallback mostra só o nome. */}
+            {(() => {
+              const dominio = daLinha(endereco as unknown as LinhaEndereco, "");
+              const linhas = dominio
+                ? formatarEndereco(dominio)
+                : [endereco.recipient_name as string];
+              return linhas.map((linha, i) => (
+                <span key={i}>
+                  {linha}
+                  {i < linhas.length - 1 ? <br /> : null}
+                </span>
+              ));
+            })()}
           </p>
         </section>
       ) : null}
