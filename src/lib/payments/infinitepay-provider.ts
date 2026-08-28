@@ -41,6 +41,15 @@ export class InfinitePayProvider implements PaymentProvider {
   readonly name = "infinitepay";
 
   async createCharge(charge: PaymentCharge): Promise<PaymentResult> {
+    // A InfinitePay não vende fora do Brasil (central de ajuda oficial,
+    // 27/08/2026) e a API não tem campo de moeda: tudo é BRL implícito.
+    // Mandar um pedido em USD para cá cobraria o número em reais — valor
+    // errado numa moeda errada. Melhor recusar antes de existir cobrança.
+    if (charge.currency !== "BRL") {
+      throw new Error(
+        `InfinitePay só processa BRL — pedido em ${charge.currency} deve ir ao provider internacional.`
+      );
+    }
     const body = {
       handle: requireHandle(),
       // order_nsu é o que volta no webhook — é assim que reconhecemos o
@@ -158,6 +167,11 @@ export class InfinitePayProvider implements PaymentProvider {
 
     return {
       paid: data.success === true && data.paid === true,
+      // A API não devolve moeda porque só existe uma: a conta InfinitePay
+      // opera exclusivamente em BRL. Declarar aqui (em vez de null) liga a
+      // conferência de moeda em confirmarPagamento() também para o fluxo
+      // nacional.
+      currency: "BRL",
       paidAmountCents:
         typeof data.paid_amount === "number"
           ? data.paid_amount

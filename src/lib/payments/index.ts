@@ -2,6 +2,7 @@ import "server-only";
 import type { PaymentProvider } from "./provider";
 import { MockPaymentProvider } from "./mock-provider";
 import { InfinitePayProvider } from "./infinitepay-provider";
+import { StripeProvider } from "./stripe-provider";
 import { descricaoDoAmbiente, permiteSimulacao } from "@/lib/config/ambiente";
 
 /**
@@ -89,12 +90,53 @@ export function getPaymentProvider(): PaymentProvider {
 }
 
 /**
+ * Provider INTERNACIONAL — Stripe, exigida por STRIPE_SECRET_KEY.
+ *
+ * Mesma filosofia fail-closed do nacional: sem a variável não existe
+ * padrão, e o construtor do adapter ainda recusa chave live fora de
+ * produção e chave de teste em produção (ver stripe-provider.ts). Não há
+ * "mock internacional": o fluxo internacional se testa apontando
+ * STRIPE_API_BASE para um dublê local — o código que roda é o real.
+ */
+export function getStripeProvider(): PaymentProvider {
+  if (!process.env.STRIPE_SECRET_KEY?.trim()) {
+    throw new PagamentoIndisponivel(
+      "STRIPE_SECRET_KEY não está definida. Pagamento internacional fica " +
+        `indisponível de propósito — nenhum país estrangeiro abre sem ela. ${descricaoDoAmbiente()}`
+    );
+  }
+  return new StripeProvider();
+}
+
+/**
+ * A decisão de roteamento inteira, num lugar só: moeda → gateway.
+ *
+ * BRL → provider nacional (InfinitePay em produção, mock onde simulação é
+ * permitida). Qualquer outra moeda suportada → Stripe. Não existe terceiro
+ * caminho, e não existe pedido sem moeda (orders.currency é not null).
+ */
+export function providerParaMoeda(moeda: string): PaymentProvider {
+  if (moeda === "BRL") return getPaymentProvider();
+  return getStripeProvider();
+}
+
+/**
  * Se o pagamento está configurado, sem lançar. Para tela/diagnóstico decidir
  * o que mostrar antes de tentar cobrar.
  */
 export function pagamentoEstaDisponivel(): boolean {
   try {
     getPaymentProvider();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** O mesmo, para o caminho internacional. */
+export function pagamentoInternacionalDisponivel(): boolean {
+  try {
+    getStripeProvider();
     return true;
   } catch {
     return false;

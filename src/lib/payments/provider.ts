@@ -38,6 +38,15 @@ export interface PaymentCharge {
   /** número legível do pedido, para o cliente reconhecer na fatura */
   orderNumber: string;
   amountCents: number;
+  /**
+   * Moeda da COBRANÇA (ISO 4217, maiúscula) — a mesma gravada em
+   * orders.currency. Cada adapter decide o que aceita: a InfinitePay só
+   * processa BRL e RECUSA qualquer outra na criação (melhor falhar antes de
+   * cobrar do que cobrar na moeda errada); a Stripe cobra na moeda do
+   * mercado. Nunca converter aqui — conversão é decisão comercial, não do
+   * adapter.
+   */
+  currency: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -59,6 +68,22 @@ export interface PaymentResult {
  * Pistas extraídas do webhook. Deliberadamente NÃO inclui "status": o aviso
  * não tem autoridade para dizer se foi pago — ver comentário no topo.
  */
+/**
+ * O que o aviso PEDE que seja feito. "pagamento" é o caso clássico (vá
+ * confirmar se foi pago). "reembolso" existe porque um gateway que avisa
+ * charge.refunded NÃO pode passar pelo caminho de confirmação: o pagamento
+ * original continua constando como bem-sucedido no gateway, e confirmar de
+ * novo marcaria como pago um pedido que acabou de ser estornado.
+ * "ignorar" registra o evento (auditoria + idempotência) e para — para os
+ * muitos eventos que um gateway manda e não mudam pedido nenhum.
+ */
+export type TipoDeAviso = "pagamento" | "reembolso" | "ignorar";
+
+/** Superfície mínima dos cabeçalhos HTTP que um adapter pode precisar ler. */
+export interface CabecalhosWebhook {
+  get(nome: string): string | null;
+}
+
 export interface WebhookHint {
   /** nosso orders.id, devolvido pelo gateway */
   orderId: string;
@@ -72,6 +97,11 @@ export interface WebhookHint {
    * payment_events tem unique (provider, provider_event_id)).
    */
   eventId: string;
+  /**
+   * O que fazer com o aviso. Ausente = "pagamento", que é o comportamento
+   * histórico — os adapters antigos não precisam mudar.
+   */
+  kind?: TipoDeAviso;
 }
 
 /** Resultado de uma verificação ATIVA junto ao gateway. É isto que vale. */
@@ -79,6 +109,13 @@ export interface ConfirmedPayment {
   paid: boolean;
   /** quanto o gateway diz que foi efetivamente pago, em centavos */
   paidAmountCents: number | null;
+  /**
+   * Em QUAL moeda o gateway diz que foi pago (ISO 4217, maiúscula), ou null
+   * quando o gateway não informa. Com mais de uma moeda no sistema, comparar
+   * só o número deixaria passar "pagou 770 USD num pedido de 770 BRL" — e
+   * vice-versa. Quem compara é confirmarPagamento(), contra orders.currency.
+   */
+  currency: string | null;
   method: string | null;
   installments: number | null;
   /** resposta crua, guardada em payments.raw_response para auditoria */
@@ -94,8 +131,14 @@ export interface PaymentProvider {
   /**
    * Lê o corpo do webhook e extrai as pistas. Devolve null se o corpo não
    * for reconhecível — nesse caso a rota responde 400 sem tocar em pedido.
+   *
+   * `cabecalhos` existe para gateway que ASSINA o webhook (a Stripe manda a
+   * assinatura no header Stripe-Signature): o adapter valida a assinatura
+   * aqui dentro e devolve null quando ela não confere — a rota nem fica
+   * sabendo que existia um corpo. Adapters sem assinatura ignoram o
+   * parâmetro.
    */
-  parseWebhookHint(rawBody: string): WebhookHint | null;
+  parseWebhookHint(rawBody: string, cabecalhos?: CabecalhosWebhook): WebhookHint | null;
 
   /**
    * Pergunta ao gateway, por chamada de saída, se aquele pedido foi pago.

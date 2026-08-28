@@ -168,6 +168,50 @@ if (permiteSimulacao && ambiente === "staging") {
 }
 
 // ---------------------------------------------------------------------------
+// STRIPE — o gateway internacional segue a mesma disciplina (28/08/2026)
+// ---------------------------------------------------------------------------
+// As duas direções são perigosas: chave LIVE fora de produção cobra cartão
+// de verdade num ambiente de teste; chave TEST em produção "aprova" compra
+// em que dinheiro nenhum entrou (o mesmo buraco do mock, com outro nome).
+const stripeKey = env("STRIPE_SECRET_KEY");
+if (stripeKey) {
+  const ehLive = stripeKey.includes("_live") || stripeKey.startsWith("sk_live");
+  if (ehLive && !podeReceberComprador) {
+    problemas.push(
+      "STRIPE_SECRET_KEY LIVE num ambiente sem comprador real. Um teste aqui " +
+        "cobraria cartão de verdade. Use a chave sk_test_ correspondente."
+    );
+  }
+  if (!ehLive && podeReceberComprador) {
+    problemas.push(
+      "STRIPE_SECRET_KEY de TESTE num ambiente com comprador real. Pedido " +
+        "internacional seria 'pago' com cartão de teste, sem dinheiro entrar. " +
+        "Use a chave live — ou remova a variável até o internacional abrir."
+    );
+  }
+  if (!env("STRIPE_WEBHOOK_SECRET")) {
+    problemas.push(
+      "STRIPE_SECRET_KEY presente sem STRIPE_WEBHOOK_SECRET. O webhook da " +
+        "Stripe ficaria não-verificável e todo evento seria recusado. As duas " +
+        "andam juntas (whsec_... está no endpoint do Dashboard)."
+    );
+  }
+} else if (env("STRIPE_WEBHOOK_SECRET")) {
+  avisos.push(
+    "STRIPE_WEBHOOK_SECRET presente sem STRIPE_SECRET_KEY — metade de uma " +
+      "configuração. O internacional continua fechado (comportamento seguro), " +
+      "mas confira se a intenção não era outra."
+  );
+}
+if (env("STRIPE_API_BASE") && podeReceberComprador) {
+  problemas.push(
+    "STRIPE_API_BASE definida num ambiente com comprador real. Essa variável " +
+      "aponta o pagamento para um servidor que NÃO é a Stripe — só existe " +
+      "para o dublê de teste do staging. Remova."
+  );
+}
+
+// ---------------------------------------------------------------------------
 // P0-3 — rastreamento não pode misturar teste com a conta real
 // ---------------------------------------------------------------------------
 if (podeReceberComprador) {

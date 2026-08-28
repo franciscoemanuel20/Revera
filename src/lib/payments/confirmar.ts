@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
-import { getPaymentProvider } from "@/lib/payments";
+import { providerParaMoeda } from "@/lib/payments";
 import type { WebhookHint } from "@/lib/payments/provider";
 import { registrarPurchasePendente } from "@/lib/tracking/purchase";
 import { despacharPurchase } from "@/lib/tracking/despachar";
@@ -69,17 +69,9 @@ export async function confirmarPagamento(
    * para tratar mal quem estava comprando — o mesmo raciocínio já escrito
    * em src/app/checkout/pagamento/page.tsx.
    */
-  let provider;
-  try {
-    provider = getPaymentProvider();
-  } catch (erro) {
-    console.error("[confirmar] pagamento não configurado", erro);
-    return { estado: "indisponivel", motivo: "pagamento não configurado" };
-  }
-
   const { data: pedido, error: erroPedido } = await supabase
     .from("orders")
-    .select("id, status, total_cents")
+    .select("id, status, total_cents, currency")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -89,6 +81,46 @@ export async function confirmarPagamento(
   }
   if (!pedido) {
     return { estado: "nao_pago", motivo: "pedido inexistente" };
+  }
+
+  /**
+   * O provider é decidido pela MOEDA DO PEDIDO, nunca pela rota que chamou
+   * (multi-gateway, 28/08/2026): BRL → nacional, resto → Stripe. Por isso o
+   * pedido é lido ANTES do provider — a leitura acima é o que diz qual
+   * gateway tem autoridade para confirmar este pagamento. Um webhook da
+   * Stripe apontando para um pedido BRL vai perguntar à InfinitePay (que
+   * dirá "não pago"), e vice-versa: gateway nenhum confirma pedido que não
+   * é dele.
+   */
+  let provider;
+  try {
+    provider = providerParaMoeda(pedido.currency as string);
+  } catch (erro) {
+    console.error("[confirmar] pagamento não configurado", erro);
+    return { estado: "indisponivel", motivo: "pagamento não configurado" };
+  }
+
+  /**
+   * PORTA 2 sem pista: o cliente voltou à página do pedido e ninguém trouxe
+   * o id da transação. Para a Stripe isso importa — o retrieve por id de
+   * sessão é imediato, enquanto a busca por metadata tem consistência
+   * eventual. A linha `pending` de payments, gravada na criação da
+   * cobrança, guarda exatamente esse id. Usa quando existir.
+   */
+  let pistasEfetivas = pistas;
+  if (!pistas?.transactionId) {
+    const { data: pendente } = await supabase
+      .from("payments")
+      .select("provider_payment_id")
+      .eq("order_id", pedido.id)
+      .eq("provider", provider.name)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (pendente?.provider_payment_id) {
+      pistasEfetivas = { ...pistas, transactionId: pendente.provider_payment_id as string };
+    }
   }
 
   // Já pago (por qualquer uma das portas). Não reprocessa, não redispara.
@@ -104,9 +136,9 @@ export async function confirmarPagamento(
   try {
     confirmacao = await provider.confirmPayment({
       orderId,
-      transactionId: pistas?.transactionId ?? null,
-      invoiceSlug: pistas?.invoiceSlug ?? null,
-      eventId: pistas?.eventId ?? `order:${orderId}`,
+      transactionId: pistasEfetivas?.transactionId ?? null,
+      invoiceSlug: pistasEfetivas?.invoiceSlug ?? null,
+      eventId: pistasEfetivas?.eventId ?? `order:${orderId}`,
     });
   } catch (erro) {
     // Gateway fora do ar não é "não pago" — é "não sei ainda". Devolver
@@ -117,8 +149,24 @@ export async function confirmarPagamento(
   }
 
   if (!confirmacao.paid) {
-    await registrarTentativa(supabase, provider.name, pedido, pistas, confirmacao, "failed");
+    await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
     return { estado: "nao_pago", motivo: "gateway diz que não foi pago" };
+  }
+
+  /**
+   * Conferência de MOEDA, antes da de valor (multi-moeda, 28/08/2026).
+   * "Pagou 770" não diz nada sozinho: 770 USD e 770 BRL diferem por fator
+   * cinco. Só compara quando o gateway informou moeda (o mock não informa —
+   * e aí vale a conferência de valor contra o total, como sempre).
+   */
+  if (confirmacao.currency != null && confirmacao.currency !== pedido.currency) {
+    console.error("[confirmar] moeda paga diverge da moeda do pedido", {
+      pedido: pedido.id,
+      moedaPedido: pedido.currency,
+      moedaPaga: confirmacao.currency,
+    });
+    await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
+    return { estado: "nao_pago", motivo: "moeda divergente" };
   }
 
   // Conferência de valor: pagar R$ 1 num pedido de R$ 1.600 não libera nada.
@@ -132,11 +180,11 @@ export async function confirmarPagamento(
       pago: confirmacao.paidAmountCents,
       total: pedido.total_cents,
     });
-    await registrarTentativa(supabase, provider.name, pedido, pistas, confirmacao, "failed");
+    await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
     return { estado: "nao_pago", motivo: "valor divergente" };
   }
 
-  await registrarTentativa(supabase, provider.name, pedido, pistas, confirmacao, "approved");
+  await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "approved");
 
   // A trava contra corrida: se as duas portas chegarem juntas, só uma
   // atualiza — a outra vê zero linhas e entende que já foi.
@@ -228,4 +276,59 @@ async function registrarTentativa(
     raw_response: confirmacao.raw as never,
   });
   if (error) console.error("[confirmar] falha ao registrar payment", error);
+}
+
+/**
+ * Reembolso avisado pelo gateway (hoje: charge.refunded da Stripe).
+ *
+ * NÃO passa por confirmarPagamento de propósito: lá a pergunta é "foi
+ * pago?", e a resposta do gateway para um pagamento estornado continua
+ * sendo "sim, foi" — o caminho de confirmação marcaria como pago um pedido
+ * que acabou de ser devolvido. Aqui a transição é outra e é estreita:
+ * paid → refunded, e só. Pedido que nunca foi pago não tem o que estornar
+ * (o update condicional encontra zero linhas e nada acontece).
+ *
+ * O eixo de envio fica como está: estorno de pedido já enviado é decisão
+ * operacional (a peça volta? reenvia?) que pertence ao admin, não a um
+ * webhook.
+ */
+export async function registrarReembolso(
+  orderId: string,
+  origem: { provider: string; transactionId: string | null; eventId: string }
+): Promise<"reembolsado" | "ignorado"> {
+  const supabase = createAdminClient();
+
+  const { data: atualizado, error } = await supabase
+    .from("orders")
+    .update({ payment_status: "refunded", updated_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .eq("payment_status", "paid")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[reembolso] falha ao marcar", error);
+    return "ignorado";
+  }
+  if (!atualizado) return "ignorado";
+
+  await supabase.from("payments").insert({
+    order_id: orderId,
+    provider: origem.provider,
+    provider_payment_id: origem.transactionId,
+    method: null,
+    status: "refunded",
+    amount_cents: 0,
+    raw_response: { evento: origem.eventId } as never,
+  });
+
+  await supabase.from("audit_logs").insert({
+    admin_user_id: null,
+    action: "pedido.reembolso_registrado",
+    entity_type: "orders",
+    entity_id: orderId,
+    diff: { por: origem.provider, evento: origem.eventId },
+  });
+
+  return "reembolsado";
 }

@@ -59,6 +59,9 @@ export class MockPaymentProvider implements PaymentProvider {
     return {
       paid: true,
       paidAmountCents: null,
+      // null de propósito, como o valor: exercita o caminho "gateway não
+      // informou moeda" da conferência.
+      currency: null,
       method: "mock",
       installments: 1,
       raw: { mock: true, orderId: hint.orderId },

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
-import { getPaymentProvider } from "@/lib/payments";
+import { providerParaMoeda } from "@/lib/payments";
 import { urlDoWebhook } from "@/lib/payments/webhook-url";
 import { baseUrl } from "@/lib/config/urls";
 
@@ -36,7 +36,7 @@ export default async function PagamentoPage({
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, total_cents, shipping_cents, access_token, customer_id"
+      "id, order_number, status, total_cents, shipping_cents, discount_cents, currency, access_token, customer_id"
     )
     .eq("access_token", accessToken)
     .maybeSingle();
@@ -78,11 +78,13 @@ export default async function PagamentoPage({
      * Falhar fechado é sobre não aprovar pagamento indevido; não é desculpa
      * para tratar mal quem estava comprando.
      */
-    const provider = getPaymentProvider();
+    // Roteado pela MOEDA do pedido: BRL → nacional, resto → Stripe.
+    const provider = providerParaMoeda(pedido.currency as string);
     const resultado = await provider.createCharge({
       orderId: pedido.id,
       orderNumber: pedido.order_number,
       amountCents: pedido.total_cents,
+      currency: pedido.currency as string,
       customerName: cliente?.full_name ?? undefined,
       customerEmail: cliente?.email ?? undefined,
       customerPhone: cliente?.phone ?? undefined,
