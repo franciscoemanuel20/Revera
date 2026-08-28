@@ -42,16 +42,25 @@ export WHATSAPP_PHONE_NUMBER_ID=""
 export WHATSAPP_DESTINO=""
 export NEXT_PUBLIC_SITE_URL="http://localhost:3002"
 
-# 3) Stripe em modo DUBLÊ (scripts/stripe-fake.mjs, porta 4242):
-#    - a chave é um marcador de teste (o dublê não autentica; o adapter só
-#      exige que NÃO seja live fora de produção);
-#    - o STRIPE_WEBHOOK_SECRET é compartilhado com o dublê, que assina os
-#      webhooks no formato real — a verificação exercitada é a de verdade;
-#    - STRIPE_API_BASE aponta o adapter para o dublê. Em produção o adapter
-#      RECUSA esta variável; aqui é exatamente o uso para o qual ela existe.
-export STRIPE_SECRET_KEY="sk_test_duble_local_staging"
-export STRIPE_WEBHOOK_SECRET="whsec_duble_local_staging"
-export STRIPE_API_BASE="http://localhost:4242"
+# 3) Stripe: chave REAL de teste quando o .env.staging tiver uma (veio da
+#    conta sandbox do Francisco em 28/08 — com ela, o adapter fala com a
+#    Stripe de verdade em test mode, e o webhook chega pelo `stripe listen`);
+#    sem chave real, cai no DUBLÊ local (scripts/stripe-fake.mjs, porta
+#    4242), que assina webhooks no formato real. Em produção o adapter
+#    RECUSA STRIPE_API_BASE; aqui é o uso para o qual ela existe.
+case "$STRIPE_SECRET_KEY" in
+  sk_test_*)
+    # Chave real de teste do .env.staging. O STRIPE_WEBHOOK_SECRET (whsec do
+    # `stripe listen`) também precisa vir de lá; sem ele o webhook é
+    # recusado — fail-closed, e a porta 2 continua confirmando.
+    unset STRIPE_API_BASE
+    ;;
+  *)
+    export STRIPE_SECRET_KEY="sk_test_duble_local_staging"
+    export STRIPE_WEBHOOK_SECRET="whsec_duble_local_staging"
+    export STRIPE_API_BASE="http://localhost:4242"
+    ;;
+esac
 
 # 4) países abertos para TESTE no staging — em produção quem decide é a
 #    variável na Vercel, que hoje não existe (só Brasil).

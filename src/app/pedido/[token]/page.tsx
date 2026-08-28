@@ -49,22 +49,25 @@ export default async function PedidoPage({
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal_cents, discount_cents, shipping_cents, total_cents, currency, created_at, address_id"
+      "id, order_number, status, payment_status, subtotal_cents, discount_cents, shipping_cents, total_cents, currency, created_at, address_id"
     )
     .eq("access_token", token)
     .maybeSingle();
 
   if (!pedido) notFound();
 
-  // PORTA 2. Só age se ainda estiver 'new' — a própria função verifica.
-  if (pedido.status === "new") {
+  // PORTA 2. Só age se ainda estiver aguardando pagamento. O eixo legado
+  // `status` volta a 'new' num pedido ESTORNADO (o CASE gerado não tem
+  // 'refunded'), então a condição olha o eixo real do dinheiro — sem isso,
+  // cada visita a um pedido estornado dispararia uma consulta ao gateway.
+  if (pedido.status === "new" && pedido.payment_status === "pending") {
     await confirmarPagamento(pedido.id);
   }
 
   // Relê depois da tentativa de confirmação, para mostrar o estado atual.
   const { data: atual } = await supabase
     .from("orders")
-    .select("status, shipping_cents, total_cents")
+    .select("status, payment_status, shipping_cents, total_cents")
     .eq("id", pedido.id)
     .maybeSingle();
 
@@ -76,7 +79,8 @@ export default async function PedidoPage({
    * tinha ligado aqui). `na()` é o único formatador da página.
    */
   const na = (cents: number) => formatarValorNaMoeda(cents, (pedido.currency as string) ?? "BRL");
-  const pago = status !== "new" && status !== "canceled";
+  const estornado = (atual?.payment_status ?? pedido.payment_status) === "refunded";
+  const pago = !estornado && status !== "new" && status !== "canceled";
 
   const [{ data: itens }, { data: endereco }, { data: envio }] = await Promise.all([
     supabase
@@ -116,12 +120,14 @@ export default async function PedidoPage({
       <header className="flex flex-col gap-2 text-center">
         <span className="eyebrow-ink">Pedido {pedido.order_number}</span>
         <h1 className="font-display text-3xl text-ink">
-          {pago ? "Pagamento confirmado" : "Aguardando pagamento"}
+          {estornado ? "Pagamento estornado" : pago ? "Pagamento confirmado" : "Aguardando pagamento"}
         </h1>
         <p className="text-ink/70">
-          {pago
-            ? "Recebemos seu pedido e já estamos cuidando dele."
-            : "Assim que o pagamento for identificado, esta página se atualiza."}
+          {estornado
+            ? "O valor deste pedido foi devolvido. Qualquer dúvida, fale com a gente."
+            : pago
+              ? "Recebemos seu pedido e já estamos cuidando dele."
+              : "Assim que o pagamento for identificado, esta página se atualiza."}
         </p>
       </header>
 
