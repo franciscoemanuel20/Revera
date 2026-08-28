@@ -75,7 +75,13 @@ comment on table intl_shipping_quotes is
   'Cotacoes MANUAIS de frete internacional (DHL etc.), cadastradas pela operacao. O checkout so cobra frete que exista aqui, ativo e dentro da validade. Sem cotacao valida, o pais nao vende.';
 
 alter table intl_shipping_quotes enable row level security;
--- Sem policy publica: so a service role le e escreve, como orders.
+-- Sem policy PUBLICA: o comprador nunca lê isto direto (o checkout lê via
+-- service role, no servidor). O admin logado administra pelo painel — a
+-- mesma policy de admin_users usada em variant_prices (migration 9).
+drop policy if exists "admin manage intl shipping quotes" on intl_shipping_quotes;
+create policy "admin manage intl shipping quotes" on intl_shipping_quotes for all
+  using (exists (select 1 from admin_users where id = auth.uid()))
+  with check (exists (select 1 from admin_users where id = auth.uid()));
 
 -- ---------------------------------------------------------------------
 -- 3. O PEDIDO GRAVA QUAL COTAÇÃO USOU
