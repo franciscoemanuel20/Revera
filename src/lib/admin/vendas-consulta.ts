@@ -55,6 +55,8 @@ export interface VendaResumo {
   cidade: string | null;
   uf: string | null;
   telefone: string | null;
+  email: string | null;
+  cpf: string | null;
   pais: string;
   internacional: boolean;
   moeda: string;
@@ -69,13 +71,33 @@ export interface VendaResumo {
   vistoEm: string | null;
 }
 
-const SELECT_VENDA =
-  "id, order_number, created_at, total_cents, currency, export_status, payment_status, shipping_status, canceled_at, cancel_reason, seen_at," +
-  " customers(full_name, phone, email, cpf)," +
-  " addresses(city, state, country)," +
-  " order_items(product_name_snapshot, quantity)," +
-  " payments(method, status)," +
-  " shipments(tracking_code, label_url, service_name)";
+/**
+ * O join de endereço muda conforme a consulta filtra por ele ou não — e isso
+ * não é estilo, é correção (bug real pego no teste vivo de 28/08/2026):
+ *
+ * No PostgREST, filtrar um recurso EMBUTIDO (`addresses.country=eq.BR`) com
+ * o join padrão (left) NÃO exclui o pedido — só anula o endereço embutido da
+ * linha que não casa. O filtro "Internacional" devolvia TODOS os pedidos, e
+ * os do Brasil ainda apareciam (sem cidade, porque o endereço vinha null e
+ * `mapear` assume BR como padrão). Com `!inner`, o filtro passa a cortar a
+ * linha inteira, que é o que as chips de origem/país/UF prometem.
+ *
+ * O left join continua sendo o padrão de propósito: com `!inner` sempre, um
+ * pedido sem endereço (não deveria existir, mas dado ruim acontece) sumiria
+ * do painel silenciosamente — e pedido invisível é pior que pedido sem
+ * cidade.
+ */
+export function selectVenda(filtraPorEndereco: boolean): string {
+  return (
+    "id, order_number, created_at, total_cents, currency, export_status, payment_status, shipping_status, canceled_at, cancel_reason, seen_at," +
+    " customers(full_name, phone, email, cpf)," +
+    ` addresses${filtraPorEndereco ? "!inner" : ""}(city, state, country),` +
+    " order_items(product_name_snapshot, quantity)," +
+    " payments(method, status)," +
+    " shipments(tracking_code, label_url, service_name)"
+  );
+}
+
 
 /**
  * O recorte de tempo é calculado no fuso de São Paulo, não no do servidor.
@@ -102,18 +124,28 @@ export function fimDoPeriodo(periodo: Periodo, agora: Date): Date | null {
 }
 
 /**
- * A busca cobre número do pedido e rastreio direto no banco. Nome, telefone,
- * e-mail e CPF moram na tabela de clientes: filtrar por eles exigiria um
- * join que o PostgREST não expressa bem numa query só, então o casamento
- * desses campos é feito em memória, sobre a página já carregada.
+ * A busca por número de pedido é filtrada direto no banco. Nome, telefone,
+ * e-mail, CPF e rastreio moram em tabelas relacionadas: filtrar por eles
+ * exigiria um join que o PostgREST não expressa bem numa query só, então o
+ * casamento desses campos é feito em memória (ver a segunda passada em
+ * buscarVendas).
  *
  * É honesto sobre o limite: com poucos milhares de pedidos isto é
  * instantâneo. Quando a loja passar disso, a saída é uma coluna de busca
  * materializada (tsvector) — e não emendar mais um `or` aqui.
  */
-function casaBuscaLocal(venda: VendaResumo, termo: string): boolean {
-  const alvo = [venda.numero, venda.cliente, venda.rastreio ?? ""].join(" ").toLowerCase();
-  return alvo.includes(termo);
+export function casaBuscaLocal(venda: VendaResumo, termo: string): boolean {
+  const alvo = [venda.numero, venda.cliente, venda.rastreio ?? "", venda.email ?? ""]
+    .join(" ")
+    .toLowerCase();
+  if (alvo.includes(termo)) return true;
+
+  // Telefone e CPF casam por dígitos: "(12) 98140" deve achar "+55 12 98140…".
+  const soDigitos = termo.replace(/\D/g, "");
+  if (soDigitos.length < 4) return false;
+  return [venda.telefone ?? "", venda.cpf ?? ""].some((v) =>
+    v.replace(/\D/g, "").includes(soDigitos)
+  );
 }
 
 export async function buscarVendas(
@@ -124,7 +156,13 @@ export async function buscarVendas(
   // Encadeado direto, sem função auxiliar: os tipos do PostgREST não
   // sobrevivem a uma passagem por variável genérica (o builder carrega o
   // nome da tabela no tipo), e forçar isso com `any` esconderia erro real.
-  let query = supabase.from("orders").select(SELECT_VENDA);
+  const filtraPorEndereco = Boolean(
+    params.uf ||
+      params.pais ||
+      params.origem === "brasil" ||
+      params.origem === "internacional"
+  );
+  let query = supabase.from("orders").select(selectVenda(filtraPorEndereco));
 
   const filtroAba = filtroDaAba(params.aba);
   if (filtroAba.paymentStatus) query = query.in("payment_status", filtroAba.paymentStatus);
@@ -146,11 +184,11 @@ export async function buscarVendas(
   else if (params.origem === "internacional") query = query.neq("addresses.country", "BR");
 
   const termo = params.busca?.trim().toLowerCase() ?? "";
-  if (termo) {
+  const escapado = termo.replace(/[%,()]/g, "");
+  if (termo && escapado) {
     // O que o banco consegue filtrar sozinho, ele filtra: assim a busca por
     // número de pedido continua exata mesmo com muitos pedidos.
-    const escapado = termo.replace(/[%,()]/g, "");
-    if (escapado) query = query.or(`order_number.ilike.%${escapado}%`);
+    query = query.or(`order_number.ilike.%${escapado}%`);
   }
 
   switch (params.ordem) {
@@ -174,31 +212,42 @@ export async function buscarVendas(
 
   let vendas = (data ?? []).map(mapear);
 
-  // Termo que não casou pelo número do pedido ainda pode ser nome ou
-  // rastreio — a segunda passada, em memória, cobre isso.
+  /**
+   * Segunda passada da busca (bug real pego no teste vivo de 28/08/2026):
+   * a versão anterior filtrava por order_number NO BANCO e depois tentava
+   * casar nome/rastreio em memória — mas sobre um resultado que o próprio
+   * filtro de número já tinha esvaziado. Buscar por rastreio ou por nome
+   * devolvia sempre "nenhuma venda encontrada".
+   *
+   * Agora, quando o termo não casa como número de pedido, a MESMA consulta
+   * (mesma aba, período, origem, país) roda de novo sem o filtro de número,
+   * e o casamento por nome, e-mail, telefone, CPF e rastreio é feito em
+   * memória sobre essa página. Duas idas ao banco no pior caso — honesto
+   * para a escala atual; a saída definitiva (tsvector) está anotada em
+   * casaBuscaLocal.
+   */
   if (termo) {
-    const doBanco = vendas.filter((v) => casaBuscaLocal(v, termo));
-    if (doBanco.length > 0) vendas = doBanco;
+    vendas = vendas.filter((v) => casaBuscaLocal(v, termo));
+    if (vendas.length === 0) {
+      let ampla = supabase.from("orders").select(selectVenda(filtraPorEndereco));
+      if (filtroAba.paymentStatus) ampla = ampla.in("payment_status", filtroAba.paymentStatus);
+      if (filtroAba.shippingStatus) ampla = ampla.in("shipping_status", filtroAba.shippingStatus);
+      if (filtroAba.cancelado === true) ampla = ampla.not("canceled_at", "is", null);
+      if (filtroAba.cancelado === false) ampla = ampla.is("canceled_at", null);
+      if (inicio) ampla = ampla.gte("created_at", inicio.toISOString());
+      if (fim) ampla = ampla.lt("created_at", fim.toISOString());
+      if (params.uf) ampla = ampla.eq("addresses.state", params.uf);
+      if (params.pais) ampla = ampla.eq("addresses.country", params.pais.toUpperCase());
+      else if (params.origem === "brasil") ampla = ampla.eq("addresses.country", "BR");
+      else if (params.origem === "internacional") ampla = ampla.neq("addresses.country", "BR");
+
+      const buscaAmpla = await ampla.order("created_at", { ascending: false }).limit(300);
+      if (buscaAmpla.error) return { vendas: [], erro: buscaAmpla.error.message };
+      vendas = (buscaAmpla.data ?? []).map(mapear).filter((v) => casaBuscaLocal(v, termo));
+    }
   }
 
   return { vendas, erro: null };
-}
-
-/** Busca ampla (sem o filtro de número) para quando o termo é nome ou CPF. */
-export async function buscarVendasPorPessoa(
-  supabase: SupabaseClient,
-  termo: string
-): Promise<VendaResumo[]> {
-  const limpo = termo.trim().toLowerCase();
-  if (!limpo) return [];
-  const soDigitos = limpo.replace(/\D/g, "");
-
-  const { data } = await supabase.from("orders").select(SELECT_VENDA).limit(300);
-  return (data ?? []).map(mapear).filter((v) => {
-    const alvo = [v.numero, v.cliente, v.rastreio ?? ""].join(" ").toLowerCase();
-    if (alvo.includes(limpo)) return true;
-    return soDigitos.length >= 4 && (v.telefone ?? "").replace(/\D/g, "").includes(soDigitos);
-  });
 }
 
 interface LinhaBanco {
@@ -237,6 +286,8 @@ function mapear(linha: unknown): VendaResumo {
     criadoEm: l.created_at,
     cliente: l.customers?.full_name?.trim() || "Cliente sem nome",
     telefone: l.customers?.phone ?? null,
+    email: l.customers?.email ?? null,
+    cpf: l.customers?.cpf ?? null,
     produto: primeiro
       ? itens.length > 1
         ? `${primeiro.product_name_snapshot} +${itens.length - 1}`
