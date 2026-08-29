@@ -167,11 +167,26 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
    * para repor, que é o que o seguro precisa cobrir. Um desconto promocional
    * não torna a prótese mais barata de fabricar.
    *
-   * Se a SuperFrete não responder, a venda ACONTECE do mesmo jeito, com
-   * frete 0 e o motivo gravado em shipping_quotes. A assimetria decide:
-   * perder uma venda de R$ 1.600 porque uma API de terceiro piscou é muito
-   * pior que a operação absorver ~R$ 25 de frete num pedido — e o registro
-   * garante que ninguém descubra isso pela fatura, três meses depois.
+   * ===========================================================================
+   * FAIL-CLOSED NO FRETE (29/08/2026) — o que mudou e por quê
+   * ===========================================================================
+   * Antes, se a cotação falhasse, a venda acontecia com `shipping_cents = 0`
+   * e o motivo ficava só no registro. O raciocínio era: melhor absorver
+   * ~R$ 25 do que perder uma venda de R$ 1.600.
+   *
+   * A auditoria de 29/08/2026 mostrou o buraco desse raciocínio. Não era
+   * "de vez em quando a API pisca": TODO pedido de 5 peças ou mais caía
+   * nesse caminho, porque R$ 3.100 declarados passam do teto de seguro de
+   * R$ 3.000 — e 5 peças é exatamente o que a loja anuncia como vantagem. A
+   * exceção rara era, na prática, a regra nos pedidos mais caros, e o frete
+   * saía do bolso da operação sem ninguém combinar.
+   *
+   * Agora são duas mudanças, nesta ordem:
+   *   1. a causa foi corrigida — pedido grande vai em mais de uma caixa
+   *      (dividirEmRemessas), então existe cotação onde antes não existia;
+   *   2. o que sobrar de falha é EXPLÍCITO: o pedido não é criado, o cliente
+   *      vê que o frete não pôde ser calculado, e nada é cobrado. Frete
+   *      inválido não vira mais "a gente combina depois".
    */
   const quantidadeTotal = carrinho.items.reduce((soma, i) => soma + i.quantity, 0);
   const cotacao = await cotarFrete({
@@ -180,7 +195,29 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
     quantidade: quantidadeTotal,
   });
 
-  const shippingCents = cotacao.escolhida?.priceCents ?? 0;
+  if (!cotacao.escolhida) {
+    // Registro antes de recusar: sem isto, "por que ninguém consegue fechar
+    // pedido para o Acre?" não teria como ser respondido depois.
+    console.error("[frete] shipping_quote_failed", {
+      cep: dados.cep,
+      quantidade: quantidadeTotal,
+      valor_declarado_cents: subtotalCents,
+      motivo: cotacao.indisponivel ?? "nenhuma transportadora cobre o valor declarado",
+      opcoes: cotacao.opcoes.map((o) => ({
+        servico: o.serviceName,
+        preco: o.priceCents,
+        cobre_seguro: o.coversInsurance,
+        erro: o.error ?? null,
+      })),
+    });
+    return falhar(
+      "Não conseguimos calcular o frete para este CEP agora, e não vamos " +
+        "fechar o pedido com um valor que não é o real. Tente de novo em " +
+        "alguns minutos — nada foi cobrado."
+    );
+  }
+
+  const shippingCents = cotacao.escolhida.priceCents;
   const totalCents = subtotalCents - discountCents + shippingCents;
 
   const orderId = randomUUID();
@@ -302,6 +339,9 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
       cep_destino: dados.cep,
       quantidade: quantidadeTotal,
       valor_declarado_cents: subtotalCents,
+      // Em quantas caixas o pedido vai. Quem despacha precisa saber: duas
+      // caixas com uma etiqueta só chegam meia entrega.
+      remessas: cotacao.remessas ?? null,
       opcoes: cotacao.opcoes,
     },
   });

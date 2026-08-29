@@ -64,6 +64,38 @@ export default async function PagamentoPage({
 
   const base = baseUrl();
 
+  /**
+   * REAPROVEITA O LINK QUE JÁ EXISTE (29/08/2026) — idempotência.
+   *
+   * Esta página cria a cobrança no gateway. Sem guarda, cada F5, cada
+   * "Tentar novamente" e cada volta pelo histórico criava um link NOVO e mais
+   * uma linha em `payments`. Medido no pedido de teste REV-D32DE067: três
+   * linhas `pending` para um pedido só.
+   *
+   * Nenhum cliente seria cobrado duas vezes por isso — só um link é pago —
+   * mas a conciliação vira adivinhação ("qual destes três é o que valeu?") e
+   * o webhook passa a ter mais de um candidato para o mesmo pedido.
+   *
+   * A guarda: se já existe cobrança pendente para ESTE pedido, com o MESMO
+   * valor e com a URL guardada, manda o cliente para ela. Valor diferente
+   * significa pedido alterado — aí um link novo é o certo.
+   */
+  const { data: pagamentoExistente } = await supabase
+    .from("payments")
+    .select("id, raw_response, amount_cents, status")
+    .eq("order_id", pedido.id)
+    .eq("status", "pending")
+    .eq("amount_cents", pedido.total_cents)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const urlGuardada = (pagamentoExistente?.raw_response as { checkout_url?: string } | null)
+    ?.checkout_url;
+  if (urlGuardada) {
+    redirect(urlGuardada);
+  }
+
   let checkoutUrl: string;
   try {
     /**
@@ -128,6 +160,11 @@ export default async function PagamentoPage({
       provider_payment_id: resultado.providerPaymentId,
       status: "pending",
       amount_cents: pedido.total_cents,
+      // A URL do checkout fica GUARDADA — é o que permite reaproveitar o
+      // link em vez de criar outro a cada recarga. A InfinitePay nem sempre
+      // devolve `slug`, então `provider_payment_id` pode vir nulo; a URL é a
+      // única referência confiável para este link.
+      raw_response: { checkout_url: resultado.checkoutUrl },
     });
   } catch (erro) {
     console.error("[pagamento] falha ao criar cobrança", erro);

@@ -23,6 +23,9 @@ export const dynamic = "force-dynamic";
 
 const INSTITUCIONAIS: Array<{ caminho: string; prioridade: number }> = [
   { caminho: "", prioridade: 1 },
+  // O catálogo (29/08/2026) — prioridade alta porque é a porta de entrada
+  // para os quatro produtos que não tinham nenhum link no site.
+  { caminho: "/produtos", prioridade: 0.9 },
   { caminho: "/sobre-as-proteses", prioridade: 0.8 },
   { caminho: "/cores", prioridade: 0.8 },
   { caminho: "/naturalidade", prioridade: 0.7 },

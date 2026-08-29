@@ -128,6 +128,28 @@ export function CheckoutForm() {
   // mensagem clara": os dois casos abaixo têm mensagem própria, nenhum
   // deles trava o formulário (o cliente sempre pode preencher o endereço
   // na mão).
+  /**
+   * Apaga o endereço que veio de uma busca ANTERIOR (29/08/2026).
+   *
+   * Sem isto: quem digitava 01310-100 via "Avenida Paulista / Bela Vista /
+   * São Paulo / SP" preencher sozinho, trocava para um CEP de Santa
+   * Catarina, recebia "CEP não encontrado" — e os campos continuavam com o
+   * endereço de São Paulo. O pedido podia sair com o CEP de uma cidade e a
+   * rua de outra, e quem descobre isso é o entregador.
+   *
+   * O cliente continua livre para preencher na mão: os campos só ficam
+   * vazios, não bloqueados.
+   */
+  function limparEnderecoBuscado() {
+    setCampos((atual) => ({
+      ...atual,
+      street: "",
+      neighborhood: "",
+      city: "",
+      state: "",
+    }));
+  }
+
   async function buscarEndereco(cepDigitado: string) {
     const digitos = cepDigitado.replace(/\D/g, "");
     setAvisoCep(null);
@@ -138,12 +160,14 @@ export function CheckoutForm() {
     try {
       const resposta = await fetch(`https://viacep.com.br/ws/${digitos}/json/`);
       if (!resposta.ok) {
+        limparEnderecoBuscado();
         setAvisoCep("Não foi possível consultar o CEP agora — preencha o endereço manualmente.");
         return;
       }
 
       const dados = (await resposta.json()) as RespostaViaCep;
       if (dados.erro) {
+        limparEnderecoBuscado();
         setAvisoCep("CEP não encontrado — confira o número ou preencha o endereço manualmente.");
         return;
       }
@@ -156,6 +180,7 @@ export function CheckoutForm() {
         state: dados.uf ?? atual.state,
       }));
     } catch {
+      limparEnderecoBuscado();
       setAvisoCep("Não foi possível consultar o CEP agora — preencha o endereço manualmente.");
     } finally {
       setBuscandoCep(false);
@@ -197,7 +222,8 @@ export function CheckoutForm() {
       if (!r.ok || !dados.disponivel || typeof dados.priceCents !== "number") {
         setFrete(null);
         setAvisoFrete(
-          "Não conseguimos calcular o frete agora. Você pode continuar — combinamos o envio depois da confirmação."
+          "Não conseguimos calcular o frete para este CEP agora. O pedido não pode ser " +
+          "fechado sem o frete real — confira o CEP e tente de novo em alguns minutos."
         );
         return;
       }
@@ -210,7 +236,8 @@ export function CheckoutForm() {
     } catch {
       setFrete(null);
       setAvisoFrete(
-        "Não conseguimos calcular o frete agora. Você pode continuar — combinamos o envio depois da confirmação."
+        "Não conseguimos calcular o frete para este CEP agora. O pedido não pode ser " +
+          "fechado sem o frete real — confira o CEP e tente de novo em alguns minutos."
       );
     } finally {
       setCotandoFrete(false);
@@ -454,8 +481,22 @@ export function CheckoutForm() {
         </p>
       ) : null}
 
-      <Button type="submit" size="lg" disabled={enviando || cart.items.length === 0}>
-        {enviando ? "Enviando…" : "Finalizar pedido"}
+      {/* Sem frete calculado não há total real — e desde 29/08/2026 o
+          servidor recusa o pedido nesse estado. O botão passa a dizer isso
+          na tela, em vez de deixar a pessoa preencher tudo e levar um erro
+          no fim. */}
+      <Button
+        type="submit"
+        size="lg"
+        disabled={enviando || cart.items.length === 0 || cotandoFrete || !frete}
+      >
+        {enviando
+          ? "Enviando…"
+          : cotandoFrete
+            ? "Calculando frete…"
+            : !frete
+              ? "Informe o CEP para calcular o frete"
+              : "Finalizar pedido"}
       </Button>
     </form>
   );

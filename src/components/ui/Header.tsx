@@ -8,6 +8,10 @@ import { CartTriggerButton } from "@/components/cart/CartTriggerButton";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 
 const LINKS = [
+  // "Próteses" primeiro, e de propósito (29/08/2026): sem esta entrada,
+  // quatro dos cinco produtos ativos não eram alcançáveis por navegação
+  // nenhuma — só a Micropele 0,08mm, pelos botões da home.
+  { href: "/produtos", label: "Próteses" },
   { href: "/cores", label: "Cores" },
   { href: "/cuidados", label: "Cuidados" },
   { href: "/garantia", label: "Garantia" },

@@ -1,6 +1,9 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
-import { applyQuantityDiscount, type QuantityDiscountRule } from "@/lib/pricing/discount";
+import {
+  precoDaLinhaComDegrauDoProduto,
+  type QuantityDiscountRule,
+} from "@/lib/pricing/discount";
 import { gravarTokenNoCookie, lerTokenDoCookie, tokenTemFormatoValido } from "./token";
 import type { CartDiscountRuleView, CartItemView, CartView } from "./types";
 
@@ -224,7 +227,12 @@ function montarLabelVariante(params: {
   lengthCm?: number | null;
 }): string | null {
   const partes = [
-    params.colorName ?? null,
+    // "Cor 3" e não "3": a linha do carrinho é lida fora do contexto da
+    // cartela, e um "3" solto ao lado de "Micropele 0,08mm" parece medida,
+    // quantidade ou espessura. O prefixo é só de exibição — o cadastro
+    // continua com o código da cor puro (colors.name), igual ao aria-label
+    // dos botões em ColorSelector.tsx.
+    params.colorName ? `Cor ${params.colorName}` : null,
     params.sizeLabel ?? null,
     params.grayLevelLabel ?? null,
     params.lengthCm != null ? `${params.lengthCm}cm` : null,
@@ -325,6 +333,38 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
   const tamanhosPorId = new Map((tamanhos ?? []).map((s) => [s.id as string, s.label as string]));
   const niveisPorId = new Map((niveisGrisalho ?? []).map((g) => [g.id as string, g.label as string]));
 
+  /**
+   * QUANTIDADE POR PRODUTO, não por linha (29/08/2026).
+   *
+   * ===========================================================================
+   * O QUE ACONTECEU
+   * ===========================================================================
+   * Enquanto cada produto tinha uma variante genérica só, "linha do carrinho"
+   * e "produto" eram a mesma coisa, e aplicar o degrau de desconto sobre
+   * `linha.quantity` dava o resultado certo por acidente.
+   *
+   * Quando a cor virou variante (scripts/criar-variantes-por-cor.mjs), cinco
+   * peças da Micropele viraram DUAS linhas — 3 na cor 3 e 2 na cor 5 — e o
+   * desconto "a partir de 5 peças" sumiu: nenhuma das duas linhas chegava a
+   * 5 sozinha. O cliente comprava exatamente as 5 peças anunciadas e pagava
+   * R$ 3.250 em vez de R$ 3.100.
+   *
+   * A regra comercial do Francisco é por VOLUME do produto ("comprando mais,
+   * o preço cai"), não por cor: quem leva 5 Micropele leva 5 Micropele,
+   * pintadas como for. Então o degrau é escolhido pela soma do produto e o
+   * preço unitário resultante vale para todas as linhas dele.
+   */
+  const quantidadePorProduto = new Map<string, number>();
+  for (const linha of itensBrutos) {
+    const variante = variantesPorId.get(linha.variant_id as string);
+    if (!variante) continue;
+    const produtoId = variante.product_id as string;
+    quantidadePorProduto.set(
+      produtoId,
+      (quantidadePorProduto.get(produtoId) ?? 0) + (linha.quantity as number)
+    );
+  }
+
   const items: CartItemView[] = itensBrutos.flatMap((linha): CartItemView[] => {
     const variante = variantesPorId.get(linha.variant_id as string);
     // Variante removida do catálogo depois de estar no carrinho — descarta
@@ -337,7 +377,15 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
     const quantidade = linha.quantity as number;
     const precoBase = variante.price_cents as number;
     const regrasDoProduto = regrasPorProduto.get(variante.product_id as string) ?? [];
-    const resultado = applyQuantityDiscount(precoBase, quantidade, regrasDoProduto as QuantityDiscountRule[]);
+    // O DEGRAU vem da soma do produto; o SUBTOTAL continua sendo desta linha.
+    const quantidadeDoProduto =
+      quantidadePorProduto.get(variante.product_id as string) ?? quantidade;
+    const resultado = precoDaLinhaComDegrauDoProduto(
+      precoBase,
+      quantidade,
+      quantidadeDoProduto,
+      regrasDoProduto as QuantityDiscountRule[]
+    );
 
     return [
       {

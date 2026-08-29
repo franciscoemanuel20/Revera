@@ -73,3 +73,35 @@ function precoUnitarioDaRegra(basePriceCents: number, regra: QuantityDiscountRul
   // ruim no admin.
   return basePriceCents;
 }
+
+/**
+ * O degrau é escolhido pela quantidade do PRODUTO; o subtotal é o da LINHA.
+ *
+ * ===========================================================================
+ * POR QUE ISTO EXISTE (29/08/2026)
+ * ===========================================================================
+ * Depois que a cor virou variante, um pedido de 5 Micropele podia estar
+ * partido em duas linhas (3 na cor 3, 2 na cor 5). `applyQuantityDiscount`
+ * olhando só a linha não via nenhuma chegar a 5 — e o desconto "a partir de
+ * 5 peças", que a própria loja anuncia, sumia. O cliente levava as 5 peças
+ * anunciadas e pagava R$ 3.250 em vez de R$ 3.100.
+ *
+ * A regra comercial é por volume do produto, não por cor. Esta função separa
+ * as duas perguntas de propósito:
+ *
+ *   "qual degrau se aplica?"  → quantidadeDoProduto (soma de todas as cores)
+ *   "quanto custa esta linha?" → quantidadeDaLinha
+ */
+export function precoDaLinhaComDegrauDoProduto(
+  basePriceCents: number,
+  quantidadeDaLinha: number,
+  quantidadeDoProduto: number,
+  rules: QuantityDiscountRule[]
+): { unitPriceCents: number; subtotalCents: number; discountCents: number } {
+  const degrau = applyQuantityDiscount(basePriceCents, quantidadeDoProduto, rules);
+  return {
+    unitPriceCents: degrau.unitPriceCents,
+    subtotalCents: degrau.unitPriceCents * quantidadeDaLinha,
+    discountCents: (basePriceCents - degrau.unitPriceCents) * quantidadeDaLinha,
+  };
+}

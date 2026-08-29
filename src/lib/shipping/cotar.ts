@@ -3,10 +3,17 @@ import "server-only";
 import { getShippingProvider } from "./index";
 import { ShippingUnavailable } from "./provider";
 import type { ShippingPackageInfo, ShippingQuote } from "./provider";
-import { CAIXA_UNITARIA, caixaPara, melhorOpcao } from "./regras";
+import type { Remessa } from "./regras";
+import {
+  CAIXA_UNITARIA,
+  caixaPara,
+  dividirEmRemessas,
+  melhorCombinacao,
+  melhorOpcao,
+} from "./regras";
 import { cepDeOrigem } from "./superfrete-provider";
 
-export { melhorOpcao, caixaPara } from "./regras";
+export { melhorOpcao, caixaPara, dividirEmRemessas, melhorCombinacao } from "./regras";
 
 function numeroOuPadrao(v: string | undefined, padrao: number): number {
   const n = Number(v);
@@ -48,6 +55,13 @@ export interface ResultadoCotacao {
   caixa: ShippingPackageInfo;
   /** Preenchido quando a plataforma não respondeu. */
   indisponivel: string | null;
+  /**
+   * Como o pedido foi partido para caber no seguro. `null` quando não houve
+   * cotação; uma entrada só quando foi tudo numa caixa. Vai para
+   * `shipping_quotes.raw`, porque quem for despachar precisa saber que são
+   * duas caixas e não uma.
+   */
+  remessas?: Remessa[] | null;
 }
 
 /**
@@ -64,21 +78,61 @@ export async function cotarFrete(input: {
   quantidade: number;
 }): Promise<ResultadoCotacao> {
   const provider = getShippingProvider();
-  const caixa = caixaPara(input.quantidade, unidadeConfigurada());
+  const unidade = unidadeConfigurada();
+  const caixa = caixaPara(input.quantidade, unidade);
 
   try {
     const origem = { cep: provider.name === "mock" ? "12216530" : cepDeOrigem() };
-    const opcoes = await provider.quote(
-      origem,
-      { cep: input.cepDestino },
-      caixa,
-      input.valorDeclaradoCents
+
+    /**
+     * DIVISÃO EM REMESSAS (29/08/2026) — ver dividirEmRemessas em regras.ts.
+     *
+     * Acima de R$ 3.000 declarados nenhuma transportadora cobre o seguro, e
+     * o pedido ficava SEM FRETE justamente na faixa que a loja incentiva
+     * ("a partir de 5 peças"). Agora o pedido grande vai em mais de uma
+     * caixa, cada uma dentro do teto, e o cliente paga a soma.
+     *
+     * O caminho de uma remessa só continua idêntico ao de antes — mesma
+     * chamada, mesma escolha por melhorOpcao — para não mexer no que já
+     * estava provado funcionando em pedidos pequenos.
+     */
+    const remessas = dividirEmRemessas(input.quantidade, input.valorDeclaradoCents);
+
+    if (remessas.length === 1) {
+      const opcoes = await provider.quote(
+        origem,
+        { cep: input.cepDestino },
+        caixa,
+        input.valorDeclaradoCents
+      );
+      return {
+        opcoes,
+        escolhida: melhorOpcao(opcoes),
+        caixa,
+        indisponivel: null,
+      };
+    }
+
+    const cotacoes = await Promise.all(
+      remessas.map((remessa) =>
+        provider.quote(
+          origem,
+          { cep: input.cepDestino },
+          caixaPara(remessa.quantidade, unidade),
+          remessa.valorDeclaradoCents
+        )
+      )
     );
+
+    const escolhida = melhorCombinacao(cotacoes);
     return {
-      opcoes,
-      escolhida: melhorOpcao(opcoes),
+      // Todas as opções de todas as caixas — o painel precisa conseguir
+      // explicar por que o frete deu o que deu.
+      opcoes: cotacoes.flat(),
+      escolhida,
       caixa,
       indisponivel: null,
+      remessas,
     };
   } catch (e) {
     const motivo =
@@ -86,6 +140,6 @@ export async function cotarFrete(input: {
         ? e.message
         : `Erro inesperado ao cotar frete: ${e instanceof Error ? e.message : e}`;
     console.error("[frete] cotação falhou:", motivo);
-    return { opcoes: [], escolhida: null, caixa, indisponivel: motivo };
+    return { opcoes: [], escolhida: null, caixa, indisponivel: motivo, remessas: null };
   }
 }

@@ -114,3 +114,143 @@ export function escolherServico(
   }
   return melhorOpcao(opcoes);
 }
+
+/**
+ * O teto de seguro mais alto entre os serviços cotados por padrão
+ * (PAC, SEDEX e Loggi: R$ 3.000 cada). Fica aqui, e não em
+ * superfrete-provider.ts, porque é aritmética de regra — quem divide o
+ * pedido em remessas precisa dele sem falar com a rede.
+ */
+export const TETO_SEGURO_MAIS_ALTO_CENTS = 300_000;
+
+export interface Remessa {
+  /** Quantas peças vão nesta caixa. */
+  quantidade: number;
+  /** Quanto vale o conteúdo desta caixa — é o que o seguro precisa cobrir. */
+  valorDeclaradoCents: number;
+}
+
+/**
+ * Divide um pedido em remessas cujo valor declarado caiba no seguro.
+ *
+ * ===========================================================================
+ * POR QUE ISTO EXISTE (29/08/2026) — o frete sumia no pedido grande
+ * ===========================================================================
+ * Medido em produção: 1 peça (R$ 650) cotava Loggi a R$ 19,03; 4 peças
+ * (R$ 2.600) cotavam Loggi a R$ 45,43; 5 peças (R$ 3.100) não cotavam NADA —
+ * "Nenhuma transportadora atende este CEP com a cobertura necessária".
+ *
+ * A causa não era o CEP nem o peso: era `melhorOpcao` descartando, com
+ * razão, toda transportadora cujo teto de seguro (R$ 3.000) não cobria o
+ * valor declarado. E a própria loja empurra o cliente para lá, anunciando
+ * desconto "a partir de 5 peças".
+ *
+ * A saída certa NÃO é baixar o seguro — é fazer o que a operação faria no
+ * balcão: mandar em duas caixas. Cada caixa declara o seu próprio conteúdo,
+ * cada uma cabe no teto, e o cliente paga a soma dos fretes.
+ *
+ * Aritmética pura de propósito, para ser testável sem rede (mesmo motivo do
+ * resto deste arquivo).
+ *
+ * Regras:
+ *   - o valor é repartido PROPORCIONALMENTE às peças, e o resto de divisão
+ *     vai para a primeira caixa (nunca some centavo: a soma das remessas é
+ *     exatamente o valor declarado total);
+ *   - se uma única peça já valer mais que o teto, não há divisão que
+ *     resolva — devolve uma remessa só e quem chama trata a falta de
+ *     cobertura explicitamente. Melhor recusar do que enviar descoberto.
+ */
+export function dividirEmRemessas(
+  quantidade: number,
+  valorDeclaradoTotalCents: number,
+  tetoCents: number = TETO_SEGURO_MAIS_ALTO_CENTS
+): Remessa[] {
+  const q = Math.max(1, Math.floor(quantidade));
+  const total = Math.max(0, Math.round(valorDeclaradoTotalCents));
+
+  if (total <= tetoCents) {
+    return [{ quantidade: q, valorDeclaradoCents: total }];
+  }
+
+  const valorPorPeca = total / q;
+
+  // Peça sozinha já estoura o teto: dividir não adianta.
+  if (valorPorPeca > tetoCents) {
+    return [{ quantidade: q, valorDeclaradoCents: total }];
+  }
+
+  const pecasPorCaixa = Math.max(1, Math.floor(tetoCents / valorPorPeca));
+  const caixas = Math.ceil(q / pecasPorCaixa);
+
+  const remessas: Remessa[] = [];
+  let pecasRestantes = q;
+  let centavosRestantes = total;
+
+  for (let i = 0; i < caixas; i++) {
+    const ultima = i === caixas - 1;
+    const pecas = ultima ? pecasRestantes : Math.min(pecasPorCaixa, pecasRestantes);
+    // A última leva o que sobrou de centavo, para a soma fechar exatamente.
+    const valor = ultima ? centavosRestantes : Math.round(valorPorPeca * pecas);
+    remessas.push({ quantidade: pecas, valorDeclaradoCents: valor });
+    pecasRestantes -= pecas;
+    centavosRestantes -= valor;
+  }
+
+  return remessas;
+}
+
+/**
+ * Combina as cotações de várias remessas num frete só.
+ *
+ * O cliente recebe UM valor de frete e a operação despacha N caixas pela
+ * MESMA transportadora — misturar serviço entre caixas do mesmo pedido é
+ * pedir para uma chegar semanas depois da outra.
+ *
+ * Por isso a escolha é feita por serviço presente em TODAS as remessas, que
+ * cubra o seguro em TODAS elas e não tenha erro em nenhuma. Entre os que
+ * sobram, o de menor soma. O prazo é o MAIOR entre as caixas: o pedido só
+ * está completo quando a última chega.
+ *
+ * Devolve null quando nenhum serviço serve para o conjunto — que é
+ * diferente de "deu erro", igual a melhorOpcao.
+ */
+export function melhorCombinacao(
+  cotacoesPorRemessa: ShippingQuote[][]
+): ShippingQuote | null {
+  if (cotacoesPorRemessa.length === 0) return null;
+  if (cotacoesPorRemessa.some((lista) => lista.length === 0)) return null;
+
+  const primeira = cotacoesPorRemessa[0]!;
+  const candidatos: ShippingQuote[] = [];
+
+  for (const base of primeira) {
+    if (base.error || base.priceCents <= 0 || !base.coversInsurance) continue;
+
+    const equivalentes: ShippingQuote[] = [base];
+    let serveEmTodas = true;
+
+    for (let i = 1; i < cotacoesPorRemessa.length; i++) {
+      const mesma = cotacoesPorRemessa[i]!.find(
+        (o) => o.serviceId === base.serviceId && !o.error && o.priceCents > 0 && o.coversInsurance
+      );
+      if (!mesma) {
+        serveEmTodas = false;
+        break;
+      }
+      equivalentes.push(mesma);
+    }
+
+    if (!serveEmTodas) continue;
+
+    candidatos.push({
+      serviceId: base.serviceId,
+      serviceName: base.serviceName,
+      carrier: base.carrier,
+      priceCents: equivalentes.reduce((soma, o) => soma + o.priceCents, 0),
+      etaDays: equivalentes.reduce((maior, o) => Math.max(maior, o.etaDays), 0),
+      coversInsurance: true,
+    });
+  }
+
+  return candidatos.sort((a, b) => a.priceCents - b.priceCents)[0] ?? null;
+}

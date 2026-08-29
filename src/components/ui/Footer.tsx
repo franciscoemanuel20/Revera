@@ -21,6 +21,7 @@ import { usePathname } from "next/navigation";
 // mais uma linha no mobile não quebra nada, ao contrário do header fixo.
 const LINKS = [
   { href: "/", label: "Início" },
+  { href: "/produtos", label: "Próteses" },
   { href: "/cores", label: "Cores" },
   { href: "/cuidados", label: "Cuidados" },
   { href: "/garantia", label: "Garantia" },

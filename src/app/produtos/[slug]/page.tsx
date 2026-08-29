@@ -76,7 +76,7 @@ export default async function ProdutoPage({
   const { data: produto } = await supabase
     .from("products")
     .select(
-      "id, slug, name, description, base_thickness_mm, is_featured, product_variants(id, color_id, price_cents, compare_at_price_cents, sku, stock_qty), product_media(url, alt_text, type, is_primary, sort_order)"
+      "id, slug, name, description, base_thickness_mm, is_featured, product_variants(id, color_id, price_cents, compare_at_price_cents, sku, stock_qty, is_active), product_media(url, alt_text, type, is_primary, sort_order)"
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -97,14 +97,26 @@ export default async function ProdutoPage({
       .order("min_qty"),
   ]);
 
-  const variantes = (produto.product_variants ?? []).map((v) => ({
+  /**
+   * Variante inativa nunca chega à tela (29/08/2026).
+   *
+   * A consulta trazia TODAS as variantes do produto, inclusive as
+   * desativadas. Depois que as variantes genéricas sem cor foram aposentadas
+   * (scripts/criar-variantes-por-cor.mjs), deixá-las passar faria a página
+   * cair de volta na variante sem cor — exatamente o defeito que estava
+   * sendo corrigido. A policy pública já filtra `is_active`, mas esta página
+   * lê com cliente admin, então o filtro precisa ser explícito aqui.
+   */
+  const variantes = (produto.product_variants ?? [])
+    .filter((v) => v.is_active !== false)
+    .map((v) => ({
     id: v.id as string,
     colorId: (v.color_id as string | null) ?? null,
     priceCents: v.price_cents as number,
     compareAtPriceCents: (v.compare_at_price_cents as number | null) ?? null,
     sku: v.sku as string,
     stockQty: v.stock_qty as number,
-  }));
+    }));
 
   // Galeria do produto: a principal primeiro, depois a ordem cadastrada.
   // Só imagem — `product_media` também aceita 'video', que a galeria da

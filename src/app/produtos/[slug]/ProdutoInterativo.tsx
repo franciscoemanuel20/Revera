@@ -108,14 +108,31 @@ export function ProdutoInterativo({
 
   const varianteGenerica = variants.find((v) => v.colorId == null) ?? null;
 
-  const [corSelecionadaId, setCorSelecionadaId] = useState<string | null>(
-    colors[0]?.id ?? null
-  );
+  /**
+   * NADA pré-selecionado (29/08/2026).
+   *
+   * Antes começava em `colors[0]`, a cor 1B. Quem não reparasse na cartela
+   * comprava 1B sem ter escolhido — numa prótese capilar, a cor É o pedido.
+   * Agora a compra fica travada até a pessoa escolher, e o botão diz o que
+   * falta em vez de ficar cinza sem explicação.
+   */
+  const [corSelecionadaId, setCorSelecionadaId] = useState<string | null>(null);
   const [quantidade, setQuantidade] = useState(1);
 
   const varianteSelecionada =
     (corSelecionadaId ? variantePorCor.get(corSelecionadaId) : undefined) ??
     varianteGenerica;
+
+  /**
+   * A variante usada só para MOSTRAR preço e degraus antes de a cor ser
+   * escolhida. Não é a que vai para o carrinho — quem decide isso é
+   * `podeComprar` logo abaixo.
+   */
+  const varianteExibicao = varianteSelecionada ?? variants[0] ?? null;
+
+  /** Produto com cartela exige cor explícita; produto sem cartela, não. */
+  const faltaEscolherCor = colors.length > 0 && !corSelecionadaId;
+  const podeComprar = Boolean(varianteSelecionada) && !faltaEscolherCor;
 
   /**
    * ViewContent — uma vez por visita à página do produto (P1, 27/08/2026).
@@ -133,22 +150,22 @@ export function ProdutoInterativo({
    */
   const jaMediuVisualizacao = useRef(false);
 
-  const resultadoDesconto = varianteSelecionada
-    ? applyQuantityDiscount(varianteSelecionada.priceCents, quantidade, discountRules)
+  const resultadoDesconto = varianteExibicao
+    ? applyQuantityDiscount(varianteExibicao.priceCents, quantidade, discountRules)
     : null;
 
   useEffect(() => {
     if (jaMediuVisualizacao.current) return;
-    if (!varianteSelecionada) return;
+    if (!varianteExibicao) return;
     jaMediuVisualizacao.current = true;
 
     medirVerProduto({
-      variantId: varianteSelecionada.id,
+      variantId: varianteExibicao.id,
       nome: name,
       quantidade: 1,
-      precoUnitarioCents: varianteSelecionada.priceCents,
+      precoUnitarioCents: varianteExibicao.priceCents,
     });
-  }, [varianteSelecionada, name]);
+  }, [varianteExibicao, name]);
 
   return (
     <main
@@ -210,10 +227,10 @@ export function ProdutoInterativo({
               ) : null}
             </div>
 
-            {varianteSelecionada ? (
+            {varianteExibicao ? (
               <Price
                 cents={resultadoDesconto!.unitPriceCents}
-                compareAtCents={varianteSelecionada.compareAtPriceCents}
+                compareAtCents={varianteExibicao.compareAtPriceCents}
               />
             ) : (
               <p className="text-ink/60">
@@ -233,7 +250,7 @@ export function ProdutoInterativo({
             <QuantitySelector
               value={quantidade}
               onChange={setQuantidade}
-              max={varianteSelecionada?.stockQty}
+              max={varianteExibicao?.stockQty}
             />
 
             {/* Degraus de desconto — só renderiza se existir regra
@@ -242,9 +259,9 @@ export function ProdutoInterativo({
                 aplica à quantidade atual ganha borda dourada + o quanto se
                 economiza em destaque, para a diferença ficar óbvia sem
                 precisar fazer conta. */}
-            {varianteSelecionada ? (
+            {varianteExibicao ? (
               <DiscountLadder
-                basePriceCents={varianteSelecionada.priceCents}
+                basePriceCents={varianteExibicao.priceCents}
                 currentQuantity={quantidade}
                 rules={discountRules}
               />
@@ -255,12 +272,16 @@ export function ProdutoInterativo({
             ) : null}
 
             <div className="flex flex-col gap-2">
-              {varianteSelecionada ? (
+              {varianteExibicao ? (
                 <Button
                   size="lg"
-                  disabled={pendente || varianteSelecionada.stockQty <= 0}
+                  disabled={pendente || !podeComprar || varianteExibicao.stockQty <= 0}
                   onClick={async () => {
                     setMensagemErro(null);
+                    if (!varianteSelecionada || faltaEscolherCor) {
+                      setMensagemErro("Escolha a cor da prótese antes de continuar.");
+                      return;
+                    }
                     const { erro } = await adicionarItem(varianteSelecionada.id, quantidade);
                     if (erro) {
                       setMensagemErro(erro);
@@ -280,11 +301,13 @@ export function ProdutoInterativo({
                     abrirDrawer();
                   }}
                 >
-                  {varianteSelecionada.stockQty <= 0
+                  {varianteExibicao.stockQty <= 0
                     ? "Fora de estoque"
-                    : pendente
-                      ? "Adicionando…"
-                      : "Comprar agora"}
+                    : faltaEscolherCor
+                      ? "Escolha uma cor"
+                      : pendente
+                        ? "Adicionando…"
+                        : "Comprar agora"}
                 </Button>
               ) : (
                 <Button size="lg" disabled title="Em breve">
