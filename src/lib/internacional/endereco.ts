@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { ehPaisSuportado, regraDoPais } from "./paises";
+import { ehPaisSuportado, idiomaDoPais, regraDoPais } from "./paises";
+import { textos, type Idioma } from "./idioma";
 
 /**
  * Endereço de entrega — um tipo, duas formas.
@@ -110,30 +111,42 @@ export const enderecoBRSchema = z.object({
     .transform(soDigitos),
 });
 
-const enderecoInternacionalBase = z.object({
-  pais: z
-    .string()
-    .trim()
-    .transform((v) => v.toUpperCase())
-    .refine((v) => ehPaisSuportado(v), {
-      message: "Ainda não entregamos neste país.",
-    }),
-  destinatario: z.string().trim().min(3, "Informe o nome completo."),
-  empresa: z.string().trim().nullable().default(null),
-  linha1: z.string().trim().min(1, "Informe o endereço."),
-  linha2: z.string().trim().nullable().default(null),
-  cidade: z.string().trim().min(1, "Informe a cidade."),
-  regiao: z.string().trim().nullable().default(null),
-  codigoPostal: z.string().trim().min(1, "Informe o código postal."),
-  telefone: telefoneInternacional,
-});
-
 /**
- * As regras que dependem do país só podem ser aplicadas depois de saber
- * qual é — por isso vêm num `superRefine`, e não no campo.
+ * O schema internacional é uma FÁBRICA por idioma, não um const.
+ *
+ * Mensagem de validação é texto que o comprador lê — e quem lê o checkout
+ * americano lê inglês. Um schema fixo obrigaria a traduzir a mensagem
+ * DEPOIS, no lugar que a exibe, e aí a tradução dependeria de cada tela
+ * lembrar de fazê-la. Aqui a mensagem já nasce na língua certa.
+ *
+ * As duas instâncias são construídas uma vez (o `Map` abaixo) porque montar
+ * schema Zod a cada submit é trabalho repetido à toa numa rota de checkout.
  */
-export const enderecoInternacionalSchema = enderecoInternacionalBase.superRefine(
-  (valor, ctx) => {
+function construirSchemaInternacional(idioma: Idioma) {
+  const t = textos(idioma);
+  const base = z.object({
+    pais: z
+      .string()
+      .trim()
+      .transform((v) => v.toUpperCase())
+      .refine((v) => ehPaisSuportado(v), {
+        message: t.erroPaisNaoAtendido,
+      }),
+    destinatario: z.string().trim().min(3, t.erroNome),
+    empresa: z.string().trim().nullable().default(null),
+    linha1: z.string().trim().min(1, t.erroEnderecoObrigatorio),
+    linha2: z.string().trim().nullable().default(null),
+    cidade: z.string().trim().min(1, t.erroCidadeObrigatoria),
+    regiao: z.string().trim().nullable().default(null),
+    codigoPostal: z.string().trim().min(1, t.erroPostalObrigatorio),
+    telefone: telefoneInternacional,
+  });
+
+  /**
+   * As regras que dependem do país só podem ser aplicadas depois de saber
+   * qual é — por isso vêm num `superRefine`, e não no campo.
+   */
+  return base.superRefine((valor, ctx) => {
     const regra = regraDoPais(valor.pais);
     if (!regra) return; // já reportado pelo refine do campo `pais`
 
@@ -141,7 +154,7 @@ export const enderecoInternacionalSchema = enderecoInternacionalBase.superRefine
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["pais"],
-        message: "Endereço no Brasil usa o formato brasileiro.",
+        message: t.erroEnderecoBrasileiro,
       });
       return;
     }
@@ -150,7 +163,7 @@ export const enderecoInternacionalSchema = enderecoInternacionalBase.superRefine
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["codigoPostal"],
-        message: `${regra.rotuloPostal} inválido — exemplo: ${regra.postalExemplo}.`,
+        message: t.erroPostalInvalido(regra.rotuloPostal, regra.postalExemplo),
       });
     }
 
@@ -158,11 +171,25 @@ export const enderecoInternacionalSchema = enderecoInternacionalBase.superRefine
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["regiao"],
-        message: `Informe ${regra.rotuloRegiao}.`,
+        message: t.erroRegiaoObrigatoria(regra.rotuloRegiao ?? t.labelRegiaoPadrao),
       });
     }
+  });
+}
+
+const SCHEMAS_INTERNACIONAIS = new Map<Idioma, ReturnType<typeof construirSchemaInternacional>>();
+
+export function enderecoInternacionalSchemaDoIdioma(idioma: Idioma) {
+  let schema = SCHEMAS_INTERNACIONAIS.get(idioma);
+  if (!schema) {
+    schema = construirSchemaInternacional(idioma);
+    SCHEMAS_INTERNACIONAIS.set(idioma, schema);
   }
-);
+  return schema;
+}
+
+/** O de sempre, em português — para quem já o importava. */
+export const enderecoInternacionalSchema = enderecoInternacionalSchemaDoIdioma("pt");
 
 /**
  * Não existe um `z.discriminatedUnion` exportado aqui de propósito. Ele
@@ -186,7 +213,10 @@ export function validarEndereco(bruto: unknown): ResultadoEndereco {
       ? String((bruto as { pais: unknown }).pais ?? "").toUpperCase()
       : "";
 
-  const schema = pais === "BR" ? enderecoBRSchema : enderecoInternacionalSchema;
+  // O idioma da mensagem de erro sai do país do ENDEREÇO — é ele que diz
+  // quem vai ler. Endereço brasileiro segue em português por definição.
+  const schema =
+    pais === "BR" ? enderecoBRSchema : enderecoInternacionalSchemaDoIdioma(idiomaDoPais(pais));
   const r = schema.safeParse({ ...(bruto as object), pais });
 
   if (!r.success) {

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { textos, type Idioma } from "@/lib/internacional/idioma";
+
 /**
  * Contato de suporte — o ÚNICO lugar do site onde o telefone da Reverá pode
  * aparecer.
@@ -29,31 +31,35 @@ import "server-only";
  * confirmação do pagamento. Contá-lo de novo aqui inflaria a métrica e
  * envenenaria a otimização das campanhas.
  */
-export function SuportePosCompra({ numeroPedido }: { numeroPedido: string }) {
+export function SuportePosCompra({
+  numeroPedido,
+  idioma = "pt",
+}: {
+  numeroPedido: string;
+  /** Idioma do comprador — o do país de entrega, decidido pela página. */
+  idioma?: Idioma;
+}) {
   const numero = process.env.WHATSAPP_POST_PURCHASE_NUMBER;
+  const t = textos(idioma);
 
   // Sem número configurado, a seção simplesmente não aparece — melhor que
   // mostrar um link quebrado.
   if (!numero) return null;
 
   const apenasDigitos = numero.replace(/\D/g, "");
-  const mensagem = encodeURIComponent(
-    `Olá! Tenho uma dúvida sobre o pedido ${numeroPedido}.`
-  );
+  const mensagem = encodeURIComponent(t.suporteMensagem(numeroPedido));
 
   return (
     <section className="flex flex-col items-center gap-3 rounded-lg border border-sand p-5 text-center">
-      <h2 className="font-display text-xl text-ink">Ficou com alguma dúvida?</h2>
-      <p className="text-sm text-ink/70">
-        Fale com a nossa equipe sobre este pedido.
-      </p>
+      <h2 className="font-display text-xl text-ink">{t.suporteTitulo}</h2>
+      <p className="text-sm text-ink/70">{t.suporteTexto}</p>
       <a
         href={`https://wa.me/${apenasDigitos}?text=${mensagem}`}
         target="_blank"
         rel="noopener noreferrer"
         className="min-h-toque rounded-md bg-gold-metal px-6 py-3 font-body font-semibold text-ink transition-all duration-300 hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
       >
-        Falar sobre o pedido {numeroPedido}
+        {t.suporteBotao(numeroPedido)}
       </a>
     </section>
   );

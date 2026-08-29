@@ -153,6 +153,45 @@ export function formatarValorNaMoeda(minor: number, moeda: string): string {
   return `${codigo || "???"} ${numero}`;
 }
 
+/**
+ * O mesmo dinheiro, formatado para quem COMPRA — não para quem opera.
+ *
+ * `formatarDinheiro` acima agrupa em pt-BR de propósito: quem lê o admin é
+ * brasileiro. Mas o comprador americano lê a MESMA tela de checkout, e para
+ * ele "1.250,00" não é mil duzentos e cinquenta — é um e vinte e cinco com
+ * um ponto estranho. Grupo e decimal trocados numa tela de pagamento é o
+ * tipo de erro que faz a pessoa fechar a aba.
+ *
+ * O SÍMBOLO continua vindo da nossa tabela, e não do Intl. Aqui isso não é
+ * teimosia: `en-US`, `en-AU` e `en-CA` devolvem todos "$" (foi o bug 5 de
+ * 27/08/2026), e um australiano vendo "$1,250.00" numa loja brasileira não
+ * tem como saber se está olhando dólar dele ou dos EUA. "A$ 1,250.00" tem.
+ *
+ * Só o número muda de locale. É a menor mudança que resolve o problema real.
+ */
+export function formatarDinheiroParaComprador(
+  minor: number,
+  moeda: string,
+  locale: string
+): string {
+  const codigo = (moeda ?? "").toUpperCase();
+  if (!ehMoedaSuportada(codigo)) {
+    // Mesma degradação honesta de formatarValorNaMoeda: código na frente,
+    // feio de propósito, sem fingir que é uma moeda que conhecemos.
+    const bruto = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(minor / 100);
+    return `${codigo || "???"} ${bruto}`;
+  }
+  const info = MOEDAS[codigo];
+  const numero = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: info.expoente,
+    maximumFractionDigits: info.expoente,
+  }).format(minor / fatorDaMoeda(codigo));
+  return `${info.simbolo} ${numero}`;
+}
+
 /** Sem símbolo, para a Commercial Invoice, onde a moeda vai em coluna própria. */
 export function formatarNumeroDinheiro(valor: Dinheiro): string {
   const info = MOEDAS[valor.moeda];

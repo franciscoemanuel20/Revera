@@ -1,5 +1,16 @@
 # Go-live do internacional — o roteiro inteiro numa página
 
+> **Estado em 28/08/2026, depois do go-live executado às ~02h:** os passos 1
+> e 2 **já foram feitos** (migrations 8+9+10 aplicadas na produção, código
+> na `main` e deploy Ready). O que resta são os passos 3 a 6, e todos
+> dependem da conta Stripe da Reverá — o passo a passo dela está em
+> [`ativar-stripe-revera.md`](ativar-stripe-revera.md).
+>
+> Acrescentado depois deste roteiro: o fluxo internacional agora fala
+> **inglês** (checkout, tela da Stripe, página do pedido e suporte
+> pós-compra), decidido pelo país de entrega. Ver
+> `src/lib/internacional/idioma.ts`.
+
 Escrito em 28/08/2026, quando o test mode ficou provado de ponta a ponta
 (compra real na Stripe em sandbox, webhook assinado, reembolso, Admin).
 Este é o caminho entre "está pronto no staging" e "vendendo de verdade" —
@@ -18,10 +29,11 @@ seguro sozinho — pular a ordem é o único jeito de quebrar algo.
 | **Conta Stripe de produção da Reverá** — a usada no teste é o sandbox da OneMark IA; para vender de verdade é preciso ativar uma conta live (da Reverá ou decisão de usar a existente) e concluir a verificação da Stripe | passo 3 |
 | **Preços reais por mercado** (USD/EUR/GBP/AUD/CAD) — os do staging são fixtures de teste | passo 4 |
 | **Cotação DHL real** com validade (a de R$ 333,23 está vencida e não serve) | passo 4 |
-| **Texto jurídico do aceite** — o atual é `2026-08-28.v1.pre-juridico`; quando o jurídico aprovar, entra com versão nova em `src/lib/internacional/aceite.ts` | antes de abrir o primeiro país |
+| **Texto jurídico do aceite** — o atual é `2026-08-28.v2.pre-juridico` (pt+en); quando o jurídico aprovar, entra com versão nova em `src/lib/internacional/aceite.ts` | antes de abrir o primeiro país |
+| **Garantia e devolução internacionais** — não estão no aceite, de propósito: prazo e quem paga o frete de retorno nunca foram decididos | antes de abrir o primeiro país |
 | **Prazo de preparação da Reverá** (dias úteis) — hoje a tela só mostra o prazo da transportadora | opcional para o go-live |
 
-## Passo 1 — Migrations 8+9+10 na PRODUÇÃO (5 min)
+## Passo 1 — Migrations 8+9+10 na PRODUÇÃO (5 min) — ✅ FEITO em 28/08
 
 1. Abrir o SQL Editor do projeto de produção — conferir no topo da tela que
    é **REVERA** (`ngnaemfiytutyplolgxb`), NÃO o staging.
@@ -32,7 +44,7 @@ seguro sozinho — pular a ordem é o único jeito de quebrar algo.
 
 **Nada muda para o cliente neste passo** — o site no ar continua igual.
 
-## Passo 2 — Publicar o código (1 comando, DEPOIS do passo 1)
+## Passo 2 — Publicar o código (1 comando, DEPOIS do passo 1) — ✅ FEITO em 28/08
 
 ```bash
 cd ~/Claude/revera && git checkout main && git merge fundacao-internacional-27-08 && git push origin main
@@ -45,6 +57,10 @@ filtros/busca do admin, admin no celular, frete que não cai mais em mock,
 página do pedido multi-moeda.
 
 ## Passo 3 — Chaves Stripe LIVE na Vercel (quando a conta existir)
+
+> A conta existe (`acct_1U9RgID7fHfQt4eq`) mas **não foi ativada** — o
+> formulário nunca foi aberto. Detalhe e passo a passo em
+> [`ativar-stripe-revera.md`](ativar-stripe-revera.md).
 
 No painel da Vercel (Production), adicionar:
 
@@ -69,6 +85,10 @@ A trava de deploy recusa sozinha: chave test em produção, chave live fora
 dela, e `STRIPE_API_BASE` onde há comprador real.
 
 ## Passo 4 — Preço e frete reais (no próprio site, sem deploy)
+
+> Conferido em 28/08: `variant_prices` e `intl_shipping_quotes` estão
+> **vazias na produção**. Sem elas o país continua indisponível mesmo
+> listado.
 
 Em `www.reveraprotesecapilar.com/admin` → **Internacional**:
 

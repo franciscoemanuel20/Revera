@@ -36,32 +36,40 @@ import {
   prontidaoDoMercado,
 } from "@/lib/internacional/mercado";
 import { ACEITE_INTERNACIONAL_VERSAO } from "@/lib/internacional/aceite";
+import { idiomaDoPais } from "@/lib/internacional/paises";
+import { textos, type Idioma } from "@/lib/internacional/idioma";
 import type { CheckoutResult } from "./actions";
 
 const textoCurto = z.string().max(500).nullable().optional().catch(null);
 
-const schemaInternacional = z.object({
+/**
+ * Fábrica por idioma, pela mesma razão de `endereco.ts`: a mensagem de erro
+ * é texto que o comprador lê, e quem compra dos EUA lê inglês.
+ */
+function construirSchema(idioma: Idioma) {
+  const t = textos(idioma);
+  return z.object({
   pais: z.string().trim().min(2).max(2).transform((v) => v.toUpperCase()),
-  name: z.string().trim().min(3, "Informe seu nome completo."),
+  name: z.string().trim().min(3, t.erroNome),
   email: z
     .string()
     .trim()
-    .email("E-mail inválido.")
+    .email(t.erroEmail)
     .transform((v) => v.toLowerCase()),
-  telefone: z.string().trim().min(1, "Informe seu telefone."),
+  telefone: z.string().trim().min(1, t.erroTelefone),
   empresa: z.string().trim().nullable().default(null),
-  linha1: z.string().trim().min(1, "Informe o endereço."),
+  linha1: z.string().trim().min(1, t.erroEnderecoObrigatorio),
   linha2: z.string().trim().nullable().default(null),
-  cidade: z.string().trim().min(1, "Informe a cidade."),
+  cidade: z.string().trim().min(1, t.erroCidadeObrigatoria),
   regiao: z.string().trim().nullable().default(null),
-  codigoPostal: z.string().trim().min(1, "Informe o código postal."),
+  codigoPostal: z.string().trim().min(1, t.erroPostalObrigatorio),
   /**
    * O aceite é OBRIGATÓRIO e específico (estrutura §6). `literal(true)`:
    * não existe pedido internacional sem ele, nem por payload adulterado —
    * o botão desabilitado na tela é cortesia, a trava é esta.
    */
   aceite: z.literal(true, {
-    errorMap: () => ({ message: "É preciso aceitar as condições de envio internacional." }),
+    errorMap: () => ({ message: t.aceiteObrigatorio }),
   }),
   atribuicao: z
     .object({
@@ -79,9 +87,35 @@ const schemaInternacional = z.object({
     .nullable()
     .optional()
     .catch(null),
-});
+  });
+}
+
+const SCHEMAS = new Map<Idioma, ReturnType<typeof construirSchema>>();
+
+function schemaDoIdioma(idioma: Idioma) {
+  let schema = SCHEMAS.get(idioma);
+  if (!schema) {
+    schema = construirSchema(idioma);
+    SCHEMAS.set(idioma, schema);
+  }
+  return schema;
+}
+
+const schemaInternacional = schemaDoIdioma("pt");
 
 export type CheckoutInternacionalInput = z.input<typeof schemaInternacional>;
+
+/**
+ * O país é lido do payload CRU, antes de validar, só para escolher a língua
+ * das mensagens. Não é confiança: nada é aceito por causa disso — o país
+ * volta a ser validado pelo schema e de novo por `validarEndereco`. Um
+ * payload adulterado no máximo recebe a recusa na língua errada.
+ */
+function idiomaDoPayload(input: unknown): Idioma {
+  if (typeof input !== "object" || input === null || !("pais" in input)) return "pt";
+  const bruto = (input as { pais: unknown }).pais;
+  return idiomaDoPais(typeof bruto === "string" ? bruto : "BR");
+}
 
 function gerarNumeroPedido(): string {
   return `REV-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -90,7 +124,9 @@ function gerarNumeroPedido(): string {
 export async function criarPedidoInternacionalAction(
   input: unknown
 ): Promise<CheckoutResult> {
-  const parsed = schemaInternacional.safeParse(input);
+  const idioma = idiomaDoPayload(input);
+  const t = textos(idioma);
+  const parsed = schemaDoIdioma(idioma).safeParse(input);
   if (!parsed.success) {
     const camposComErro: Record<string, string> = {};
     for (const issue of parsed.error.issues) {
@@ -99,7 +135,7 @@ export async function criarPedidoInternacionalAction(
         camposComErro[campo] = issue.message;
       }
     }
-    return { erro: "Confira os dados marcados abaixo.", camposComErro };
+    return { erro: t.erroConfiraCampos, camposComErro };
   }
   const dados = parsed.data;
 
@@ -121,10 +157,10 @@ export async function criarPedidoInternacionalAction(
     for (const e of endereco.erros) {
       if (e.campo && !camposComErro[e.campo]) camposComErro[e.campo] = e.mensagem;
     }
-    return { erro: "Confira os dados marcados abaixo.", camposComErro };
+    return { erro: t.erroConfiraCampos, camposComErro };
   }
   if (endereco.endereco.pais === "BR") {
-    return { erro: "Endereço no Brasil usa o checkout nacional." };
+    return { erro: t.erroEnderecoBrasileiro };
   }
 
   /**
@@ -140,7 +176,7 @@ export async function criarPedidoInternacionalAction(
 
   const carrinho = await lerCarrinhoCompleto();
   if (!carrinho.cartId || carrinho.items.length === 0) {
-    return { erro: "Sua sacola está vazia — volte e adicione algo antes de finalizar." };
+    return { erro: t.sacolaVazia };
   }
 
   // Preço do MERCADO para cada item — sem preço configurado, sem venda.
@@ -151,8 +187,7 @@ export async function criarPedidoInternacionalAction(
   if (!precos.ok) {
     return {
       erro:
-        "Um dos itens ainda não tem preço definido para o seu país. " +
-        "Nos escreva e resolvemos rapidinho — ou finalize em outro momento.",
+        t.semPrecoNoMercado,
     };
   }
 
@@ -160,8 +195,7 @@ export async function criarPedidoInternacionalAction(
   if (!(await reivindicarCarrinhoParaPedido(carrinho.cartId))) {
     return {
       erro:
-        "Este pedido já está sendo finalizado. Aguarde um instante — se a tela " +
-        "não avançar sozinha, confira seu e-mail antes de tentar de novo.",
+        t.erroPedidoEmAndamento,
     };
   }
 
@@ -185,7 +219,7 @@ export async function criarPedidoInternacionalAction(
     country: endereco.endereco.pais,
   });
   if (erroCustomer) {
-    return falhar("Não foi possível registrar seus dados. Tente novamente.");
+    return falhar(t.erroRegistrarDados);
   }
 
   const linha = paraLinha(endereco.endereco);
@@ -203,7 +237,7 @@ export async function criarPedidoInternacionalAction(
     postal_code: linha.postal_code,
   });
   if (erroAddress) {
-    return falhar("Não foi possível registrar o endereço. Tente novamente.");
+    return falhar(t.erroRegistrarEndereco);
   }
 
   const subtotalCents = precos.subtotalCents;

@@ -35,6 +35,8 @@
 
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatarBRL } from "@/lib/format/money";
+import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
+import { nomeDoPais } from "@/lib/internacional/paises";
 import { enviarWhatsApp, modoWhatsApp } from "./whatsapp";
 
 type Supabase = ReturnType<typeof createAdminClient>;
@@ -141,15 +143,23 @@ export interface ResumoVenda {
   produto: string;
   quantidade: number;
   totalCents: number;
+  /**
+   * Moeda do pedido. Sem ela o aviso mentia: um pedido de US$ 850 chegava
+   * no WhatsApp como "R$ 850,00" — número certo, moeda errada, e a diferença
+   * é de cinco mil reais na leitura de quem separa a peça.
+   */
+  moeda: string;
   cidade: string;
   uf: string;
+  /** ISO do país de entrega. "BR" no pedido nacional. */
+  pais: string;
 }
 
 async function lerResumo(supabase: Supabase, orderId: string): Promise<ResumoVenda | null> {
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, order_number, total_cents, customers(full_name), addresses(city, state), order_items(product_name_snapshot, quantity)"
+      "id, order_number, total_cents, currency, customers(full_name), addresses(city, state, country), order_items(product_name_snapshot, quantity)"
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -161,7 +171,9 @@ async function lerResumo(supabase: Supabase, orderId: string): Promise<ResumoVen
     quantity: number;
   }>;
   const primeiro = itens[0];
-  const endereco = data.addresses as { city?: string; state?: string } | null;
+  const endereco = data.addresses as
+    | { city?: string; state?: string; country?: string }
+    | null;
   const cliente = (data.customers as { full_name?: string } | null)?.full_name;
 
   return {
@@ -177,8 +189,10 @@ async function lerResumo(supabase: Supabase, orderId: string): Promise<ResumoVen
     quantidade: itens.reduce((soma, i) => soma + i.quantity, 0),
     cliente: cliente?.trim() || "Cliente sem nome",
     totalCents: data.total_cents as number,
+    moeda: (data.currency as string) ?? "BRL",
     cidade: endereco?.city ?? "—",
     uf: endereco?.state ?? "—",
+    pais: (endereco?.country as string) ?? "BR",
   };
 }
 
@@ -187,7 +201,17 @@ async function lerResumo(supabase: Supabase, orderId: string): Promise<ResumoVen
  * mensagem não carrega rua, número, CEP, CPF, e-mail nem telefone.
  */
 export function montarAvisoVendaPaga(v: ResumoVenda): { texto: string; parametros: string[] } {
-  const valor = formatarBRL(v.totalCents);
+  /**
+   * O aviso é INTERNO — vai para a equipe, em português. O que muda no
+   * pedido internacional não é a língua, é o dado: a moeda tem que ser a do
+   * pedido, e "cidade/UF" não descreve um endereço americano (state pode
+   * vir nulo, e "Miami/—" não diz nada). Fora do Brasil o lugar sai como
+   * "cidade, País".
+   */
+  const valor =
+    v.moeda === "BRL" ? formatarBRL(v.totalCents) : formatarValorNaMoeda(v.totalCents, v.moeda);
+  const lugar =
+    v.pais === "BR" ? `${v.cidade}/${v.uf}` : `${v.cidade}, ${nomeDoPais(v.pais)}`;
   const link = `${(process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "")}/admin/pedidos/${v.orderId}`;
 
   const parametros = [
@@ -196,7 +220,7 @@ export function montarAvisoVendaPaga(v: ResumoVenda): { texto: string; parametro
     v.produto,
     String(v.quantidade),
     valor,
-    `${v.cidade}/${v.uf}`,
+    lugar,
     link,
   ];
 
@@ -208,7 +232,7 @@ export function montarAvisoVendaPaga(v: ResumoVenda): { texto: string; parametro
     `Produto: ${v.produto}`,
     `Quantidade: ${v.quantidade}`,
     `Valor: ${valor}`,
-    `Cidade: ${v.cidade}/${v.uf}`,
+    `Cidade: ${lugar}`,
     "",
     "Pagamento: CONFIRMADO",
     "Envio: AGUARDANDO ETIQUETA",

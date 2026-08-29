@@ -155,6 +155,27 @@ interface SessaoStripe {
   url?: string | null;
 }
 
+/**
+ * De um locale BCP-47 nosso para o que a Stripe aceita.
+ *
+ * A lista da Stripe não é a lista do Intl: ela conhece "pt-BR" e "pt", mas
+ * não "en-AU" nem "en-CA" — manda-se "en". Locale que ela não conhece faz a
+ * criação da sessão FALHAR, então o desconhecido vira "auto", que é o
+ * comportamento de antes deste campo existir.
+ */
+export function localeDaStripe(locale: string | undefined): string {
+  if (!locale) return "auto";
+  const l = locale.toLowerCase();
+  if (l === "pt-br") return "pt-BR";
+  if (l.startsWith("pt")) return "pt";
+  if (l.startsWith("en")) return "en";
+  // A Stripe conhece "es" e "es-419"; "es-ES" ela NÃO aceita, e locale que
+  // ela não conhece faz a criação da sessão falhar — não é degradação
+  // silenciosa, é o pagamento que não abre. Por isso manda-se "es" seco.
+  if (l.startsWith("es")) return "es";
+  return "auto";
+}
+
 export class StripeProvider implements PaymentProvider {
   readonly name = "stripe";
 
@@ -193,6 +214,16 @@ export class StripeProvider implements PaymentProvider {
     const body = formEncode({
       mode: "payment",
       client_reference_id: charge.orderId,
+      /**
+       * Sem isto a Stripe usa "auto" — o idioma do NAVEGADOR. Um comprador
+       * com o Chrome em português que escolheu entrega nos EUA leria o
+       * checkout inteiro em inglês e a tela de pagar em português.
+       *
+       * A Stripe aceita "en", "pt-BR", "pt" e afins; locale desconhecido é
+       * recusado com erro na criação da sessão, por isso só mandamos o que
+       * a tabela de países produz.
+       */
+      locale: localeDaStripe(charge.locale),
       // O sucesso volta para a página do pedido (porta 2) com o id da
       // sessão — {CHECKOUT_SESSION_ID} é preenchido pela própria Stripe.
       success_url: `${charge.redirectUrl}${charge.redirectUrl.includes("?") ? "&" : "?"}cs={CHECKOUT_SESSION_ID}`,

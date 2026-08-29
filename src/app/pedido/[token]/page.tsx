@@ -4,7 +4,9 @@ import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
 import { confirmarPagamento } from "@/lib/payments/confirmar";
 import { consumirPurchaseParaNavegador } from "@/lib/tracking/purchase";
-import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
+import { formatarDinheiroParaComprador } from "@/lib/internacional/moeda";
+import { idiomaDoPais, localeDoPais } from "@/lib/internacional/paises";
+import { LANG_HTML, textos } from "@/lib/internacional/idioma";
 import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacional/endereco";
 import { PurchaseTracker } from "./PurchaseTracker";
 import { SuportePosCompra } from "./SuportePosCompra";
@@ -15,14 +17,30 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const PASSOS = [
-  { chave: "new", rotulo: "Pedido recebido" },
-  { chave: "paid", rotulo: "Pagamento confirmado" },
-  { chave: "preparing", rotulo: "Preparando" },
-  { chave: "label_ready", rotulo: "Etiqueta pronta" },
-  { chave: "shipped", rotulo: "Enviado" },
-  { chave: "delivered", rotulo: "Entregue" },
+const ORDEM_DOS_PASSOS = [
+  "new",
+  "paid",
+  "preparing",
+  "label_ready",
+  "shipped",
+  "delivered",
 ] as const;
+
+/**
+ * O rótulo de cada passo vem do dicionário, mas a ORDEM não: ela é a
+ * máquina de estados do pedido e não muda com a língua.
+ */
+function passos(t: ReturnType<typeof textos>) {
+  const rotulos: Record<(typeof ORDEM_DOS_PASSOS)[number], string> = {
+    new: t.pedidoPassoRecebido,
+    paid: t.pedidoPassoPago,
+    preparing: t.pedidoPassoPreparando,
+    label_ready: t.pedidoPassoEtiqueta,
+    shipped: t.pedidoPassoEnviado,
+    delivered: t.pedidoPassoEntregue,
+  };
+  return ORDEM_DOS_PASSOS.map((chave) => ({ chave, rotulo: rotulos[chave] }));
+}
 
 /**
  * Acompanhamento do pedido — e PORTA 2 da confirmação de pagamento.
@@ -72,13 +90,6 @@ export default async function PedidoPage({
     .maybeSingle();
 
   const status = (atual?.status ?? pedido.status) as string;
-  /**
-   * Todo dinheiro desta página sai na MOEDA DO PEDIDO (bug pego no E2E de
-   * 28/08: pedido de US$ 970 aparecia como "R$ 970,00" para o cliente — a
-   * mesma classe de defeito corrigida no admin em e636f0e, que ninguém
-   * tinha ligado aqui). `na()` é o único formatador da página.
-   */
-  const na = (cents: number) => formatarValorNaMoeda(cents, (pedido.currency as string) ?? "BRL");
   const estornado = (atual?.payment_status ?? pedido.payment_status) === "refunded";
   const pago = !estornado && status !== "new" && status !== "canceled";
 
@@ -103,37 +114,63 @@ export default async function PedidoPage({
       .maybeSingle(),
   ]);
 
+  /**
+   * A língua desta página é a do PAÍS DE ENTREGA do pedido, não a de quem
+   * abre o link. O mesmo link pode ser aberto pelo comprador em Miami e
+   * pela equipe em São José dos Campos — e ele precisa ser o mesmo
+   * documento nos dois lugares, senão "qual tela você está vendo?" vira
+   * pergunta de suporte.
+   */
+  const paisDoPedido = (endereco?.country as string | undefined) ?? "BR";
+  const idioma = idiomaDoPais(paisDoPedido);
+  const t = textos(idioma);
+  /**
+   * Todo dinheiro desta página sai na MOEDA DO PEDIDO (bug pego no E2E de
+   * 28/08: pedido de US$ 970 aparecia como "R$ 970,00" para o cliente — a
+   * mesma classe de defeito corrigida no admin em e636f0e, que ninguém
+   * tinha ligado aqui). `na()` é o único formatador da página, e agrupa o
+   * número no locale de quem lê: "1,250.00" para o americano.
+   */
+  const na = (cents: number) =>
+    formatarDinheiroParaComprador(
+      cents,
+      (pedido.currency as string) ?? "BRL",
+      localeDoPais(paisDoPedido)
+    );
+
   // Purchase: só sai daqui, uma vez, e só se o pagamento foi confirmado.
   const purchase = pago
     ? await consumirPurchaseParaNavegador(supabase, pedido.id)
     : null;
 
+  const PASSOS = passos(t);
   const indiceAtual = PASSOS.findIndex((p) => p.chave === status);
 
   return (
     <main
+      lang={LANG_HTML[idioma]}
       className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 40 }}
     >
       {purchase ? <PurchaseTracker payload={purchase} /> : null}
 
       <header className="flex flex-col gap-2 text-center">
-        <span className="eyebrow-ink">Pedido {pedido.order_number}</span>
+        <span className="eyebrow-ink">{t.pedidoNumero(pedido.order_number as string)}</span>
         <h1 className="font-display text-3xl text-ink">
-          {estornado ? "Pagamento estornado" : pago ? "Pagamento confirmado" : "Aguardando pagamento"}
+          {estornado ? t.pedidoEstornado : pago ? t.pedidoPago : t.pedidoAguardando}
         </h1>
         <p className="text-ink/70">
           {estornado
-            ? "O valor deste pedido foi devolvido. Qualquer dúvida, fale com a gente."
+            ? t.pedidoTextoEstornado
             : pago
-              ? "Recebemos seu pedido e já estamos cuidando dele."
-              : "Assim que o pagamento for identificado, esta página se atualiza."}
+              ? t.pedidoTextoPago
+              : t.pedidoTextoAguardando}
         </p>
       </header>
 
       {status === "canceled" ? (
         <p className="rounded-lg border border-sand p-4 text-center text-ink/80">
-          Este pedido foi cancelado.
+          {t.pedidoCancelado}
         </p>
       ) : (
         <ol className="flex flex-col gap-3">
@@ -158,7 +195,7 @@ export default async function PedidoPage({
 
       {envio?.tracking_code ? (
         <section className="flex flex-col gap-1 rounded-lg border border-sand p-4">
-          <span className="eyebrow-ink">Rastreamento</span>
+          <span className="eyebrow-ink">{t.pedidoRastreamento}</span>
           <p className="font-mono text-lg text-ink">{envio.tracking_code}</p>
           {envio.service_name ? (
             <p className="text-sm text-ink/70">{envio.service_name}</p>
@@ -167,7 +204,7 @@ export default async function PedidoPage({
       ) : null}
 
       <section className="flex flex-col gap-3">
-        <h2 className="font-display text-xl text-ink">Itens</h2>
+        <h2 className="font-display text-xl text-ink">{t.pedidoItens}</h2>
         <ul className="flex flex-col gap-2">
           {(itens ?? []).map((item, i) => (
             <li key={i} className="flex justify-between gap-4 text-sm">
@@ -185,20 +222,20 @@ export default async function PedidoPage({
         </ul>
 
         <dl className="flex flex-col gap-1 border-t border-sand pt-3 text-sm">
-          <Linha rotulo="Subtotal" valor={na(pedido.subtotal_cents)} />
+          <Linha rotulo={t.pedidoSubtotal} valor={na(pedido.subtotal_cents)} />
           {pedido.discount_cents > 0 ? (
-            <Linha rotulo="Desconto" valor={`− ${na(pedido.discount_cents)}`} />
+            <Linha rotulo={t.pedidoDesconto} valor={`− ${na(pedido.discount_cents)}`} />
           ) : null}
           <Linha
-            rotulo="Frete"
+            rotulo={t.pedidoFrete}
             valor={
               (atual?.shipping_cents ?? pedido.shipping_cents) > 0
                 ? na(atual?.shipping_cents ?? pedido.shipping_cents)
-                : "a combinar"
+                : t.pedidoFreteACombinar
             }
           />
           <div className="flex justify-between pt-1 font-display text-lg text-ink">
-            <dt>Total</dt>
+            <dt>{t.pedidoTotal}</dt>
             <dd className="tabular-nums">
               {na(atual?.total_cents ?? pedido.total_cents)}
             </dd>
@@ -208,7 +245,7 @@ export default async function PedidoPage({
 
       {endereco ? (
         <section className="flex flex-col gap-1">
-          <h2 className="font-display text-xl text-ink">Entrega</h2>
+          <h2 className="font-display text-xl text-ink">{t.pedidoEntrega}</h2>
           <p className="text-sm text-ink/80">
             {/* formatarEndereco decide o layout pelo PAÍS (bug do E2E de
                 28/08: endereço americano saía no molde brasileiro, com
@@ -233,7 +270,7 @@ export default async function PedidoPage({
       {/* O contato só existe DEPOIS do pagamento confirmado — regra comercial
           do projeto. E o botão não dispara evento de conversão nenhum: o
           Purchase já saiu na confirmação, contá-lo de novo seria inflar. */}
-      {pago ? <SuportePosCompra numeroPedido={pedido.order_number} /> : null}
+      {pago ? <SuportePosCompra numeroPedido={pedido.order_number} idioma={idioma} /> : null}
     </main>
   );
 }

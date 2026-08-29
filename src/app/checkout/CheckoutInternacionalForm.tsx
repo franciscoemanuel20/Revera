@@ -5,7 +5,8 @@ import { lerAtribuicao } from "@/lib/tracking/atribuicao";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Toast } from "@/components/ui/Toast";
-import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
+import { formatarDinheiroParaComprador } from "@/lib/internacional/moeda";
+import { textos, type Idioma } from "@/lib/internacional/idioma";
 import {
   criarPedidoInternacionalAction,
   type CheckoutInternacionalInput,
@@ -25,9 +26,17 @@ const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2
  */
 
 export interface ResumoInternacional {
+  /**
+   * Idioma e locale viajam como DADO, e o dicionário é importado aqui
+   * dentro. Mandar o dicionário por prop não funcionaria: ele tem funções
+   * (`envioPorTitulo`, `resumoPrazo`), e função não atravessa a fronteira
+   * servidor→cliente. Erro que só aparece em runtime, no checkout.
+   */
+  idioma: Idioma;
+  locale: string;
   pais: {
     iso: string;
-    nomePt: string;
+    nome: string;
     ddi: string;
     exigeRegiao: boolean;
     rotuloRegiao: string | null;
@@ -78,12 +87,14 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
   const [erros, setErros] = useState<Record<string, string>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const t = textos(resumo.idioma);
 
   function atualizar(campo: keyof FormState, valor: string) {
     setCampos((atual) => ({ ...atual, [campo]: valor }));
   }
 
-  const na = (cents: number) => formatarValorNaMoeda(cents, resumo.moeda);
+  const na = (cents: number) =>
+    formatarDinheiroParaComprador(cents, resumo.moeda, resumo.locale);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -122,9 +133,9 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
       ) : null}
 
       <section className="flex flex-col gap-4">
-        <h2 className="font-display text-xl text-ink">Seus dados</h2>
+        <h2 className="font-display text-xl text-ink">{t.secaoSeusDados}</h2>
 
-        <FormField label="Nome completo" error={erros.name}>
+        <FormField label={t.labelNome} error={erros.name}>
           {(props) => (
             <input
               {...props}
@@ -137,7 +148,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
           )}
         </FormField>
 
-        <FormField label="E-mail" error={erros.email}>
+        <FormField label={t.labelEmail} error={erros.email}>
           {(props) => (
             <input
               {...props}
@@ -152,8 +163,8 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
         </FormField>
 
         <FormField
-          label="Telefone"
-          hint={`Com o código do país (+${resumo.pais.ddi}).`}
+          label={t.labelTelefone}
+          hint={t.hintTelefone(resumo.pais.ddi)}
           error={erros.telefone}
         >
           {(props) => (
@@ -171,10 +182,10 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
 
       <section className="flex flex-col gap-4">
         <h2 className="font-display text-xl text-ink">
-          Endereço de entrega — {resumo.pais.nomePt}
+          {t.secaoEndereco(resumo.pais.nome)}
         </h2>
 
-        <FormField label="Endereço (rua e número)" error={erros.linha1}>
+        <FormField label={t.labelEndereco} error={erros.linha1}>
           {(props) => (
             <input
               {...props}
@@ -187,7 +198,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
           )}
         </FormField>
 
-        <FormField label="Complemento" hint="Opcional." error={erros.linha2}>
+        <FormField label={t.labelComplemento} hint={t.hintOpcional} error={erros.linha2}>
           {(props) => (
             <input
               {...props}
@@ -199,7 +210,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
           )}
         </FormField>
 
-        <FormField label="Empresa" hint="Opcional." error={erros.empresa}>
+        <FormField label={t.labelEmpresa} hint={t.hintOpcional} error={erros.empresa}>
           {(props) => (
             <input
               {...props}
@@ -212,7 +223,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
         </FormField>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Cidade" error={erros.cidade}>
+          <FormField label={t.labelCidade} error={erros.cidade}>
             {(props) => (
               <input
                 {...props}
@@ -226,7 +237,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
           </FormField>
 
           {resumo.pais.exigeRegiao ? (
-            <FormField label={resumo.pais.rotuloRegiao ?? "Região"} error={erros.regiao}>
+            <FormField label={resumo.pais.rotuloRegiao ?? t.labelRegiaoPadrao} error={erros.regiao}>
               {(props) => (
                 <input
                   {...props}
@@ -242,7 +253,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
 
           <FormField
             label={resumo.pais.rotuloPostal}
-            hint={`Exemplo: ${resumo.pais.postalExemplo}`}
+            hint={t.hintExemplo(resumo.pais.postalExemplo)}
             error={erros.codigoPostal}
           >
             {(props) => (
@@ -260,7 +271,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
       </section>
 
       <section className="flex flex-col gap-3 rounded-lg border border-sand bg-paper p-4">
-        <h2 className="font-display text-xl text-ink">Resumo</h2>
+        <h2 className="font-display text-xl text-ink">{t.resumoTitulo}</h2>
         <ul className="flex flex-col gap-1 text-sm text-ink/80">
           {resumo.itens.map((item, i) => (
             <li key={i} className="flex justify-between gap-4">
@@ -272,31 +283,29 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
           ))}
         </ul>
         <div className="flex justify-between text-sm text-ink/80">
-          <span>Produtos</span>
+          <span>{t.resumoProdutos}</span>
           <span>{na(resumo.subtotalCents)}</span>
         </div>
         <div className="flex justify-between text-sm text-ink/80">
           <span>
-            Frete internacional — {resumo.frete.carrier}
+            {t.resumoFrete(resumo.frete.carrier)}
             {resumo.frete.etaDiasMin
-              ? ` · ${resumo.frete.etaDiasMin}${
-                  resumo.frete.etaDiasMax && resumo.frete.etaDiasMax !== resumo.frete.etaDiasMin
-                    ? `–${resumo.frete.etaDiasMax}`
-                    : ""
-                } dias úteis estimados pela transportadora`
+              ? t.resumoPrazo(resumo.frete.etaDiasMin, resumo.frete.etaDiasMax)
               : ""}
           </span>
           <span>{na(resumo.frete.priceCents)}</span>
         </div>
         <div className="flex justify-between border-t border-sand pt-2 font-medium text-ink">
-          <span>Total</span>
+          <span>{t.resumoTotal}</span>
+          {/*
+            Sem o código ISO ao lado. Cheguei a pôr ("US$ 1,820.00 USD") pelo
+            argumento de casar com a fatura do cartão — e na tela ficou
+            redundante, porque a nossa tabela de símbolos já distingue US$,
+            A$ e CA$, que era o problema que o código resolveria.
+          */}
           <span>{na(resumo.totalCents)}</span>
         </div>
-        <p className="text-xs text-ink/60">
-          O prazo estimado é da transportadora e não inclui o tempo de preparação nem o
-          desembaraço aduaneiro. Não prometemos data de entrega absoluta em envio
-          internacional.
-        </p>
+        <p className="text-xs text-ink/60">{t.resumoRessalvaPrazo}</p>
       </section>
 
       <section className="flex flex-col gap-3 rounded-lg border border-sand/70 bg-paper p-4">
@@ -316,7 +325,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
       </section>
 
       <Button type="submit" disabled={!aceite || enviando}>
-        {enviando ? "Criando seu pedido…" : "Continuar para o pagamento"}
+        {enviando ? t.botaoEnviando : t.botaoContinuar}
       </Button>
     </form>
   );

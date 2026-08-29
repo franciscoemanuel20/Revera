@@ -55,6 +55,18 @@ export interface PaymentCharge {
   /** para onde o gateway avisa que algo aconteceu */
   webhookUrl: string;
   items: Array<{ description: string; quantity: number; priceCents: number }>;
+  /**
+   * Idioma da TELA do gateway, quando ele souber respeitar.
+   *
+   * Vem do país de entrega, como todo o resto do checkout — e não do
+   * navegador. Um brasileiro comprando para a filha nos EUA lê o checkout
+   * em inglês e o campo de endereço em inglês; a tela da Stripe voltar a
+   * ser em português no meio do caminho pareceria outro site.
+   *
+   * Opcional porque nem todo adapter tem onde aplicar: a InfinitePay é
+   * brasileira e não recebe idioma.
+   */
+  locale?: string;
 }
 
 export interface PaymentResult {

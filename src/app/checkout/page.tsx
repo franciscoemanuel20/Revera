@@ -4,16 +4,19 @@ import { CheckoutForm } from "./CheckoutForm";
 import { CheckoutInternacionalForm, type ResumoInternacional } from "./CheckoutInternacionalForm";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { lerCarrinhoCompleto } from "@/lib/cart/store";
-import {
-  ACEITE_INTERNACIONAL_TEXTO,
-  AVISO_IMPOSTOS_TEXTO,
-  AVISO_IMPOSTOS_TITULO,
-} from "@/lib/internacional/aceite";
+import { aceiteInternacional } from "@/lib/internacional/aceite";
 import {
   precosDoCarrinhoNoMercado,
   prontidaoDoMercado,
 } from "@/lib/internacional/mercado";
-import { bandeira, nomeDoPais, paisesDoCheckout, regraDoPais } from "@/lib/internacional/paises";
+import {
+  bandeira,
+  idiomaDoPais,
+  nomeDoPais,
+  paisesDoCheckout,
+  regraDoPais,
+} from "@/lib/internacional/paises";
+import { LANG_HTML, textos } from "@/lib/internacional/idioma";
 
 export const metadata: Metadata = {
   title: "Checkout",
@@ -43,6 +46,13 @@ export default async function CheckoutPage({
   const paisPedido = (sp.pais ?? "BR").toUpperCase();
   const pais = paises.includes(paisPedido) ? paisPedido : "BR";
 
+  // O idioma sai do PAÍS ESCOLHIDO, não do cabeçalho do navegador. Um
+  // brasileiro com o Chrome em inglês comprando para o Brasil continua
+  // lendo português — o que decide a língua é para onde a peça vai, que é
+  // também quem decide moeda, frete e imposto.
+  const idioma = idiomaDoPais(pais);
+  const t = textos(idioma);
+
   let conteudo: React.ReactNode;
 
   if (pais === "BR") {
@@ -53,16 +63,21 @@ export default async function CheckoutPage({
 
   return (
     <main
+      // `lang` no <main>, e não no <html>: o layout raiz é compartilhado com
+      // a loja inteira em português e mexer nele para traduzir o checkout
+      // poria a venda nacional em risco. O atributo é válido em qualquer
+      // elemento, e é o que faz o leitor de tela pronunciar em inglês.
+      lang={LANG_HTML[idioma]}
       className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
       <div className="flex flex-col gap-2">
-        <span className="eyebrow-ink">Quase lá</span>
-        <h1 className="font-display text-3xl text-ink">Finalizar pedido</h1>
+        <span className="eyebrow-ink">{t.checkoutEyebrow}</span>
+        <h1 className="font-display text-3xl text-ink">{t.checkoutTitulo}</h1>
       </div>
 
       {paises.length > 1 ? (
-        <nav aria-label="País de entrega" className="flex flex-wrap gap-2">
+        <nav aria-label={t.navPaisLabel} className="flex flex-wrap gap-2">
           {paises.map((iso) => (
             <Link
               key={iso}
@@ -73,7 +88,7 @@ export default async function CheckoutPage({
                   : "border-sand bg-paper text-ink"
               }`}
             >
-              {bandeira(iso)} {nomeDoPais(iso)}
+              {bandeira(iso)} {nomeDoPais(iso, idioma)}
             </Link>
           ))}
         </nav>
@@ -86,24 +101,26 @@ export default async function CheckoutPage({
 
 async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
   const regra = regraDoPais(pais);
+  const idioma = idiomaDoPais(pais);
+  const t = textos(idioma);
   const mercado = await prontidaoDoMercado(pais);
 
   if (!regra || !mercado.aberto) {
+    // `mercado.motivo` vem do servidor em português: é diagnóstico de
+    // operação ("cotação vencida", "sem preço"), não texto de vitrine.
+    // Traduzir motivo por motivo criaria duas listas para manter — e o
+    // comprador não precisa do detalhe, precisa saber que não dá hoje.
     return (
       <IndisponivelInternacional
         pais={pais}
-        motivo={mercado.aberto ? "Indisponível." : mercado.motivo}
+        motivo={t.indisponivelGenerico}
       />
     );
   }
 
   const carrinho = await lerCarrinhoCompleto();
   if (!carrinho.cartId || carrinho.items.length === 0) {
-    return (
-      <p className="max-w-2xl text-ink/70">
-        Sua sacola está vazia — volte à loja e adicione uma peça antes de finalizar.
-      </p>
-    );
+    return <p className="max-w-2xl text-ink/70">{t.sacolaVazia}</p>;
   }
 
   const precos = await precosDoCarrinhoNoMercado(
@@ -113,19 +130,17 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
   if (!precos.ok) {
     // Preço é decisão comercial: sem preço definido para o mercado, o
     // honesto é dizer isso — nunca converter do real por conta própria.
-    return (
-      <IndisponivelInternacional
-        pais={pais}
-        motivo="Um dos itens da sua sacola ainda não tem preço definido para este país."
-      />
-    );
+    return <IndisponivelInternacional pais={pais} motivo={t.semPrecoNoMercado} />;
   }
 
   const porVariante = new Map(precos.itens.map((i) => [i.variantId, i]));
+  const aceite = aceiteInternacional(idioma);
   const resumo: ResumoInternacional = {
+    idioma,
+    locale: regra.locale,
     pais: {
       iso: regra.iso,
-      nomePt: regra.nomePt,
+      nome: nomeDoPais(regra.iso, idioma),
       ddi: regra.ddi,
       exigeRegiao: regra.exigeRegiao,
       rotuloRegiao: regra.rotuloRegiao,
@@ -147,24 +162,21 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
       etaDiasMax: mercado.frete.etaDiasMax,
     },
     totalCents: precos.subtotalCents + mercado.frete.priceCents,
-    avisoImpostosTitulo: AVISO_IMPOSTOS_TITULO,
-    avisoImpostosTexto: AVISO_IMPOSTOS_TEXTO,
-    aceiteTexto: ACEITE_INTERNACIONAL_TEXTO,
+    avisoImpostosTitulo: aceite.avisoTitulo,
+    avisoImpostosTexto: aceite.avisoTexto,
+    aceiteTexto: aceite.aceite,
   };
 
   return (
     <div className="flex flex-col gap-6">
       <section className="max-w-2xl rounded-lg border border-sand bg-paper p-4 text-sm text-ink/80">
         <h2 className="mb-2 font-display text-lg text-ink">
-          Seu pedido será enviado pela {mercado.frete.carrier}
+          {t.envioPorTitulo(mercado.frete.carrier)}
         </h2>
         <ul className="list-inside list-disc space-y-1 text-xs leading-relaxed">
-          <li>Envio porta a porta, com rastreamento e comprovante de entrega.</li>
-          <li>O prazo estimado é informado no momento da contratação do envio.</li>
-          <li>
-            A encomenda poderá estar sujeita a impostos e taxas no país de destino
-            (detalhes abaixo, antes de finalizar).
-          </li>
+          <li>{t.envioBulletPortaAPorta}</li>
+          <li>{t.envioBulletPrazo}</li>
+          <li>{t.envioBulletImpostos}</li>
         </ul>
       </section>
       <CheckoutInternacionalForm resumo={resumo} />
@@ -173,17 +185,20 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
 }
 
 function IndisponivelInternacional({ pais, motivo }: { pais: string; motivo: string }) {
+  const idioma = idiomaDoPais(pais);
+  const t = textos(idioma);
   return (
-    <div className="max-w-2xl rounded-lg border border-sand bg-paper p-6">
+    <div
+      lang={LANG_HTML[idioma]}
+      className="max-w-2xl rounded-lg border border-sand bg-paper p-6"
+    >
       <h2 className="font-display text-xl text-ink">
-        {bandeira(pais)} {nomeDoPais(pais)} — indisponível no momento
+        {bandeira(pais)} {t.indisponivelTitulo(nomeDoPais(pais, idioma))}
       </h2>
       <p className="mt-2 text-sm text-ink/70">{motivo}</p>
-      <p className="mt-4 text-sm text-ink/70">
-        Você pode finalizar uma entrega no Brasil normalmente, ou voltar mais tarde.
-      </p>
+      <p className="mt-4 text-sm text-ink/70">{t.indisponivelAlternativa}</p>
       <Link href="/checkout" className="mt-4 inline-block text-sm text-ink underline">
-        Ir para o checkout do Brasil
+        {t.indisponivelLinkBR}
       </Link>
     </div>
   );

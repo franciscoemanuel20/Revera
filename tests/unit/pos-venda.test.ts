@@ -102,8 +102,10 @@ describe("aviso de venda no WhatsApp", () => {
     produto: "Micropele 0,06mm",
     quantidade: 1,
     totalCents: 160000,
+    moeda: "BRL",
     cidade: "Campinas",
     uf: "SP",
+    pais: "BR",
   };
 
   it("não carrega endereço, CPF, e-mail nem telefone", () => {
@@ -135,6 +137,37 @@ describe("aviso de venda no WhatsApp", () => {
   it("mais de um produto vira resumo, não lista", () => {
     const { texto } = montarAvisoVendaPaga({ ...venda, produto: "Micropele 0,06mm +1" });
     expect(texto).toContain("+1");
+  });
+
+  /**
+   * O aviso é interno e continua em português. O que não pode continuar é o
+   * dado errado: antes de 28/08/2026 um pedido americano chegava como
+   * "R$ 850,00" e "Miami/—", porque o texto presumia real e UF.
+   */
+  it("pedido internacional avisa na moeda do pedido, não em real", () => {
+    const { texto, parametros } = montarAvisoVendaPaga({
+      ...venda,
+      totalCents: 85000,
+      moeda: "USD",
+      cidade: "Miami",
+      uf: "FL",
+      pais: "US",
+    });
+    expect(texto).toContain("US$");
+    expect(texto).not.toContain("R$");
+    expect(parametros).toContain("US$ 850,00");
+  });
+
+  it("fora do Brasil o lugar sai como cidade e país, não cidade/UF", () => {
+    const { texto } = montarAvisoVendaPaga({
+      ...venda,
+      moeda: "USD",
+      cidade: "Miami",
+      uf: "FL",
+      pais: "US",
+    });
+    expect(texto).toContain("Miami, Estados Unidos");
+    expect(texto).not.toContain("Miami/FL");
   });
 });
 

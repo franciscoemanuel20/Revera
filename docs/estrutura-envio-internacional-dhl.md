@@ -178,7 +178,20 @@ O botão de finalizar permanece desabilitado até o aceite. O aceite é
 `JÁ IMPLEMENTADO` (28/08/2026, migration 10) — `orders.terms_version` +
 `orders.terms_accepted_at` (relógio do servidor, CHECK de coerência),
 checkbox obrigatória que trava o botão E é revalidada no servidor
-(`literal(true)`). Versão atual: `2026-08-28.v1.pre-juridico`.
+(`literal(true)`). Versão atual: **`2026-08-28.v2.pre-juridico`**.
+
+A v2 (28/08/2026) mantém os cinco requisitos acima e acrescenta dois que a
+operação da DHL exige: exatidão dos dados de entrega informados pelo
+comprador, e a possibilidade de a alfândega do destino pedir documento ou
+informação **a ele** para liberar a encomenda. Existe em português e inglês
+— **a versão é uma só para as duas línguas**, porque é o mesmo acordo; mudar
+só a redação inglesa também obriga versão nova.
+
+`DEPENDE DE DECISÃO COMERCIAL` — **garantia e devolução internacionais NÃO
+estão no aceite**, de propósito. A garantia de 7 dias úteis é da venda
+nacional; para fora não foi decidido prazo, nem quem paga o frete de retorno
+(que pode custar mais que a peça). Escrever por analogia criaria obrigação
+versionada e aceita pelo cliente que a operação não assumiu.
 
 `DEPENDE DO CONTADOR/FISCAL` — o texto jurídico definitivo não sai sem
 revisão apropriada. O texto acima é requisito de conteúdo, não redação final.

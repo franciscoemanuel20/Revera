@@ -21,14 +21,34 @@
  * não há: o gateway atual não processa venda internacional.
  */
 
+import { textos, type Dicionario, type Idioma } from "./idioma";
+
 export type CodigoPais = string; // ISO 3166-1 alfa-2, maiúsculo
 
 export interface RegraDePais {
   iso: CodigoPais;
   nomePt: string;
   nomeEn: string;
+  nomeEs: string;
   /** Moeda em que costumamos apresentar preço neste mercado. */
   moedaPadrao: string;
+  /**
+   * Em que língua o comprador deste país lê o checkout.
+   *
+   * Mora aqui, e não numa regra "é BR? então português", porque Portugal
+   * desmente a regra: é internacional em tudo (euro, DHL, alfândega) e lê
+   * em português. País é dado; idioma é atributo do país.
+   */
+  idioma: Idioma;
+  /**
+   * Locale BCP-47 para formatar NÚMERO e DATA na tela do comprador.
+   *
+   * Separado de `idioma` porque não é a mesma pergunta: en-US e en-GB
+   * compartilham o texto e discordam da data (03/04 é abril nos EUA e
+   * março no Reino Unido). E é o que faz um total sair "1,250.00" para
+   * quem lê em inglês, em vez do "1.250,00" que só o Brasil entende.
+   */
+  locale: string;
   /** Prefixo telefônico internacional, sem o "+". */
   ddi: string;
   /**
@@ -52,9 +72,16 @@ export interface RegraDePais {
 }
 
 /**
- * Os seis primeiros mercados. A ordem é a do pedido do Francisco (Brasil,
- * EUA, Portugal, Reino Unido, Austrália, Canadá), que é também a ordem de
- * interesse comercial.
+ * Os sete mercados que o sistema sabe representar. A ordem é a do pedido do
+ * Francisco (Brasil, EUA, Portugal, Reino Unido, Austrália, Canadá), com a
+ * Espanha entrando por último, em 29/08/2026.
+ *
+ * A Espanha entrou pela regra "conforme as moedas": ela é o único mercado
+ * hispanofalante que usa uma moeda que JÁ tem preço gravado (euro, as cinco
+ * linhas em produção desde 29/08). México e Argentina precisariam de moeda
+ * nova em `moeda.ts`, de 5 linhas novas em `variant_prices` e de cotação
+ * DHL própria — é abertura de mercado, não tradução, e por isso não entra
+ * junto com o idioma.
  *
  * As expressões de código postal seguem o formato publicado por cada
  * serviço postal. A do Reino Unido é a mais complexa porque o formato
@@ -65,7 +92,10 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     iso: "BR",
     nomePt: "Brasil",
     nomeEn: "Brazil",
+    nomeEs: "Brasil",
     moedaPadrao: "BRL",
+    idioma: "pt",
+    locale: "pt-BR",
     ddi: "55",
     exigeRegiao: true,
     rotuloRegiao: "UF",
@@ -77,7 +107,10 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     iso: "US",
     nomePt: "Estados Unidos",
     nomeEn: "United States",
+    nomeEs: "Estados Unidos",
     moedaPadrao: "USD",
+    idioma: "en",
+    locale: "en-US",
     ddi: "1",
     exigeRegiao: true,
     rotuloRegiao: "State",
@@ -89,7 +122,10 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     iso: "PT",
     nomePt: "Portugal",
     nomeEn: "Portugal",
+    nomeEs: "Portugal",
     moedaPadrao: "EUR",
+    idioma: "pt",
+    locale: "pt-PT",
     ddi: "351",
     // Portugal tem distritos, mas o endereço postal não os usa: o código
     // postal de sete dígitos já resolve a entrega.
@@ -103,7 +139,10 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     iso: "GB",
     nomePt: "Reino Unido",
     nomeEn: "United Kingdom",
+    nomeEs: "Reino Unido",
     moedaPadrao: "GBP",
+    idioma: "en",
+    locale: "en-GB",
     ddi: "44",
     exigeRegiao: false,
     rotuloRegiao: "County",
@@ -115,7 +154,10 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     iso: "AU",
     nomePt: "Austrália",
     nomeEn: "Australia",
+    nomeEs: "Australia",
     moedaPadrao: "AUD",
+    idioma: "en",
+    locale: "en-AU",
     ddi: "61",
     exigeRegiao: true,
     rotuloRegiao: "State",
@@ -127,13 +169,38 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     iso: "CA",
     nomePt: "Canadá",
     nomeEn: "Canada",
+    nomeEs: "Canadá",
     moedaPadrao: "CAD",
+    idioma: "en",
+    locale: "en-CA",
     ddi: "1",
     exigeRegiao: true,
     rotuloRegiao: "Province",
     rotuloPostal: "Postal Code",
     postalRegex: /^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i,
     postalExemplo: "K1A 0B1",
+  },
+  ES: {
+    iso: "ES",
+    nomePt: "Espanha",
+    nomeEn: "Spain",
+    nomeEs: "España",
+    moedaPadrao: "EUR",
+    idioma: "es",
+    locale: "es-ES",
+    ddi: "34",
+    // Espanha tem províncias, e o endereço postal as menciona — mas os dois
+    // primeiros dígitos do código postal JÁ identificam a província, então
+    // exigir o campo faria a pessoa repetir o que ela acabou de digitar.
+    // Mesma decisão de Portugal e do Reino Unido: rótulo existe, obrigação
+    // não.
+    exigeRegiao: false,
+    rotuloRegiao: "Provincia",
+    rotuloPostal: "Código Postal",
+    // Cinco dígitos, de 01000 a 52999. A faixa não é validada aqui de
+    // propósito: recusar um CP válido custa uma venda, e a DHL confere.
+    postalRegex: /^\d{5}$/,
+    postalExemplo: "28013",
   },
 };
 
@@ -147,8 +214,36 @@ export function regraDoPais(iso: string): RegraDePais | null {
   return PAISES[iso.toUpperCase()] ?? null;
 }
 
-export function nomeDoPais(iso: string): string {
-  return regraDoPais(iso)?.nomePt ?? iso.toUpperCase();
+export function nomeDoPais(iso: string, idioma: Idioma = "pt"): string {
+  const regra = regraDoPais(iso);
+  if (!regra) return iso.toUpperCase();
+  // Não é `idioma === "en" ? en : pt`. Com o espanhol dentro, esse ternário
+  // devolveria "Espanha" a um espanhol lendo em espanhol — nome do país
+  // errado na primeira linha do endereço dele.
+  if (idioma === "en") return regra.nomeEn;
+  if (idioma === "es") return regra.nomeEs;
+  return regra.nomePt;
+}
+
+/**
+ * O idioma de um país, com o português como porta padrão.
+ *
+ * País desconhecido cai em português de propósito: quem chega aqui com um
+ * ISO que a tabela não conhece está num caminho que não deveria existir, e
+ * a tela de erro é brasileira.
+ */
+export function idiomaDoPais(iso: string): Idioma {
+  return regraDoPais(iso)?.idioma ?? "pt";
+}
+
+/** Locale de NÚMERO e DATA. Mesma lógica de porta padrão. */
+export function localeDoPais(iso: string): string {
+  return regraDoPais(iso)?.locale ?? "pt-BR";
+}
+
+/** Atalho: o dicionário já resolvido pelo país. */
+export function textosDoPais(iso: string): Dicionario {
+  return textos(idiomaDoPais(iso));
 }
 
 /** Bandeira por composição de Regional Indicator — sem imagem, sem CDN. */
