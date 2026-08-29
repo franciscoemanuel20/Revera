@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { Price } from "./Price";
 import { QuantitySelector } from "./QuantitySelector";
 import { Button } from "./Button";
@@ -44,10 +45,42 @@ export function CartDrawer({
   erro,
   onDismissErro,
 }: CartDrawerProps) {
+  /**
+   * ESC FECHA A SACOLA (29/08/2026).
+   *
+   * Antes o único jeito de sair era achar o ✕. Num painel que cobre a tela
+   * inteira no celular, isso é a diferença entre voltar a comprar e fechar a
+   * aba. O efeito é registrado sempre e sai de cena com o próprio drawer —
+   * `open` está nas dependências para não deixar listener pendurado.
+   */
+  useEffect(() => {
+    if (!open) return;
+    function aoTeclar(evento: KeyboardEvent) {
+      if (evento.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", aoTeclar);
+    return () => document.removeEventListener("keydown", aoTeclar);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink/40" role="dialog" aria-modal="true">
+    /**
+     * CLICAR FORA FECHA (29/08/2026).
+     *
+     * O `onClick` está no fundo escuro, e só fecha quando o clique foi NELE
+     * mesmo (`e.target === e.currentTarget`). Sem essa checagem, clicar em
+     * qualquer coisa dentro do painel borbulharia até aqui e fecharia a
+     * sacola no meio da compra — que é pior que não fechar nunca.
+     */
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-ink/40"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="flex h-full w-full max-w-md flex-col gap-4 bg-paper p-6">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-xl text-ink">Sua sacola</h2>

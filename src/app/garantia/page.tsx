@@ -31,9 +31,11 @@ import type { Metadata } from "next";
  * comum e sem número de artigo — o direito existe citado ou não, e escondê-lo
  * seria o único jeito de essa página virar problema.
  *
- * Mesma regra de antes: não acrescente cláusula aqui sem confirmar o fato.
- * Esta página precisa de revisão de advogado antes de virar política
- * definitiva.
+ * O AVISO "política revisada juridicamente antes da publicação final" saiu em
+ * 29/08/2026, a pedido do Francisco. Ele dizia ao cliente que a política não
+ * estava pronta — ou seja, convidava a testá-la. A necessidade de revisão de
+ * advogado continua real; ela é assunto interno, e este comentário é o lugar
+ * dela. Não acrescente cláusula nesta página sem confirmar o fato.
  */
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
@@ -162,9 +164,6 @@ export default function GarantiaPage() {
         </p>
       </Reveal>
 
-      <p className="rounded-md border border-moss/30 bg-moss/5 px-4 py-3 text-sm text-moss">
-        Política revisada juridicamente antes da publicação final.
-      </p>
     </main>
   );
 }

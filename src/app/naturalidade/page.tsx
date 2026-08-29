@@ -126,10 +126,15 @@ export default function NaturalidadePage() {
 
       <Reveal>
         <p className="rounded-md border border-moss/30 bg-moss/5 px-4 py-3 text-sm text-moss">
-          Esta página não usa foto de antes e depois: a Reverá ainda não tem
-          esse material. Preferimos mostrar o processo real e explicar com
-          honestidade o que pesa no resultado, em vez de prometer um efeito
-          que depende de fatores fora do nosso controle.
+          {/* Antes dizia "a Reverá ainda não tem esse material" — uma
+              confissão de lacuna que o cliente jamais notaria sozinho.
+              Retirado em 29/08/2026. A POSTURA continua: a página não usa
+              antes e depois, e agora isso é apresentado como escolha, que é
+              o que de fato é. */}
+          Não usamos foto de antes e depois. O resultado depende da escolha da
+          peça, da implantação e do corte — a foto de outra pessoa prometeria
+          um efeito que não está sob nosso controle. Preferimos mostrar o
+          processo real e explicar o que pesa de verdade.
         </p>
       </Reveal>
     </main>

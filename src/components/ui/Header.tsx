@@ -70,6 +70,41 @@ export function Header() {
     return () => window.removeEventListener("scroll", aoRolar);
   }, []);
 
+  /**
+   * CLICAR FORA (OU APERTAR ESC) FECHA OS MENUS (29/08/2026).
+   *
+   * Os dois menus deste header são <details>/<summary> nativos, escolhidos
+   * de propósito para não depender de JS. O preço disso é que <details> só
+   * fecha quando se clica no próprio <summary> de novo — clicar fora deixa o
+   * menu aberto por cima do conteúdo, e a pessoa acha que a página travou.
+   * Foi exatamente a queixa do Francisco em 29/08.
+   *
+   * Este efeito devolve o comportamento que todo mundo espera sem abrir mão
+   * do <details>: fecha o que estiver aberto quando o clique acontece fora
+   * dele. `pointerdown` em vez de `click` para responder já no toque, que no
+   * celular é o que dá a sensação de resposta imediata.
+   */
+  useEffect(() => {
+    function fecharAbertos(alvo: Node | null) {
+      for (const menu of document.querySelectorAll<HTMLDetailsElement>(
+        "header details[open]"
+      )) {
+        if (alvo && menu.contains(alvo)) continue;
+        menu.open = false;
+      }
+    }
+    const aoApontar = (e: PointerEvent) => fecharAbertos(e.target as Node | null);
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key === "Escape") fecharAbertos(null);
+    };
+    document.addEventListener("pointerdown", aoApontar);
+    document.addEventListener("keydown", aoTeclar);
+    return () => {
+      document.removeEventListener("pointerdown", aoApontar);
+      document.removeEventListener("keydown", aoTeclar);
+    };
+  }, []);
+
   // Mesmo padrão do Footer (src/components/ui/Footer.tsx): o admin tem seu
   // próprio header/nav em src/app/admin/(protected)/layout.tsx, então este
   // não aparece ali.
