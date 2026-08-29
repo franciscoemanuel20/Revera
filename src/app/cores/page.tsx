@@ -8,12 +8,12 @@ import { ColorHelpForm } from "./ColorHelpForm";
 export const metadata: Metadata = {
   title: "Cores disponíveis",
   description:
-    "As oito cores reais da linha Reverá, fotografadas. Não sabe qual é a sua? A gente ajuda a descobrir pela foto.",
+    "As cores reais da linha Reverá, fotografadas — incluindo a escala de grisalho. Não sabe qual é a sua? A gente ajuda a descobrir pela foto.",
   alternates: { canonical: "/cores" },
   openGraph: {
     title: "Cores disponíveis — Reverá",
     description:
-      "As oito cores reais da linha Reverá, fotografadas. Não sabe qual é a sua? A gente ajuda a descobrir pela foto.",
+      "As cores reais da linha Reverá, fotografadas — incluindo a escala de grisalho. Não sabe qual é a sua? A gente ajuda a descobrir pela foto.",
     url: "/cores",
   },
 };

@@ -46,13 +46,13 @@ export default function PorQueReveraPage() {
         </section>
       </Reveal>
 
-      {/* Variedade de cores — 8 cores reais, ver seeds/colors.json e a
+      {/* Variedade de cores — o número sai do cadastro real (colors), e
           página /cores, que já lê a mesma tabela colors. */}
       <Reveal delayMs={60}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
           <h2 className="font-display text-xl text-ink">Variedade de cores</h2>
           <p className="text-ink/80">
-            A linha Micropele está disponível em 8 cores. Veja todas em{" "}
+            A linha Micropele está disponível em 15 cores, incluindo a escala de grisalho. Veja todas em{" "}
             <a
               href="/cores"
               className="text-ink underline decoration-gold underline-offset-4 hover:text-gold-deep"
