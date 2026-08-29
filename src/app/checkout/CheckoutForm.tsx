@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Image from "next/image";
 import { medirIniciarCheckout } from "@/lib/tracking/browser";
 import { lerAtribuicao } from "@/lib/tracking/atribuicao";
 import { useCart } from "@/components/cart/CartProvider";
@@ -453,6 +454,60 @@ export function CheckoutForm() {
             )}
           </FormField>
         </div>
+      </section>
+
+      {/* O QUE ESTÁ SENDO COMPRADO (29/08/2026).
+          Até aqui o checkout mostrava só os totais: a pessoa preenchia CPF e
+          endereço sem rever o que ia levar. Com a cor virando variante, três
+          linhas podem se chamar "Micropele 0,08mm" e diferir só na cor — é
+          exatamente antes de pagar que esse conferido tem que caber.
+          Lista SÓ DE LEITURA: os mesmos números que o resumo abaixo já usa
+          (cart.items), sem recalcular nada. Para mudar quantidade ou remover,
+          a pessoa volta à sacola. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-lg text-ink">Seu pedido</h2>
+        <ul className="flex flex-col divide-y divide-sand rounded-lg border border-sand">
+          {cart.items.map((item) => (
+            <li key={item.cartItemId} className="flex items-center gap-3 p-3">
+              {item.colorPhotoUrl ? (
+                <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-sand">
+                  <Image
+                    src={item.colorPhotoUrl}
+                    alt={item.variantLabel ?? item.productName}
+                    fill
+                    sizes="112px"
+                    className="object-cover"
+                  />
+                </span>
+              ) : null}
+              <span className="flex flex-1 flex-col">
+                <span className="text-sm font-medium text-ink">{item.productName}</span>
+                {item.variantLabel ? (
+                  <span className="text-sm text-ink/60">{item.variantLabel}</span>
+                ) : null}
+                <span className="text-xs text-ink/50">
+                  {item.quantity} ×{" "}
+                  {(item.unitPriceCents / 100).toLocaleString("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  })}
+                </span>
+              </span>
+              <span className="shrink-0 text-sm font-semibold text-ink tabular-nums">
+                {(item.subtotalCents / 100).toLocaleString("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                })}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <a
+          href="/carrinho"
+          className="self-start text-sm text-ink underline decoration-gold decoration-2 underline-offset-4"
+        >
+          Alterar a sacola
+        </a>
       </section>
 
       {/* O total soma o frete só quando ele existe de verdade. Enquanto não
