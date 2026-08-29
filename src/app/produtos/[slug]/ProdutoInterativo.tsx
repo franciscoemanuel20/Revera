@@ -128,7 +128,16 @@ export function ProdutoInterativo({
    * Agora a compra fica travada até a pessoa escolher, e o botão diz o que
    * falta em vez de ficar cinza sem explicação.
    */
-  const [corSelecionadaId, setCorSelecionadaId] = useState<string | null>(null);
+  /**
+   * Cor única não é escolha: já vem marcada (29/08/2026).
+   *
+   * Fora da Micropele 0,08, a peça só sai na 1B. Obrigar um clique numa
+   * cartela de uma bolinha só é atrito sem proteção nenhuma — a trava existe
+   * para quem tem várias cores e pode comprar a errada sem perceber.
+   */
+  const [corSelecionadaId, setCorSelecionadaId] = useState<string | null>(
+    colors.length === 1 ? colors[0]!.id : null
+  );
   const [quantidade, setQuantidade] = useState(1);
 
   const varianteSelecionada =

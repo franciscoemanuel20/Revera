@@ -172,6 +172,25 @@ export default async function ProdutoPage({
     })
     .filter((p) => p.vendavel);
 
+  /**
+   * A CARTELA SÓ MOSTRA O QUE ESTE PRODUTO TEM (29/08/2026).
+   *
+   * `colors` é uma tabela global; as variantes é que dizem quais cores cada
+   * peça realmente existe. Enquanto todo produto tinha as oito cores isso
+   * não aparecia — mas o Francisco definiu que grisalho é só na Micropele
+   * 0,08 e que as outras quatro saem só na 1B (castanho escuro).
+   *
+   * Sem este filtro a página da Afro mostraria oito bolinhas, o cliente
+   * clicaria na 5, e o botão ficaria cinza sem explicar por quê: existe cor
+   * selecionada, mas não existe variante para ela. Beco sem saída.
+   */
+  const coresComVariante = new Set(
+    variantes.map((v) => v.colorId).filter((id): id is string => Boolean(id))
+  );
+  const coresDesteProduto = (colors ?? []).filter((c) =>
+    coresComVariante.has(c.id as string)
+  );
+
   const agora = new Date();
   const regrasVigentes = (regras ?? [])
     .filter((r) => {
@@ -242,7 +261,7 @@ export default async function ProdutoPage({
       baseThicknessMm={produto.base_thickness_mm}
       fotos={fotos}
       variants={variantes}
-      colors={(colors ?? []).map((c) => ({
+      colors={coresDesteProduto.map((c) => ({
         id: c.id as string,
         code: c.code as string,
         name: c.name as string,
