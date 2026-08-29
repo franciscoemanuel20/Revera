@@ -35,6 +35,32 @@ type Cliente = ReturnType<typeof createAdminClient>;
  * responder e o Google falhar, um reenvio manda só para o Google — em vez de
  * duplicar a receita na Meta.
  */
+/**
+ * O valor que a META recebe: só as peças, sem frete (Francisco, 29/08/2026).
+ *
+ * `orders.total_cents` é peça + frete − desconto. Mandar isso à Meta inflaria
+ * o ROAS com dinheiro que é da transportadora, não da Reverá: numa venda de
+ * 5 peças o frete responde por R$ 64 dos R$ 3.164, e a campanha passaria a
+ * ser avaliada por uma receita que ninguém embolsa.
+ *
+ * Então o Purchase da Meta reporta `total − frete`, que é exatamente o que
+ * foi cobrado pelas próteses, já com o desconto por quantidade aplicado.
+ *
+ * O GA4 NÃO usa esta função de propósito: lá a convenção é `value` cheio com
+ * `shipping` numa chave separada, e o relatório do Google já sabe descontar.
+ * Uniformizar os dois quebraria o lado que está certo.
+ *
+ * O `Math.max(0, …)` existe porque frete maior que o total só aconteceria com
+ * dado corrompido — e valor negativo na Meta é evento recusado, não erro
+ * visível.
+ */
+export function valorDasPecas(pedido: {
+  total_cents: number;
+  shipping_cents?: number | null;
+}): number {
+  return Math.max(0, pedido.total_cents - (pedido.shipping_cents ?? 0));
+}
+
 export async function despacharPurchase(
   supabase: Cliente,
   orderId: string,
@@ -182,7 +208,7 @@ async function despachar(
           comoTeste: permissao.comoTeste,
           eventId: orderId,
           eventTimeSegundos: agoraSegundos,
-          valorCents: pedido.total_cents,
+          valorCents: valorDasPecas(pedido),
           orderNumber: pedido.order_number,
           sourceUrl: `${baseUrl()}/pedido`,
           contents,

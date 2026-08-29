@@ -1,4 +1,5 @@
 import "server-only";
+import { valorDasPecas } from "./despachar";
 import type { createAdminClient } from "@/lib/supabase/server";
 import { podeEnviarConversao } from "./permissao";
 
@@ -86,7 +87,7 @@ export async function consumirPurchaseParaNavegador(
   // O pedido precisa estar pago DE FATO. Não basta existir o registro.
   const { data: pedido } = await supabase
     .from("orders")
-    .select("id, order_number, status, total_cents")
+    .select("id, order_number, status, total_cents, shipping_cents")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -152,7 +153,16 @@ export async function consumirPurchaseParaNavegador(
 
   return {
     eventId: orderId,
-    valueCents: pedido.total_cents,
+    /**
+     * MESMO valor do lado servidor — só as peças, sem frete (29/08/2026).
+     *
+     * Os dois Purchase compartilham o `event_id` (o id do pedido) para a Meta
+     * juntar navegador e CAPI num evento só. Se cada lado mandasse um valor
+     * diferente, a deduplicação continuaria funcionando mas o valor final
+     * dependeria de qual chegou primeiro — receita instável por sorte de
+     * corrida. Ver valorDasPecas em src/lib/tracking/despachar.ts.
+     */
+    valueCents: valorDasPecas(pedido),
     currency: "BRL",
     orderId,
     orderNumber: pedido.order_number,
