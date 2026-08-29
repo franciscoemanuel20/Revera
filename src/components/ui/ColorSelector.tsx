@@ -21,11 +21,39 @@ export interface ColorSelectorProps {
 // ou, na ausência dos dois, só o código como texto. onNeedHelp é opcional
 // de propósito: liga com o fluxo de color_help_requests (enviar foto e
 // pedir ajuda), que é uma tela própria — este componente só expõe o gancho.
+/**
+ * A cartela em FILEIRAS, uma por família (Francisco, 29/08/2026).
+ *
+ * Com 15 cores numa lista que só quebra sozinha, o cliente via um bloco só e
+ * não percebia que existem três conjuntos diferentes. As fileiras são:
+ *
+ *   1. as cores base — 1B, 2, 3, 4, 5, 6, 7;
+ *   2. a escala de grisalho sobre o 1B — 1b10 … 1b80;
+ *   3. a linha 3 — 3.10 … 3.40.
+ *
+ * A família sai do CÓDIGO, que é a convenção do próprio Francisco: "1b" mais
+ * dígitos é grisalho, "3." mais dígitos é linha 3. Qualquer código que não
+ * casar com nenhuma das duas cai na primeira fileira — código novo pode ficar
+ * no lugar errado, mas NUNCA some da tela, que é o desfecho seguro.
+ *
+ * Repare que a 3.10 vive na fileira 3, e não entre as básicas: ela é o
+ * primeiro degrau da linha 3, e estar nos dois lugares é impossível.
+ */
+function separarEmFileiras(colors: ColorOption[]): ColorOption[][] {
+  const grisalho = colors.filter((c) => /^1b\d+$/i.test(c.code));
+  const linha3 = colors.filter((c) => /^3\.\d+$/.test(c.code));
+  const usados = new Set([...grisalho, ...linha3].map((c) => c.id));
+  const base = colors.filter((c) => !usados.has(c.id));
+  return [base, grisalho, linha3].filter((fileira) => fileira.length > 0);
+}
+
 export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: ColorSelectorProps) {
+  const fileiras = separarEmFileiras(colors);
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        {colors.map((color) => {
+      {fileiras.map((fileira, i) => (
+      <div key={i} className="flex flex-wrap gap-2">
+        {fileira.map((color) => {
           const selecionado = color.id === selectedId;
           return (
             /**
@@ -85,6 +113,7 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
           );
         })}
       </div>
+      ))}
       {onNeedHelp ? (
         <button type="button" onClick={onNeedHelp} className="self-start text-sm text-ink underline decoration-gold decoration-2 underline-offset-4">
           Não sei qual cor escolher
