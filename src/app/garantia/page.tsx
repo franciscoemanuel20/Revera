@@ -10,8 +10,9 @@ import type { Metadata } from "next";
  * troca, (c) o enquadramento legal, dizendo que a prótese é "bem não
  * durável".
  *
- * (a) e (b) entraram. O (c) NÃO — e a razão está aqui para ninguém reescrever
- * de boa-fé mais tarde:
+ * (a) e (b) entraram. O (c) NÃO, e depois o próprio Francisco decidiu que a
+ * página não citaria lei nenhuma ("então não escreva a lei, é melhor"). A
+ * razão de (c) fica registrada para ninguém reescrever de boa-fé mais tarde:
  *
  *   O art. 26 do CDC dá 30 dias para reclamar de vício aparente em produto
  *   NÃO durável e 90 dias em produto DURÁVEL. Não durável é o que se esgota
@@ -19,11 +20,16 @@ import type { Metadata } from "next";
  *   de 4 a 18 meses conforme o material e o cuidado; pela definição do
  *   próprio artigo ela é DURÁVEL.
  *
- *   Escrever "bem não durável" na página não encurta o direito de ninguém: só
- *   coloca no ar uma cláusula que o Procon derruba e que, derrubada, enfraquece
- *   o resto da política. O texto abaixo afirma o prazo comercial da Reverá (7
- *   dias úteis) sem declarar prazo legal nenhum — que é o que se pode dizer
- *   com segurança sem parecer jurídico.
+ *   Escrever "bem não durável" na página não encurtaria o direito de ninguém:
+ *   só colocaria no ar uma cláusula que o Procon derruba, e cláusula derrubada
+ *   enfraquece o resto da política — inclusive a parte da troca, que é a que
+ *   de fato protege a operação.
+ *
+ * POR QUE NÃO HÁ ARTIGO CITADO AQUI: decisão do Francisco em 29/08/2026.
+ * Citar artigo transforma a página em contrato e cria a chance de citar
+ * errado. A frase dos 7 dias para desistir CONTINUA na página, em português
+ * comum e sem número de artigo — o direito existe citado ou não, e escondê-lo
+ * seria o único jeito de essa página virar problema.
  *
  * Mesma regra de antes: não acrescente cláusula aqui sem confirmar o fato.
  * Esta página precisa de revisão de advogado antes de virar política
@@ -139,11 +145,9 @@ export default function GarantiaPage() {
           teste dos fios que revela isso logo no primeiro dia.
         </p>
         <p className="text-ink/80">
-          Comprou pelo site e mudou de ideia? O Código de Defesa do Consumidor
-          garante <strong className="text-ink">7 dias corridos</strong> para
-          desistir da compra, contados do recebimento, com a peça sem uso e sem
-          alteração (art. 49). Nada nesta página reduz esse direito nem os
-          demais prazos legais.
+          Mudou de ideia? Dá para desistir da compra em até{" "}
+          <strong className="text-ink">7 dias</strong> do recebimento, com a peça
+          sem uso e sem alteração — é só falar com a gente.
         </p>
         <p className="text-ink/80">
           A durabilidade depois disso depende dos cuidados do dia a dia — o que
