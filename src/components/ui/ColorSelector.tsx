@@ -74,7 +74,12 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
                 selecionado ? "font-semibold text-ink" : "text-ink/55"
               }`}
             >
-              {color.code}
+              {/* `name`, não `code`: o cadastro guarda "1b" minúsculo no
+                  código e "1B" no nome, e é o NOME que sai no aria-label,
+                  na sacola ("Cor 1B") e no pedido. Mostrar "1b" aqui e
+                  "1B" lá faria o cliente e a operação falarem duas línguas
+                  para a mesma cor. */}
+              {color.name}
             </span>
             </span>
           );
