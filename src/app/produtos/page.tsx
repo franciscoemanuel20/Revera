@@ -84,7 +84,13 @@ export default async function ProdutosPage() {
         description: (p.description as string | null) ?? null,
         isFeatured: Boolean(p.is_featured),
         priceCents: precos.length > 0 ? Math.min(...precos) : null,
-        imageUrl: (foto?.url as string | undefined) ?? null,
+        /**
+         * Mesmo fallback da página do produto (ProdutoInterativo.tsx, linha
+         * do `/media/hero`): a Micropele 0,08 e a 0,06 ainda não têm linha em
+         * `product_media`, e sem isto os dois cards do catálogo saíam como
+         * retângulo cinza — no celular, metade da tela vazia logo na entrada.
+         */
+        imageUrl: (foto?.url as string | undefined) ?? "/media/hero/produto-close-1.jpeg",
         imageAlt: (foto?.alt_text as string | undefined) ?? null,
       };
     })
