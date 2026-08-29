@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { produtoEstaVendavel, type ProdutoVitrine } from "@/lib/catalog/vitrine";
 
 export const metadata: Metadata = {
-  title: "Próteses — Reverá",
+  title: "Próteses",
   description:
     "Todas as próteses capilares da Reverá: Micropele 0,08mm e 0,06mm, Cacho Aberto, Cacho Fechado e Afro.",
 };

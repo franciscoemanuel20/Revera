@@ -10,7 +10,7 @@ import { PurchaseTracker } from "./PurchaseTracker";
 import { SuportePosCompra } from "./SuportePosCompra";
 
 export const metadata: Metadata = {
-  title: "Seu pedido — Reverá",
+  title: "Seu pedido",
   // Página de pedido não deve ser indexada nem aparecer em busca.
   robots: { index: false, follow: false },
 };

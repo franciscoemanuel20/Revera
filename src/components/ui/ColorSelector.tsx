@@ -40,7 +40,19 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
               style={!color.photoUrl && color.hexPreview ? { backgroundColor: color.hexPreview } : undefined}
             >
               {color.photoUrl ? (
-                <Image src={color.photoUrl} alt={color.name} fill className="object-cover" />
+                /* `sizes` explícito (29/08/2026). Sem ele o <Image fill> do
+                   Next assume 100vw e pede a foto em 3840px de largura para
+                   um círculo de 44px: 435 KB por cor, 3,4 MB só na cartela.
+                   Medido no site em produção — no 4G as bolinhas apareciam
+                   uma a uma e a pessoa escolhia a cor olhando círculo vazio.
+                   44px é o tamanho real; o dobro cobre telas 2x. */
+                <Image
+                  src={color.photoUrl}
+                  alt={color.name}
+                  fill
+                  sizes="88px"
+                  className="object-cover"
+                />
               ) : !color.hexPreview ? (
                 <span className="flex h-full w-full items-center justify-center text-xs text-ink">
                   {color.code}

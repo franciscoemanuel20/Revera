@@ -7,7 +7,7 @@ import { urlDoWebhook } from "@/lib/payments/webhook-url";
 import { baseUrl } from "@/lib/config/urls";
 
 export const metadata: Metadata = {
-  title: "Pagamento — Reverá",
+  title: "Pagamento",
 };
 
 /**

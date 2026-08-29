@@ -302,7 +302,21 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
   const { data: variantes } = await admin()
     .from("product_variants")
     .select("id, product_id, color_id, size_id, gray_level_id, length_cm, price_cents, compare_at_price_cents, stock_qty")
-    .in("id", variantIds);
+    .in("id", variantIds)
+    /**
+     * Variante INATIVA não volta (29/08/2026).
+     *
+     * `adicionarItem` já recusa variante inativa, mas a LEITURA não filtrava:
+     * quem tinha a variante genérica sem cor na sacola antes de ela ser
+     * aposentada (scripts/criar-variantes-por-cor.mjs) continuava vendo a
+     * linha e conseguia fechar o pedido sem cor nenhuma — exatamente o
+     * defeito que estava sendo corrigido. Sem o filtro, aposentar uma
+     * variante não aposenta os carrinhos que já a carregam.
+     *
+     * A linha some da leitura (o `if (!variante) return []` logo abaixo já
+     * trata esse caso); a linha continua em cart_items até alguém remover.
+     */
+    .eq("is_active", true);
 
   const variantesPorId = new Map((variantes ?? []).map((v) => [v.id as string, v]));
 

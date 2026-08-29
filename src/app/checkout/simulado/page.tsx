@@ -7,7 +7,7 @@ import { formatarBRL } from "@/lib/format/money";
 import { SimuladorAcoes } from "./SimuladorAcoes";
 
 export const metadata: Metadata = {
-  title: "Pagamento simulado — Reverá",
+  title: "Pagamento simulado",
   robots: { index: false, follow: false },
 };
 
