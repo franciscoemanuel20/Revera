@@ -28,8 +28,17 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
         {colors.map((color) => {
           const selecionado = color.id === selectedId;
           return (
+            /**
+             * O CÓDIGO DA COR ESCRITO EMBAIXO (29/08/2026).
+             *
+             * Antes o código só existia no `aria-label` — quem enxerga via oito
+             * bolinhas de cabelo escuro, quase todas parecidas na miniatura, e
+             * não tinha como dizer "quero a 3.10". Agora o código fica visível,
+             * e é o mesmo que aparece na sacola ("Cor 3.10") e no pedido, então
+             * cliente e operação falam a mesma língua.
+             */
+            <span key={color.id} className="flex flex-col items-center gap-1">
             <button
-              key={color.id}
               type="button"
               aria-label={`Cor ${color.name}`}
               aria-pressed={selecionado}
@@ -59,6 +68,15 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
                 </span>
               ) : null}
             </button>
+            <span
+              aria-hidden="true"
+              className={`text-[11px] leading-none tabular-nums ${
+                selecionado ? "font-semibold text-ink" : "text-ink/55"
+              }`}
+            >
+              {color.code}
+            </span>
+            </span>
           );
         })}
       </div>

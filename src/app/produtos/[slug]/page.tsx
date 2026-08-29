@@ -132,6 +132,46 @@ export default async function ProdutoPage({
       alt: (m.alt_text as string | null) ?? produto.name,
     }));
 
+  /**
+   * AS OUTRAS TEXTURAS (29/08/2026).
+   *
+   * Cacheado, crespo e afro não são variantes da Micropele — são PRODUTOS
+   * próprios, com preço próprio (R$ 750 contra R$ 650). Quem chega na
+   * Micropele procurando cacheado não tinha como saber que os outros
+   * existem: até hoje nenhuma página linkava para eles.
+   *
+   * Então em vez de inventar uma dimensão nova de variante, esta tira mostra
+   * os outros produtos ativos e leva até eles. Sai do banco, não de uma lista
+   * escrita à mão — produto que for despublicado some daqui sozinho.
+   */
+  const { data: outros } = await supabase
+    .from("products")
+    .select("slug, name, sort_order, product_variants(is_active, price_cents, stock_qty), product_media(url, type, is_primary, sort_order)")
+    .eq("status", "active")
+    .neq("slug", produto.slug as string)
+    .order("sort_order");
+
+  const outrasTexturas = (outros ?? [])
+    .map((p) => {
+      const vendaveis = (p.product_variants ?? []).filter(
+        (v) => v.is_active && (v.price_cents as number) > 0 && (v.stock_qty as number) > 0
+      );
+      const foto = (p.product_media ?? [])
+        .filter((m) => (m.type ?? "image") === "image")
+        .sort((a, b) => {
+          if (Boolean(b.is_primary) !== Boolean(a.is_primary)) return Boolean(b.is_primary) ? 1 : -1;
+          return ((a.sort_order as number | null) ?? 0) - ((b.sort_order as number | null) ?? 0);
+        })[0];
+      return {
+        slug: p.slug as string,
+        name: p.name as string,
+        priceCents: vendaveis.length > 0 ? Math.min(...vendaveis.map((v) => v.price_cents as number)) : null,
+        imageUrl: (foto?.url as string | undefined) ?? null,
+        vendavel: vendaveis.length > 0,
+      };
+    })
+    .filter((p) => p.vendavel);
+
   const agora = new Date();
   const regrasVigentes = (regras ?? [])
     .filter((r) => {
@@ -210,6 +250,7 @@ export default async function ProdutoPage({
         photoUrl: (c.photo_url as string | null) ?? null,
       }))}
       discountRules={regrasVigentes}
+      outrasTexturas={outrasTexturas}
     />
     </>
   );

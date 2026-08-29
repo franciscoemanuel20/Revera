@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { ColorSelector, type ColorOption } from "@/components/ui/ColorSelector";
@@ -46,6 +47,16 @@ export interface ProdutoInterativoProps {
   // precisa dele) — só a UI usa, para mostrar o texto cadastrado no admin
   // em vez de "a partir de N unidades" quando existir um.
   discountRules: Array<QuantityDiscountRule & { label: string | null }>;
+  /**
+   * Os outros produtos ativos — cacheado, crespo, afro. Não são variantes
+   * desta peça: são produtos próprios, com preço próprio. Ver page.tsx.
+   */
+  outrasTexturas?: Array<{
+    slug: string;
+    name: string;
+    priceCents: number | null;
+    imageUrl: string | null;
+  }>;
 }
 
 // Galeria do produto. Desde 27/08/2026 as fotos vêm de `product_media`, uma
@@ -83,6 +94,7 @@ export function ProdutoInterativo({
   variants,
   colors,
   discountRules,
+  outrasTexturas = [],
 }: ProdutoInterativoProps) {
   const router = useRouter();
   const { adicionarItem, abrirDrawer, pendente } = useCart();
@@ -323,6 +335,54 @@ export function ProdutoInterativo({
           </Reveal>
         </div>
       </div>
+
+      {/* OUTRAS TEXTURAS — cacheado, crespo e afro são produtos próprios, com
+          preço próprio, e até 29/08/2026 não eram linkados de lugar nenhum.
+          Quem chega aqui procurando cacheado precisa conseguir chegar lá. */}
+      {outrasTexturas.length > 0 ? (
+        <section className="flex flex-col gap-4 border-t border-sand pt-8">
+          <div className="flex flex-col gap-1">
+            <span className="eyebrow-ink">Outras texturas</span>
+            <p className="text-sm text-ink/60">
+              Cacheada, crespa e afro são peças próprias, com trama e preço
+              próprios — não é a mesma peça em outro acabamento.
+            </p>
+          </div>
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {outrasTexturas.map((outro) => (
+              <li key={outro.slug}>
+                <Link
+                  href={`/produtos/${outro.slug}`}
+                  className="group flex items-center gap-3 rounded-lg border border-sand p-3 transition-shadow duration-300 hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                >
+                  <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-sand">
+                    {outro.imageUrl ? (
+                      <Image
+                        src={outro.imageUrl}
+                        alt={outro.name}
+                        fill
+                        sizes="112px"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]"
+                      />
+                    ) : null}
+                  </span>
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-ink">{outro.name}</span>
+                    {outro.priceCents != null ? (
+                      <span className="text-sm text-ink/60">
+                        {(outro.priceCents / 100).toLocaleString("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        })}
+                      </span>
+                    ) : null}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </main>
   );
 }
