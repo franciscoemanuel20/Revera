@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import Image from "next/image";
 import { Price } from "./Price";
 import { QuantitySelector } from "./QuantitySelector";
 import { Button } from "./Button";
@@ -97,6 +98,24 @@ export function CartDrawer({
           ) : (
             items.map((item) => (
               <li key={item.id} className="flex gap-3">
+                {/* A FOTO DA COR NA LINHA (29/08/2026).
+                    O drawer já recebia `imageUrl` (a foto da cor, vinda de
+                    colors.photo_url) e nunca a mostrava. Desde que a cor
+                    virou variante, três linhas podem se chamar "Micropele
+                    0,08mm" e se distinguir só por um rótulo pequeno — a
+                    miniatura é o que faz a diferença ser vista antes de
+                    fechar o pedido. A página /carrinho já fazia isso. */}
+                {item.imageUrl ? (
+                  <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-sand">
+                    <Image
+                      src={item.imageUrl}
+                      alt={item.variantLabel ?? item.name}
+                      fill
+                      sizes="112px"
+                      className="object-cover"
+                    />
+                  </span>
+                ) : null}
                 <div className="flex-1">
                   <p className="font-medium text-ink">{item.name}</p>
                   {item.variantLabel ? <p className="text-sm text-ink/60">{item.variantLabel}</p> : null}

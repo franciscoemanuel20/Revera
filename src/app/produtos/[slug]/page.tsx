@@ -76,7 +76,7 @@ export default async function ProdutoPage({
   const { data: produto } = await supabase
     .from("products")
     .select(
-      "id, slug, name, description, base_thickness_mm, is_featured, product_variants(id, color_id, price_cents, compare_at_price_cents, sku, stock_qty, is_active), product_media(url, alt_text, type, is_primary, sort_order)"
+      "id, slug, name, description, base_thickness_mm, is_featured, product_variants(id, color_id, price_cents, compare_at_price_cents, sku, stock_qty, is_active), product_media(url, alt_text, type, is_primary, sort_order, variant_id)"
     )
     .eq("slug", slug)
     .maybeSingle();
@@ -130,6 +130,17 @@ export default async function ProdutoPage({
     .map((m) => ({
       src: m.url as string,
       alt: (m.alt_text as string | null) ?? produto.name,
+      /**
+       * A foto pertence a uma VARIANTE específica? (29/08/2026)
+       *
+       * `product_media.variant_id` já existia no schema e nunca era lido.
+       * Quando preenchido, a foto deixa de ser genérica e passa a ser "a
+       * peça naquela cor" — clicar nela escolhe a cor, e escolher a cor traz
+       * a foto dela para a galeria. Hoje nenhuma linha tem variant_id, então
+       * nada muda na tela; o dia em que alguém fotografar a peça por cor,
+       * funciona sem tocar em código.
+       */
+      variantId: (m.variant_id as string | null) ?? null,
     }));
 
   /**

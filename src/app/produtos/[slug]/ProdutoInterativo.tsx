@@ -29,6 +29,11 @@ interface VariantData {
 export interface FotoProduto {
   src: string;
   alt: string;
+  /**
+   * Variante que esta foto retrata, quando ela retrata uma. Nulo para foto
+   * genérica do produto (é o caso de todas hoje). Ver page.tsx.
+   */
+  variantId?: string | null;
 }
 
 export interface ProdutoInterativoProps {
@@ -139,6 +144,16 @@ export function ProdutoInterativo({
     colors.length === 1 ? colors[0]!.id : null
   );
   const [quantidade, setQuantidade] = useState(1);
+  /**
+   * CONFIRMAÇÃO DISCRETA, NO LUGAR DO DRAWER (29/08/2026).
+   *
+   * Antes, adicionar abria a sacola por cima da página: a pessoa que queria
+   * levar três peças tinha que fechar o painel a cada item. Agora a página
+   * fica onde está e só avisa. `chave` existe para o aviso reaparecer quando
+   * a mesma pessoa adiciona de novo — sem ela, o segundo clique não mostra
+   * nada porque a mensagem já era a mesma.
+   */
+  const [confirmacao, setConfirmacao] = useState<{ texto: string; chave: number } | null>(null);
 
   const varianteSelecionada =
     (corSelecionadaId ? variantePorCor.get(corSelecionadaId) : undefined) ??
@@ -171,6 +186,14 @@ export function ProdutoInterativo({
    */
   const jaMediuVisualizacao = useRef(false);
 
+  // O aviso some sozinho depois de 4s — tempo de ler sem virar entulho na
+  // tela de quem está escolhendo a próxima peça.
+  useEffect(() => {
+    if (!confirmacao) return;
+    const t = setTimeout(() => setConfirmacao(null), 4000);
+    return () => clearTimeout(t);
+  }, [confirmacao]);
+
   const resultadoDesconto = varianteExibicao
     ? applyQuantityDiscount(varianteExibicao.priceCents, quantidade, discountRules)
     : null;
@@ -198,6 +221,11 @@ export function ProdutoInterativo({
             foto principal dá o leve zoom (scale 1.03) pedido para fotos de
             produto/cor, dentro de container overflow-hidden (nunca anima
             width/height, só transform). */}
+        {/* `sm:sticky` — a galeria acompanha a rolagem enquanto o cliente
+            passa pelas cores, quantidade e degraus de desconto. No celular
+            fica no fluxo normal: grudar a imagem lá comeria metade da tela
+            de quem já está decidindo. */}
+        <div className="sm:sticky" style={{ top: HEADER_HEIGHT_PX + 24 }}>
         <Reveal className="flex flex-col gap-3">
           <div className="group relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand">
             <Image
@@ -217,17 +245,35 @@ export function ProdutoInterativo({
                   type="button"
                   aria-label={`Ver foto ${i + 1} de ${fotos.length}`}
                   aria-pressed={fotoAtivaIndex === i}
-                  onClick={() => setFotoAtivaIndex(i)}
+                  onClick={() => {
+                    setFotoAtivaIndex(i);
+                    /**
+                     * Foto de uma cor específica também ESCOLHE a cor
+                     * (29/08/2026). Se a pessoa clica na foto da peça na cor
+                     * 5, ela está dizendo "quero essa" — e o pedido tem que
+                     * sair com a cor 5, não com a que estava marcada antes.
+                     * Só age quando a foto tem variante; foto genérica
+                     * continua sendo só troca de imagem.
+                     */
+                    const corDaFoto = foto.variantId
+                      ? variants.find((v) => v.id === foto.variantId)?.colorId
+                      : null;
+                    if (corDaFoto) setCorSelecionadaId(corDaFoto);
+                  }}
                   className={`relative aspect-square w-16 shrink-0 overflow-hidden rounded-md border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${
                     fotoAtivaIndex === i ? "border-gold" : "border-sand"
                   }`}
                 >
-                  <Image src={foto.src} alt="" fill className="object-cover" />
+                  {/* `sizes` explícito: sem ele o Next pede a foto em 3840px
+                      para uma miniatura de 64px — o mesmo defeito que a
+                      cartela de cores tinha. 128px cobre telas 2x. */}
+                  <Image src={foto.src} alt="" fill sizes="128px" className="object-cover" />
                 </button>
               ))}
             </div>
           ) : null}
         </Reveal>
+        </div>
 
         {/* Painel de compra — sticky no desktop (lg:sticky), logo abaixo do
             header fixo (top = altura do header + respiro). No mobile segue
@@ -319,7 +365,10 @@ export function ProdutoInterativo({
                       quantidade,
                       precoUnitarioCents: resultadoDesconto?.unitPriceCents ?? varianteSelecionada.priceCents,
                     });
-                    abrirDrawer();
+                    setConfirmacao({
+                      texto: "Produto adicionado ao carrinho",
+                      chave: Date.now(),
+                    });
                   }}
                 >
                   {varianteExibicao.stockQty <= 0
@@ -328,13 +377,30 @@ export function ProdutoInterativo({
                       ? "Escolha uma cor"
                       : pendente
                         ? "Adicionando…"
-                        : "Comprar agora"}
+                        : "Adicionar ao carrinho"}
                 </Button>
               ) : (
                 <Button size="lg" disabled title="Em breve">
-                  Comprar agora — Em breve
+                  Adicionar ao carrinho — Em breve
                 </Button>
               )}
+              {confirmacao ? (
+                <div
+                  key={confirmacao.chave}
+                  role="status"
+                  aria-live="polite"
+                  className="flex items-center justify-between gap-3 rounded-md bg-moss px-4 py-3 text-sm text-paper"
+                >
+                  <span>{confirmacao.texto}</span>
+                  <button
+                    type="button"
+                    onClick={abrirDrawer}
+                    className="shrink-0 underline underline-offset-2 opacity-90 hover:opacity-100"
+                  >
+                    ver sacola
+                  </button>
+                </div>
+              ) : null}
               <p className="text-xs text-ink/50">
                 Frete calculado na próxima etapa, pelo CEP de entrega.
               </p>
