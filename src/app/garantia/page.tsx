@@ -39,6 +39,13 @@ import type { Metadata } from "next";
  */
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+import { textosDaPagina } from "@/lib/conteudo/textos";
+
+/**
+ * Mesma razão de /cuidados: a página segue estática, e o painel revalida na
+ * hora ao salvar. Este número é só a rede de segurança.
+ */
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Garantia",
@@ -53,65 +60,51 @@ export const metadata: Metadata = {
   },
 };
 
-export default function GarantiaPage() {
+export default async function GarantiaPage() {
+  const t = await textosDaPagina("garantia");
+
   return (
     <main
       className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
       <Reveal className="flex flex-col items-center gap-2 text-center">
-        <span className="eyebrow-ink">Pós-venda</span>
-        <h1 className="font-display text-3xl text-ink">Garantia</h1>
+        <span className="eyebrow-ink">{t("garantia.eyebrow")}</span>
+        <h1 className="font-display text-3xl text-ink">{t("garantia.titulo")}</h1>
       </Reveal>
 
       <Reveal className="flex flex-col gap-6 text-ink/80">
-        <p>
-          Antes do envio, toda prótese passa por um teste de qualidade. Ainda
-          assim, o teste que decide é o seu, e ele é feito no minuto em que a
-          peça chega — antes de cortar, antes de moldar, antes de colar.
-        </p>
+        <p>{t("garantia.intro")}</p>
       </Reveal>
 
       {/* O TESTE — é a parte prática da página e a que evita a maioria dos
           problemas. Passo a passo, e não parágrafo corrido, porque a pessoa
           vai ler isso com a peça na mão. */}
       <Reveal className="flex flex-col gap-4">
-        <h2 className="font-display text-2xl text-ink">O teste dos fios</h2>
+        <h2 className="font-display text-2xl text-ink">{t("garantia.teste.titulo")}</h2>
         <ol className="flex flex-col gap-4 text-ink/80">
           <li className="flex gap-3">
             <span className="font-display text-lg text-gold">1</span>
-            <span>
-              Coloque um pano claro embaixo da peça, para enxergar qualquer fio
-              que soltar.
-            </span>
+            <span>{t("garantia.passo1")}</span>
           </li>
           <li className="flex gap-3">
             <span className="font-display text-lg text-gold">2</span>
-            <span>
-              Passe a mão sobre os fios, com suavidade. Sem puxar, sem apertar.
-            </span>
+            <span>{t("garantia.passo2")}</span>
           </li>
           <li className="flex gap-3">
             <span className="font-display text-lg text-gold">3</span>
-            <span>
-              É normal soltar alguns fios logo no começo — são fios que ficaram
-              soltos da confecção e não estavam presos na base.
-            </span>
+            <span>{t("garantia.passo3")}</span>
           </li>
           <li className="flex gap-3">
             <span className="font-display text-lg text-gold">4</span>
-            <span>
-              Continue por cerca de um minuto. Depois disso, passe a mão de
-              novo e olhe o pano: a queda deve ter parado.
-            </span>
+            <span>{t("garantia.passo4")}</span>
           </li>
           <li className="flex gap-3">
             <span className="font-display text-lg text-gold">5</span>
             <span>
-              Se ainda estiver caindo fio depois desse minuto,{" "}
-              <strong className="text-ink">pare por aí</strong>. Não corte, não
-              modele, não cole. Fale com a gente com a peça do jeito que
-              chegou.
+              {t("garantia.passo5.antes")}{" "}
+              <strong className="text-ink">{t("garantia.passo5.destaque")}</strong>
+              {t("garantia.passo5.depois")}
             </span>
           </li>
         </ol>
@@ -121,44 +114,33 @@ export default function GarantiaPage() {
           direito: peça cortada e colada não volta ao estado em que chegou, e é
           isso que fecha a porta da troca. */}
       <Reveal className="flex flex-col gap-4">
-        <h2 className="font-display text-2xl text-ink">Até quando dá para trocar</h2>
-        <p className="text-ink/80">
-          Enquanto a peça está como chegou — sem corte, sem modelagem e sem
-          cola —, ela pode ser devolvida e trocada por outra.
-        </p>
-        <p className="text-ink/80">
-          Depois de cortada, moldada e colada na cabeça, a prótese não volta ao
-          estado em que foi enviada: ela foi ajustada para uma pessoa só. A
-          partir daí não há mais devolução nem troca por queda de fio, e é por
-          isso que o teste acima é responsabilidade sua e vem antes de qualquer
-          outra coisa.
-        </p>
+        <h2 className="font-display text-2xl text-ink">{t("garantia.troca.titulo")}</h2>
+        <p className="text-ink/80">{t("garantia.troca.p1")}</p>
+        <p className="text-ink/80">{t("garantia.troca.p2")}</p>
         <p className="rounded-md border border-gold/40 bg-gold/5 px-4 py-3 text-sm text-ink/80">
-          Um minuto passando a mão nos fios, antes da tesoura, é o que separa
-          uma troca simples de uma peça que não tem mais como voltar.
+          {t("garantia.troca.aviso")}
         </p>
       </Reveal>
 
       <Reveal className="flex flex-col gap-4">
-        <h2 className="font-display text-2xl text-ink">Prazos</h2>
+        <h2 className="font-display text-2xl text-ink">{t("garantia.prazos.titulo")}</h2>
         <p className="text-ink/80">
-          Você tem <strong className="text-ink">7 dias úteis</strong> a partir do
-          recebimento para comunicar defeito de fabricação — e é justamente o
-          teste dos fios que revela isso logo no primeiro dia.
+          {t("garantia.prazos.defeito.antes")}{" "}
+          <strong className="text-ink">{t("garantia.prazos.defeito.prazo")}</strong>{" "}
+          {t("garantia.prazos.defeito.depois")}
         </p>
         <p className="text-ink/80">
-          Mudou de ideia? Dá para desistir da compra em até{" "}
-          <strong className="text-ink">7 dias</strong> do recebimento, com a peça
-          sem uso e sem alteração — é só falar com a gente.
+          {t("garantia.prazos.desistir.antes")}{" "}
+          <strong className="text-ink">{t("garantia.prazos.desistir.prazo")}</strong>{" "}
+          {t("garantia.prazos.desistir.depois")}
         </p>
         <p className="text-ink/80">
-          A durabilidade depois disso depende dos cuidados do dia a dia — o que
-          usar, como lavar e o que evitar está em{" "}
+          {t("garantia.prazos.cuidados.antes")}{" "}
           <a
             href="/cuidados"
             className="text-ink underline decoration-gold decoration-2 underline-offset-4"
           >
-            Cuidados
+            {t("garantia.prazos.cuidados.link")}
           </a>
           .
         </p>

@@ -15,39 +15,31 @@ import type { Metadata } from "next";
 // mostra o processo, por isso é o elemento central da página.
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+import { textosDaPagina } from "@/lib/conteudo/textos";
 
+/**
+ * O texto destes fatores mudou de lugar em 30/08/2026: agora mora em
+ * `src/lib/conteudo/registro.ts`, junto do rótulo que o painel mostra.
+ * Aqui ficam só as CHAVES — mesmo tratamento que `cuidados/page.tsx` deu
+ * ao array `BLOCOS`.
+ */
 const FATORES = [
-  {
-    titulo: "A peça",
-    texto:
-      "A qualidade da base e do fio é o ponto de partida — mas só o ponto de partida. Uma peça bem-feita ainda depende de tudo abaixo para o resultado final.",
-  },
-  {
-    titulo: "A escolha da peça certa",
-    texto:
-      "Espessura de base e cor do fio precisam combinar com o caso de quem vai usar. A mesma peça pode ler de formas diferentes em situações diferentes.",
-  },
-  {
-    titulo: "Preparação",
-    texto:
-      "Como a base é preparada antes da aplicação — moldagem, ajuste ao formato da cabeça — influencia diretamente no caimento da peça.",
-  },
-  {
-    titulo: "Corte",
-    texto:
-      "Um corte malfeito chama atenção mesmo numa base excelente. É trabalho manual do profissional, feito peça por peça.",
-  },
-  {
-    titulo: "Coloração",
-    texto:
-      "Ajustar o tom do fio à raiz e ao restante do cabelo (quando há) é o que evita um contraste perceptível na linha de transição.",
-  },
-  {
-    titulo: "Técnica de aplicação",
-    texto:
-      "O mesmo material aplicado por técnicas diferentes produz resultados diferentes. É a parte que depende inteiramente do profissional, não do produto.",
-  },
-];
+  { titulo: "naturalidade.fator1.titulo", texto: "naturalidade.fator1.texto" },
+  { titulo: "naturalidade.fator2.titulo", texto: "naturalidade.fator2.texto" },
+  { titulo: "naturalidade.fator3.titulo", texto: "naturalidade.fator3.texto" },
+  { titulo: "naturalidade.fator4.titulo", texto: "naturalidade.fator4.texto" },
+  { titulo: "naturalidade.fator5.titulo", texto: "naturalidade.fator5.texto" },
+  { titulo: "naturalidade.fator6.titulo", texto: "naturalidade.fator6.texto" },
+] as const;
+
+/**
+ * A página continua sendo gerada estaticamente — ler o banco a cada visita
+ * seria pagar uma consulta por visitante para um texto que muda uma vez por
+ * mês. O painel chama `revalidatePath` ao salvar, então a edição aparece na
+ * hora; este número é só a rede de segurança para o caso de a revalidação
+ * não acontecer.
+ */
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Naturalidade fio a fio",
@@ -62,24 +54,24 @@ export const metadata: Metadata = {
   },
 };
 
-export default function NaturalidadePage() {
+export default async function NaturalidadePage() {
+  const t = await textosDaPagina("naturalidade");
+
   return (
     <main
       className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
       <Reveal className="flex flex-col items-center gap-2 text-center">
-        <span className="eyebrow-ink">A pergunta mais comum</span>
+        <span className="eyebrow-ink">{t("naturalidade.eyebrow")}</span>
         <h1 className="font-display text-3xl text-ink">
-          Vai parecer artificial?
+          {t("naturalidade.titulo")}
         </h1>
       </Reveal>
 
       <Reveal>
         <blockquote className="surface-elevada rounded-lg border-l-4 border-l-gold px-6 py-6 text-lg italic text-paper">
-          “A naturalidade do resultado depende não apenas da qualidade da
-          prótese, mas também da escolha da peça, preparação, corte,
-          coloração e técnicas utilizadas pelo profissional.”
+          {t("naturalidade.citacao")}
         </blockquote>
       </Reveal>
 
@@ -91,10 +83,10 @@ export default function NaturalidadePage() {
             preload="metadata"
             className="w-full rounded-lg bg-ink"
           >
-            Seu navegador não reproduz este vídeo.
+            {t("naturalidade.video.fallback")}
           </video>
           <p className="text-sm text-ink/60">
-            Vídeo real do processo de implantação da prótese.
+            {t("naturalidade.video.legenda")}
           </p>
         </section>
       </Reveal>
@@ -102,13 +94,10 @@ export default function NaturalidadePage() {
       <Reveal>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
           <h2 className="font-display text-xl text-ink">
-            O que realmente influencia o resultado
+            {t("naturalidade.influencia.titulo")}
           </h2>
           <p className="text-ink/80">
-            Naturalidade não é uma característica única do produto — é a soma
-            de seis coisas. Uma peça de qualidade não compensa sozinha um
-            corte malfeito, e um bom corte não compensa uma peça errada para
-            o caso.
+            {t("naturalidade.influencia.texto")}
           </p>
         </section>
       </Reveal>
@@ -117,8 +106,8 @@ export default function NaturalidadePage() {
         {FATORES.map((fator, i) => (
           <Reveal key={fator.titulo} delayMs={i * 60}>
             <section className="flex flex-col gap-2 border-t border-sand pt-6">
-              <h3 className="font-display text-lg text-ink">{fator.titulo}</h3>
-              <p className="text-ink/80">{fator.texto}</p>
+              <h3 className="font-display text-lg text-ink">{t(fator.titulo)}</h3>
+              <p className="text-ink/80">{t(fator.texto)}</p>
             </section>
           </Reveal>
         ))}
@@ -131,10 +120,7 @@ export default function NaturalidadePage() {
               Retirado em 29/08/2026. A POSTURA continua: a página não usa
               antes e depois, e agora isso é apresentado como escolha, que é
               o que de fato é. */}
-          Não usamos foto de antes e depois. O resultado depende da escolha da
-          peça, da implantação e do corte — a foto de outra pessoa prometeria
-          um efeito que não está sob nosso controle. Preferimos mostrar o
-          processo real e explicar o que pesa de verdade.
+          {t("naturalidade.aviso")}
         </p>
       </Reveal>
     </main>

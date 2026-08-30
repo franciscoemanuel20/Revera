@@ -131,5 +131,12 @@ const NAV_ITEMS = [
   { href: "/admin/internacional", label: "Internacional" },
   { href: "/admin/solicitacoes", label: "Solicitações" },
   { href: "/admin/conteudo", label: "Conteúdo" },
+  // Entram em 30/08/2026, do pedido do Francisco de mexer no site sem
+  // depender de deploy. Ficam ao lado de "Conteúdo" e não dentro dele
+  // porque são coisas diferentes: "Conteúdo" é o que já vinha do banco
+  // (FAQ, depoimentos), "Textos" é o que estava preso no código, e "Fotos"
+  // é arquivo.
+  { href: "/admin/textos", label: "Textos" },
+  { href: "/admin/midia", label: "Fotos" },
   { href: "/admin/configuracoes", label: "Configurações" },
 ] as const;

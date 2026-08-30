@@ -5,6 +5,12 @@
 // campo, conversão texto->null feita aqui (não no zod da action), Toast
 // para erro, e aqui também para sucesso (a action não redireciona, porque
 // não há "página seguinte" — o formulário só limpa e mostra confirmação).
+//
+// Os rótulos vêm prontos por prop, não de `textosDaPagina` chamado aqui
+// dentro: isto é componente cliente, e quem lê o registro de conteúdo é
+// sempre a página server (ver page.tsx, 30/08/2026) — mistura das duas
+// coisas faria o texto editável depender de uma consulta ao banco rodando
+// no navegador do visitante.
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
@@ -13,7 +19,23 @@ import { enviarLeadProfissionalAction } from "./actions";
 
 const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink";
 
-export function ProfessionalLeadForm() {
+export interface ProfessionalLeadFormTextos {
+  nomeRotulo: string;
+  telefoneRotulo: string;
+  telefoneDica: string;
+  emailRotulo: string;
+  emailDica: string;
+  empresaRotulo: string;
+  empresaDica: string;
+  cidadeRotulo: string;
+  cidadeDica: string;
+  mensagemRotulo: string;
+  mensagemDica: string;
+  botaoEnviar: string;
+  mensagemSucesso: string;
+}
+
+export function ProfessionalLeadForm({ textos }: { textos: ProfessionalLeadFormTextos }) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -57,7 +79,7 @@ export function ProfessionalLeadForm() {
   if (enviado) {
     return (
       <Toast
-        message="Recebemos seu contato. Nossa equipe entra em contato para apresentar as condições."
+        message={textos.mensagemSucesso}
         variant="success"
         onClose={() => setEnviado(false)}
       />
@@ -68,7 +90,7 @@ export function ProfessionalLeadForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
       {erro ? <Toast message={erro} variant="error" onClose={() => setErro(null)} /> : null}
 
-      <FormField label="Nome" error={null}>
+      <FormField label={textos.nomeRotulo} error={null}>
         {(props) => (
           <input
             {...props}
@@ -80,7 +102,7 @@ export function ProfessionalLeadForm() {
         )}
       </FormField>
 
-      <FormField label="Telefone" hint="Com DDD." error={null}>
+      <FormField label={textos.telefoneRotulo} hint={textos.telefoneDica} error={null}>
         {(props) => (
           <input
             {...props}
@@ -93,7 +115,7 @@ export function ProfessionalLeadForm() {
         )}
       </FormField>
 
-      <FormField label="E-mail" hint="Opcional." error={null}>
+      <FormField label={textos.emailRotulo} hint={textos.emailDica} error={null}>
         {(props) => (
           <input
             {...props}
@@ -105,7 +127,7 @@ export function ProfessionalLeadForm() {
         )}
       </FormField>
 
-      <FormField label="Nome do salão ou barbearia" hint="Opcional." error={null}>
+      <FormField label={textos.empresaRotulo} hint={textos.empresaDica} error={null}>
         {(props) => (
           <input
             {...props}
@@ -116,7 +138,7 @@ export function ProfessionalLeadForm() {
         )}
       </FormField>
 
-      <FormField label="Cidade" hint="Opcional." error={null}>
+      <FormField label={textos.cidadeRotulo} hint={textos.cidadeDica} error={null}>
         {(props) => (
           <input
             {...props}
@@ -127,7 +149,7 @@ export function ProfessionalLeadForm() {
         )}
       </FormField>
 
-      <FormField label="Mensagem" hint="Conte um pouco sobre o volume que você trabalha. Opcional." error={null}>
+      <FormField label={textos.mensagemRotulo} hint={textos.mensagemDica} error={null}>
         {(props) => (
           <textarea
             {...props}
@@ -140,7 +162,7 @@ export function ProfessionalLeadForm() {
       </FormField>
 
       <Button type="submit" disabled={enviando}>
-        {enviando ? "Enviando…" : "Quero ser contatado"}
+        {enviando ? "Enviando…" : textos.botaoEnviar}
       </Button>
     </form>
   );

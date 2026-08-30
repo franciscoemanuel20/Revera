@@ -6,6 +6,7 @@ import { SocialProof } from "@/components/ui/SocialProof";
 import { TrustBar } from "@/components/ui/TrustBar";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createClient } from "@/lib/supabase/server";
+import { textosDaPagina } from "@/lib/conteudo/textos";
 import {
   escolherProdutoVitrine,
   linkDoProdutoVitrine,
@@ -33,6 +34,7 @@ import {
 // cores/page.tsx e faq/page.tsx já usam para as tabelas delas — sem filtro
 // redundante aqui, a RLS já resolve quem pode ver o quê.
 export default async function HomePage() {
+  const t = await textosDaPagina("home");
   const supabase = await createClient();
 
   // P0-1 (27/08/2026): o destino dos CTAs sai do BANCO, não de um slug fixo.
@@ -98,13 +100,11 @@ export default async function HomePage() {
             className="h-auto w-[250px] sm:w-[330px]"
           />
 
-          <span className="eyebrow">Base micropele 0,08mm</span>
+          <span className="eyebrow">{t("home.hero.eyebrow")}</span>
           <h1 className="max-w-2xl text-balance font-display text-4xl leading-[1.05] text-paper sm:text-[clamp(2.75rem,5vw,4rem)]">
-            Prótese capilar com acabamento natural
+            {t("home.hero.titulo")}
           </h1>
-          <p className="max-w-xl text-balance text-paper/70">
-            Envio para todo o Brasil.
-          </p>
+          <p className="max-w-xl text-balance text-paper/70">{t("home.hero.subtitulo")}</p>
 
           <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center">
             {/* "Comprar agora" só aparece quando existe algo comprável. Um
@@ -114,7 +114,7 @@ export default async function HomePage() {
             {temProduto ? (
               <Link href={linkProduto} className="w-full sm:w-auto">
                 <Button size="lg" className="w-full">
-                  Comprar agora
+                  {t("home.hero.botaoComprar")}
                 </Button>
               </Link>
             ) : null}
@@ -131,7 +131,7 @@ export default async function HomePage() {
                     : "w-full"
                 }
               >
-                Conheça nossas próteses
+                {t("home.hero.botaoConhecer")}
               </Button>
             </Link>
           </div>
@@ -147,9 +147,9 @@ export default async function HomePage() {
           por palavra — não é copy nova, não invente variação dele. */}
       <section className="w-full bg-ink px-6 py-16 sm:py-20">
         <Reveal className="mx-auto flex w-full max-w-3xl flex-col items-center gap-6 text-center">
-          <span className="eyebrow">Naturalidade</span>
+          <span className="eyebrow">{t("home.naturalidade.eyebrow")}</span>
           <h2 className="text-balance font-display text-2xl text-paper sm:text-3xl">
-            Implantação real, fio a fio
+            {t("home.naturalidade.titulo")}
           </h2>
           <div className="surface-elevada w-full overflow-hidden rounded-lg p-1.5 sm:p-2">
             <video
@@ -162,9 +162,7 @@ export default async function HomePage() {
             </video>
           </div>
           <p className="max-w-2xl text-balance text-paper/75">
-            A naturalidade do resultado depende não apenas da qualidade da
-            prótese, mas também da escolha da peça, preparação, corte,
-            coloração e técnicas utilizadas pelo profissional.
+            {t("home.naturalidade.texto")}
           </p>
         </Reveal>
       </section>
@@ -180,12 +178,9 @@ export default async function HomePage() {
           />
         </Reveal>
         <Reveal delayMs={120} className="flex flex-col gap-3 sm:w-1/2">
-          <span className="eyebrow-ink">Linha micropele</span>
-          <h2 className="font-display text-2xl text-ink">A mais fina da linha</h2>
-          <p className="text-ink/80">
-            Base ultrafina de 0,08mm, com acabamento natural na linha frontal —
-            o carro-chefe da Reverá.
-          </p>
+          <span className="eyebrow-ink">{t("home.micropele.eyebrow")}</span>
+          <h2 className="font-display text-2xl text-ink">{t("home.micropele.titulo")}</h2>
+          <p className="text-ink/80">{t("home.micropele.texto")}</p>
           {/* Sem produto publicado, este link vai para /cores — que existe e
               mostra as cores reais — em vez de para a página do produto que
               ainda não está no ar (P0-1). */}
@@ -194,8 +189,8 @@ export default async function HomePage() {
             className="self-start text-ink underline decoration-gold decoration-2 underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
             {temProduto
-              ? "Ver detalhes e cores disponíveis"
-              : "Ver as cores disponíveis"}
+              ? t("home.micropele.linkComProduto")
+              : t("home.micropele.linkSemProduto")}
           </Link>
         </Reveal>
       </section>
@@ -210,6 +205,8 @@ export default async function HomePage() {
         <section className="w-full bg-paper px-6 py-16">
           <div className="mx-auto w-full max-w-5xl">
             <SocialProof
+              eyebrow={t("home.depoimentos.eyebrow")}
+              titulo={t("home.depoimentos.titulo")}
               reviews={(avaliacoes ?? []).map((r) => ({
                 customerName: r.customer_name as string,
                 city: r.city as string | null,

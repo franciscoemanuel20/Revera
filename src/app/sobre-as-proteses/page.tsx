@@ -21,6 +21,16 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+import { textosDaPagina } from "@/lib/conteudo/textos";
+
+/**
+ * A página continua sendo gerada estaticamente — ler o banco a cada visita
+ * seria pagar uma consulta por visitante para um texto que muda uma vez por
+ * mês. O painel chama `revalidatePath` ao salvar, então a edição aparece na
+ * hora; este número é só a rede de segurança para o caso de a revalidação
+ * não acontecer.
+ */
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Sobre as próteses",
@@ -35,45 +45,33 @@ export const metadata: Metadata = {
   },
 };
 
-export default function SobreAsProtesesPage() {
+export default async function SobreAsProtesesPage() {
+  const t = await textosDaPagina("sobre");
+
   return (
     <main
       className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
       <Reveal className="flex flex-col items-center gap-2 text-center">
-        <span className="eyebrow-ink">Para quem nunca usou</span>
+        <span className="eyebrow-ink">{t("sobre.eyebrow")}</span>
         <h1 className="font-display text-3xl text-ink">
-          O que é uma prótese capilar
+          {t("sobre.titulo")}
         </h1>
-        <p className="max-w-prose text-ink/70">
-          Um guia simples, sem termo técnico sem explicação, para entender do
-          que a peça é feita e o que muda de uma base para outra.
-        </p>
+        <p className="max-w-prose text-ink/70">{t("sobre.intro")}</p>
       </Reveal>
 
       <Reveal>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
-          <h2 className="font-display text-xl text-ink">O que é</h2>
-          <p className="text-ink/80">
-            A prótese capilar é uma peça feita com fios aplicados a uma base
-            que se fixa no couro cabeludo. A função da base é servir de
-            suporte para os fios exatamente onde não há mais cabelo — por
-            isso a aparência da base (mais discreta ou mais grossa, mais
-            transparente ou mais opaca) importa tanto quanto os fios em si.
-          </p>
+          <h2 className="font-display text-xl text-ink">{t("sobre.oQueE.titulo")}</h2>
+          <p className="text-ink/80">{t("sobre.oQueE.texto")}</p>
         </section>
       </Reveal>
 
       <Reveal delayMs={60}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
-          <h2 className="font-display text-xl text-ink">O que é a base</h2>
-          <p className="text-ink/80">
-            A base é a membrana onde cada fio é fixado, um a um. É ela que
-            fica em contato com o couro cabeludo e que dá o formato da peça.
-            A espessura dessa membrana — medida em milímetros — é o principal
-            número técnico que aparece quando se fala de prótese capilar.
-          </p>
+          <h2 className="font-display text-xl text-ink">{t("sobre.oQueEABase.titulo")}</h2>
+          <p className="text-ink/80">{t("sobre.oQueEABase.texto")}</p>
         </section>
       </Reveal>
 
@@ -101,63 +99,44 @@ export default function SobreAsProtesesPage() {
       <Reveal delayMs={0}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
           <h2 className="font-display text-xl text-ink">
-            Bases mais finas e bases mais grossas
+            {t("sobre.basesFinas.titulo")}
           </h2>
-          <p className="text-ink/80">
-            De um jeito geral, quanto mais fina a base, mais discreta ela
-            tende a ficar sobre a pele — é o que costuma se buscar na linha
-            frontal, perto do rosto. Quanto mais grossa, mais resistente ao
-            manuseio do dia a dia ela tende a ser. Essa troca (discrição de
-            um lado, resistência do outro) é a lógica geral por trás da
-            variedade de espessuras que existe no mercado de próteses
-            capilares — não uma promessa sobre qualquer peça específica.
-          </p>
+          <p className="text-ink/80">{t("sobre.basesFinas.texto")}</p>
         </section>
       </Reveal>
 
       <Reveal delayMs={60}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
           <h2 className="font-display text-xl text-ink">
-            O que significa 0,08mm
+            {t("sobre.medida008.titulo")}
           </h2>
-          <p className="text-ink/80">
-            É a medida da espessura da base, em milímetros. Quanto menor o
-            número, mais fina a membrana. A linha que a Reverá trabalha hoje é
-            a Micropele 0,08mm — a base mais fina da linha, com acabamento
-            natural na linha frontal.
-          </p>
+          <p className="text-ink/80">{t("sobre.medida008.texto")}</p>
         </section>
       </Reveal>
 
       <Reveal delayMs={120}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
           <h2 className="font-display text-xl text-ink">
-            Cabelos grisalhos
+            {t("sobre.grisalhos.titulo")}
           </h2>
-          <p className="text-ink/80">
-            Próteses grisalhas de até 50% possuem fios sintéticos, para
-            permitir o processo de tonalização sem alterar os fios brancos.
-          </p>
+          <p className="text-ink/80">{t("sobre.grisalhos.texto")}</p>
         </section>
       </Reveal>
 
       <Reveal delayMs={0}>
         <section className="flex flex-col gap-3 border-t border-sand pt-6">
-          <h2 className="font-display text-xl text-ink">Como escolher</h2>
+          <h2 className="font-display text-xl text-ink">{t("sobre.comoEscolher.titulo")}</h2>
           <p className="text-ink/80">
-            Duas decisões pesam mais: a cor do fio e a orientação de um
-            profissional que vai preparar, cortar e aplicar a peça. A Reverá
-            ajuda na primeira — veja as{" "}
+            {t("sobre.comoEscolher.texto1")}{" "}
             <a href="/cores" className="text-ink underline decoration-gold underline-offset-4 hover:text-gold-deep">
-              cores disponíveis
+              {t("sobre.comoEscolher.link1")}
             </a>{" "}
-            e a ferramenta para descobrir a sua. A segunda depende do
-            profissional escolhido — veja{" "}
+            {t("sobre.comoEscolher.texto2")}{" "}
             <a
               href="/naturalidade"
               className="text-ink underline decoration-gold underline-offset-4 hover:text-gold-deep"
             >
-              o que influencia o resultado
+              {t("sobre.comoEscolher.link2")}
             </a>
             .
           </p>

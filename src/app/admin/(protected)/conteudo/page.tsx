@@ -2,12 +2,22 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { FaqManager, type FaqRow } from "./FaqManager";
 import { ReviewsManager, type ReviewRow } from "./ReviewsManager";
-import { ContentBlocksManager, type ContentBlockItem } from "./ContentBlocksManager";
-
+/**
+ * A aba "Seções" saiu em 30/08/2026, e o motivo é constrangedor: ela gravava
+ * em `content_blocks`, uma tabela que NENHUMA página do site lia. Tinha 0
+ * linhas e sempre teve. Era uma tela que aceitava o texto, dizia "salvo", e
+ * jogava fora.
+ *
+ * Uma tela que mente é pior que uma tela que falta: quem escrevesse ali ia
+ * procurar no site o que nunca ia aparecer. O que ela prometia agora existe
+ * de verdade em /admin/textos, ligado às páginas.
+ *
+ * A tabela `content_blocks` continua no banco, vazia. Apagar tabela é
+ * irreversível e ela não incomoda ninguém parada.
+ */
 const ABAS = [
   { id: "faq", label: "FAQ" },
   { id: "depoimentos", label: "Depoimentos" },
-  { id: "secoes", label: "Seções" },
 ] as const;
 
 export default async function ConteudoPage({
@@ -19,14 +29,13 @@ export default async function ConteudoPage({
   const abaAtiva = ABAS.find((a) => a.id === tab)?.id ?? "faq";
 
   const supabase = await createClient();
-  const [{ data: faq, error: erroFaq }, { data: reviews, error: erroReviews }, { data: blocos, error: erroBlocos }] =
+  const [{ data: faq, error: erroFaq }, { data: reviews, error: erroReviews }]  =
     await Promise.all([
       supabase.from("faq_items").select("*").order("sort_order"),
       supabase.from("reviews").select("*").order("sort_order"),
-      supabase.from("content_blocks").select("*").order("sort_order"),
     ]);
 
-  const erro = erroFaq || erroReviews || erroBlocos;
+  const erro = erroFaq || erroReviews;
   if (erro) {
     return (
       <div className="flex flex-col gap-4">
@@ -62,16 +71,6 @@ export default async function ConteudoPage({
     sortOrder: String(r.sort_order),
   }));
 
-  const blockItems: ContentBlockItem[] = (blocos ?? []).map((b) => ({
-    id: b.id,
-    sectionKey: b.section_key,
-    title: b.title ?? "",
-    body: b.body ?? "",
-    mediaUrl: b.media_url ?? "",
-    isVisible: b.is_visible,
-    sortOrder: b.sort_order,
-  }));
-
   return (
     <div className="flex flex-col gap-6 pb-16">
       <h1 className="font-display text-2xl text-ink">Conteúdo</h1>
@@ -92,7 +91,6 @@ export default async function ConteudoPage({
 
       {abaAtiva === "faq" ? <FaqManager initialItems={faqItems} /> : null}
       {abaAtiva === "depoimentos" ? <ReviewsManager initialItems={reviewItems} /> : null}
-      {abaAtiva === "secoes" ? <ContentBlocksManager items={blockItems} /> : null}
     </div>
   );
 }

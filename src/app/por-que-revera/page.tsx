@@ -6,6 +6,16 @@ import type { Metadata } from "next";
 // explícita: só os itens abaixo, nada além.
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+import { textosDaPagina } from "@/lib/conteudo/textos";
+
+/**
+ * A página continua sendo gerada estaticamente — ler o banco a cada visita
+ * seria pagar uma consulta por visitante para um texto que muda uma vez por
+ * mês. O painel chama `revalidatePath` ao salvar, então a edição aparece na
+ * hora; este número é só a rede de segurança para o caso de a revalidação
+ * não acontecer.
+ */
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Por que Reverá",
@@ -20,15 +30,17 @@ export const metadata: Metadata = {
   },
 };
 
-export default function PorQueReveraPage() {
+export default async function PorQueReveraPage() {
+  const t = await textosDaPagina("porque");
+
   return (
     <main
       className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
       <Reveal className="flex flex-col items-center gap-2 text-center">
-        <span className="eyebrow-ink">Confiança</span>
-        <h1 className="font-display text-3xl text-ink">Por que a Reverá</h1>
+        <span className="eyebrow-ink">{t("porque.eyebrow")}</span>
+        <h1 className="font-display text-3xl text-ink">{t("porque.titulo")}</h1>
       </Reveal>
 
       {/* Teste de qualidade — texto igual ao de /garantia, mesma fonte
@@ -36,13 +48,9 @@ export default function PorQueReveraPage() {
       <Reveal>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
           <h2 className="font-display text-xl text-ink">
-            Teste de qualidade antes do envio
+            {t("porque.bloco1.titulo")}
           </h2>
-          <p className="text-ink/80">
-            Antes do envio, todas as próteses passam por um rigoroso teste de
-            qualidade para garantir que o produto seja entregue em perfeitas
-            condições.
-          </p>
+          <p className="text-ink/80">{t("porque.bloco1.texto")}</p>
         </section>
       </Reveal>
 
@@ -50,14 +58,14 @@ export default function PorQueReveraPage() {
           página /cores, que já lê a mesma tabela colors. */}
       <Reveal delayMs={60}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
-          <h2 className="font-display text-xl text-ink">Variedade de cores</h2>
+          <h2 className="font-display text-xl text-ink">{t("porque.bloco2.titulo")}</h2>
           <p className="text-ink/80">
-            A linha Micropele está disponível em 15 cores, incluindo a escala de grisalho. Veja todas em{" "}
+            {t("porque.bloco2.texto")}{" "}
             <a
               href="/cores"
               className="text-ink underline decoration-gold underline-offset-4 hover:text-gold-deep"
             >
-              /cores
+              {t("porque.bloco2.link")}
             </a>
             .
           </p>
@@ -69,17 +77,15 @@ export default function PorQueReveraPage() {
       <Reveal delayMs={120}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
           <h2 className="font-display text-xl text-ink">
-            Suporte na escolha da cor
+            {t("porque.bloco3.titulo")}
           </h2>
           <p className="text-ink/80">
-            Envie uma foto do seu cabelo natural e nossa equipe indica a cor
-            mais parecida entre as opções disponíveis — a ferramenta está na
-            própria página de{" "}
+            {t("porque.bloco3.texto")}{" "}
             <a
               href="/cores#ajuda"
               className="text-ink underline decoration-gold underline-offset-4 hover:text-gold-deep"
             >
-              cores
+              {t("porque.bloco3.link")}
             </a>
             .
           </p>
@@ -95,28 +101,23 @@ export default function PorQueReveraPage() {
       <Reveal delayMs={0}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
           <h2 className="font-display text-xl text-ink">
-            Envio para todo o Brasil
+            {t("porque.bloco4.titulo")}
           </h2>
-          <p className="text-ink/80">
-            O frete é calculado pelo CEP no fechamento do pedido, para
-            qualquer lugar do país.
-          </p>
+          <p className="text-ink/80">{t("porque.bloco4.texto")}</p>
         </section>
       </Reveal>
 
       {/* Garantia — texto igual ao de /garantia (mesma fonte). */}
       <Reveal delayMs={60}>
         <section className="flex flex-col gap-2 border-t border-sand pt-6">
-          <h2 className="font-display text-xl text-ink">Garantia</h2>
+          <h2 className="font-display text-xl text-ink">{t("porque.bloco5.titulo")}</h2>
           <p className="text-ink/80">
-            Após o recebimento da prótese, o cliente tem o prazo de até 7
-            dias úteis para comunicar qualquer possível defeito de
-            fabricação. Veja os detalhes em{" "}
+            {t("porque.bloco5.texto")}{" "}
             <a
               href="/garantia"
               className="text-ink underline decoration-gold underline-offset-4 hover:text-gold-deep"
             >
-              /garantia
+              {t("porque.bloco5.link")}
             </a>
             .
           </p>
