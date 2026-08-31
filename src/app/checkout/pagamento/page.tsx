@@ -96,6 +96,70 @@ export default async function PagamentoPage({
     redirect(urlGuardada);
   }
 
+  /**
+   * ===========================================================================
+   * A RESERVA — por que a consulta acima não bastava (31/08/2026)
+   * ===========================================================================
+   * A guarda logo acima LÊ e depois ESCREVE, e entre as duas coisas existe um
+   * intervalo. Duas requisições quase simultâneas passam as duas pela leitura
+   * antes de qualquer uma escrever — e aí as duas cobram.
+   *
+   * Não é teoria: o pedido REV-ED9A384B, de 31/08 (DOIS DIAS depois daquela
+   * guarda), gerou duas linhas `pending` com 24 ms de diferença. E o
+   * REV-D32DE067 gerou três, duas delas separadas por 2 MILISSEGUNDOS. Dedo
+   * humano não faz isso — é execução concorrente.
+   *
+   * Ninguém foi cobrado em dobro, porque só um link é pago. Mas ficavam dois
+   * links VÁLIDOS no gateway para o mesmo pedido, e o cliente que abrisse os
+   * dois pagaria os dois.
+   *
+   * A correção não é mais verificação: verificação sempre perde a corrida.
+   * É INSERIR PRIMEIRO, com um índice único parcial no banco (migration 13)
+   * garantindo no máximo uma linha `pending` por pedido. Quem consegue
+   * inserir ganhou a corrida e é o único que fala com o gateway. Quem perde
+   * recebe erro do banco e vai buscar o link do vencedor.
+   *
+   * A ordem importa: reservar ANTES de cobrar é o que impede a segunda
+   * cobrança de existir. Cobrar primeiro e deduplicar depois deixaria o link
+   * órfão criado do mesmo jeito.
+   */
+  const { data: reserva, error: erroReserva } = await supabase
+    .from("payments")
+    .insert({
+      order_id: pedido.id,
+      provider: providerParaMoeda(pedido.currency as string).name,
+      status: "pending",
+      amount_cents: pedido.total_cents,
+      // Sem `checkout_url` ainda: ele só existe depois do gateway responder.
+      // É exatamente esta ausência que diz "reservado, ainda não pronto".
+      raw_response: {},
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (erroReserva || !reserva) {
+    /**
+     * Perdemos a corrida (ou o banco recusou por outro motivo). O vencedor
+     * está falando com o gateway agora e vai gravar a URL em seguida.
+     *
+     * Espera curta e limitada: 5 tentativas de 300 ms. Se em 1,5 s a URL não
+     * apareceu, o vencedor provavelmente falhou — e aí cair na tela de
+     * "tentar novamente" é melhor que deixar o cliente numa página parada.
+     */
+    for (let tentativa = 0; tentativa < 5; tentativa++) {
+      await new Promise((r) => setTimeout(r, 300));
+      const { data: doVencedor } = await supabase
+        .from("payments")
+        .select("raw_response")
+        .eq("order_id", pedido.id)
+        .eq("status", "pending")
+        .maybeSingle();
+      const url = (doVencedor?.raw_response as { checkout_url?: string } | null)?.checkout_url;
+      // Fora de try/catch: `redirect` funciona lançando exceção do Next.
+      if (url) redirect(url);
+    }
+  }
+
   let checkoutUrl: string;
   try {
     /**
@@ -154,20 +218,29 @@ export default async function PagamentoPage({
     });
     checkoutUrl = resultado.checkoutUrl;
 
-    await supabase.from("payments").insert({
-      order_id: pedido.id,
-      provider: provider.name,
-      provider_payment_id: resultado.providerPaymentId,
-      status: "pending",
-      amount_cents: pedido.total_cents,
-      // A URL do checkout fica GUARDADA — é o que permite reaproveitar o
-      // link em vez de criar outro a cada recarga. A InfinitePay nem sempre
-      // devolve `slug`, então `provider_payment_id` pode vir nulo; a URL é a
-      // única referência confiável para este link.
-      raw_response: { checkout_url: resultado.checkoutUrl },
-    });
+    // ATUALIZA a reserva feita acima, em vez de inserir de novo — a linha já
+    // existe desde antes de o gateway ser chamado. A URL do checkout fica
+    // GUARDADA: é o que permite reaproveitar o link a cada recarga. A
+    // InfinitePay nem sempre devolve `slug`, então `provider_payment_id` pode
+    // vir nulo, e a URL é a única referência confiável para este link.
+    await supabase
+      .from("payments")
+      .update({
+        provider_payment_id: resultado.providerPaymentId,
+        raw_response: { checkout_url: resultado.checkoutUrl },
+      })
+      .eq("id", reserva!.id);
   } catch (erro) {
     console.error("[pagamento] falha ao criar cobrança", erro);
+    /**
+     * DESFAZ A RESERVA. Sem isto, uma falha do gateway deixaria uma linha
+     * `pending` sem URL — e o índice único da migration 13 faria TODA
+     * tentativa seguinte perder a corrida contra um vencedor que não existe.
+     * O cliente ficaria preso num pedido que nunca mais abre pagamento.
+     */
+    if (reserva?.id) {
+      await supabase.from("payments").delete().eq("id", reserva.id);
+    }
     // Não deixa o cliente numa tela morta: mostra o que aconteceu e como
     // retomar, sem expor detalhe técnico do gateway.
     return (
