@@ -1,4 +1,18 @@
 -- ===========================================================================
+-- ATENÇÃO — RODE AS DUAS PARTES SEPARADAMENTE (31/08/2026)
+-- ===========================================================================
+-- O editor SQL do Supabase roda o script inteiro em UMA TRANSAÇÃO. A PARTE 2
+-- mexe em `storage.objects`, que pertence a `supabase_storage_admin` e não ao
+-- usuário do editor — se ela falhar por permissão, a transação inteira é
+-- desfeita e as TABELAS DA PARTE 1 somem junto, sem aviso.
+--
+-- Foi o que aconteceu na primeira tentativa, em 31/08/2026: o script parecia
+-- ter rodado e não havia criado nada.
+--
+-- Então: selecione e rode a PARTE 1. Confira. Depois a PARTE 2.
+-- ===========================================================================
+
+-- ===========================================================================
 -- APLICAR NO SUPABASE — CONTEÚDO EDITÁVEL PELO PAINEL
 -- Data: 30/08/2026
 -- ===========================================================================
@@ -17,6 +31,10 @@
 -- com os textos do código. Só o painel de textos e o de fotos é que ficam em
 -- modo leitura, avisando que falta aplicar isto.
 -- ===========================================================================
+
+-- ###########################################################################
+-- PARTE 1 — AS TABELAS (rode esta primeiro, sozinha)
+-- ###########################################################################
 
 create table if not exists site_texts (
   -- A chave é o contrato entre a página e o painel: "garantia.passo1".
@@ -123,6 +141,21 @@ create policy "auth write banners" on banners for all
 -- O que NÃO pode entrar aqui: foto enviada por cliente. Essa continua nos
 -- buckets privados.
 -- ===========================================================================
+
+
+-- ###########################################################################
+-- PARTE 2 — O BUCKET DAS FOTOS (rode SEPARADO da parte 1)
+-- ###########################################################################
+-- Se esta parte falhar com "must be owner of table objects", NÃO insista: o
+-- bucket se cria pelo painel, em Storage → New bucket:
+--
+--     nome    : site-media
+--     público : SIM (marcado)
+--
+-- E as quatro políticas abaixo passam a ser desnecessárias: bucket público
+-- criado pelo painel já nasce com leitura pública, e a escrita pelo painel do
+-- admin usa a chave de serviço, que ignora RLS.
+-- ###########################################################################
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
