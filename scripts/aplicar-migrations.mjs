@@ -48,10 +48,28 @@ try {
   process.exit(2);
 }
 
-const sql = readFileSync(
-  new URL("../supabase/aplicar/PENDENTES.sql", import.meta.url),
-  "utf8"
-);
+/**
+ * QUAL ARQUIVO APLICAR (31/08/2026)
+ *
+ * Passou a aceitar o caminho como argumento. O arquivo NÃO é segredo — a
+ * string de conexão é, e essa continua vindo só por variável de ambiente,
+ * nunca por argumento (argumento aparece no `ps` e no histórico do shell).
+ *
+ * Sem argumento, o comportamento antigo: PENDENTES.sql.
+ */
+const alvo = process.argv[2] ?? "supabase/aplicar/PENDENTES.sql";
+const caminhoSql = alvo.startsWith("/")
+  ? new URL(`file://${alvo}`)
+  : new URL(`../${alvo}`, import.meta.url);
+
+let sql;
+try {
+  sql = readFileSync(caminhoSql, "utf8");
+} catch {
+  console.error(`Não consegui ler o arquivo: ${alvo}`);
+  process.exit(2);
+}
+console.log(`Aplicando: ${alvo}`);
 
 const cliente = new pg.Client({
   connectionString: url,
