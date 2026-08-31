@@ -131,11 +131,27 @@ Vercel, inclusive pela CLI. Já testado em 26/08 e de novo no go-live.
 A trava de deploy recusa sozinha chave de teste em produção e chave live
 fora dela, então um engano aqui falha alto, não silenciosamente.
 
-## Passo 4 — Preço e frete reais (você me passa, eu escrevo)
+## Passo 4 — Preço e frete reais — ✅ FEITO (conferido em 30/08/2026)
 
-`variant_prices` e `intl_shipping_quotes` estão **vazias na produção**. Sem
+> **Este passo não precisa mais ser feito.** Conferido por leitura direta da
+> produção em 30/08/2026:
+>
+> - `variant_prices`: **25 linhas** — 5 variantes × USD, EUR, GBP, AUD, CAD.
+>   Gravadas em 29/08 por conversão direta da PTAX de 28/08. É custo
+>   convertido, SEM margem: devolve o preço do site menos os ~4,4% da Stripe.
+> - `intl_shipping_quotes`: **1 linha, só EUA** — DHL Express Easy,
+>   US$ 62,80, ativa, **válida até 28/09/2026**. Vencida, o país se fecha
+>   sozinho.
+>
+> Ou seja: os EUA estão prontos de preço e frete. **PT, GB, AU e CA
+> continuam sem cotação** e por isso seguem fechados, mesmo que entrem no
+> `CHECKOUT_PAISES`.
+>
+> O texto abaixo fica como registro do que foi pedido na época.
+
+`variant_prices` e `intl_shipping_quotes` estavam vazias na produção. Sem
 elas, país aberto continua indisponível — a variável do passo 5 sozinha não
-vende nada. Preciso de:
+vende nada. Era preciso:
 
 - preço da Micropele por mercado: **USD, EUR, GBP, AUD, CAD**;
 - cotação DHL por país, com **data de validade** (a de R$ 333,23 está
