@@ -127,6 +127,12 @@ export interface Dicionario {
   suporteTexto: string;
   suporteBotao: (numeroPedido: string) => string;
   suporteMensagem: (numeroPedido: string) => string;
+  /* --- suporte com o pagamento ainda pendente --- */
+  suporteTituloPendente: string;
+  suporteTextoPendente: string;
+  suporteBotaoPendente: string;
+  suporteMensagemPendente: (numeroPedido: string) => string;
+  suporteTelefoneRotulo: string;
 }
 
 /* =========================================================================
@@ -230,6 +236,14 @@ const PT: Dicionario = {
   suporteTexto: "Fale com a nossa equipe sobre este pedido.",
   suporteBotao: (n) => `Falar sobre o pedido ${n}`,
   suporteMensagem: (n) => `Olá! Tenho uma dúvida sobre o pedido ${n}.`,
+
+  suporteTituloPendente: "Precisa de ajuda com o pagamento?",
+  suporteTextoPendente:
+    "Se o pagamento não passou, ou se você tem qualquer dúvida antes de pagar, fale com a nossa equipe.",
+  suporteBotaoPendente: "Chamar no WhatsApp",
+  suporteMensagemPendente: (n) =>
+    `Olá! Preciso de ajuda com o pagamento do pedido ${n}.`,
+  suporteTelefoneRotulo: "Telefone de suporte",
 };
 
 /* =========================================================================
@@ -346,6 +360,16 @@ const EN: Dicionario = {
     "Talk to our team about this order — we reply during Brazilian business hours.",
   suporteBotao: (n) => `Ask about order ${n}`,
   suporteMensagem: (n) => `Hello! I have a question about order ${n}.`,
+
+  suporteTituloPendente: "Need help with the payment?",
+  // Mesma razão da frase acrescentada em `suporteTexto`: quem escreve de
+  // fora precisa saber de que fuso vem a resposta.
+  suporteTextoPendente:
+    "If the payment did not go through, or you have any question before paying, talk to our team — we reply during Brazilian business hours.",
+  suporteBotaoPendente: "Message us on WhatsApp",
+  suporteMensagemPendente: (n) =>
+    `Hello! I need help with the payment for order ${n}.`,
+  suporteTelefoneRotulo: "Support phone",
 };
 
 /* =========================================================================
@@ -470,6 +494,15 @@ const ES: Dicionario = {
     "Habla con nuestro equipo sobre este pedido — respondemos en horario comercial de Brasil.",
   suporteBotao: (n) => `Preguntar por el pedido ${n}`,
   suporteMensagem: (n) => `¡Hola! Tengo una duda sobre el pedido ${n}.`,
+
+  suporteTituloPendente: "¿Necesitas ayuda con el pago?",
+  // Mesma frase de fuso que existe no inglês, e pela mesma razão.
+  suporteTextoPendente:
+    "Si el pago no se completó, o tienes cualquier duda antes de pagar, habla con nuestro equipo — respondemos en horario comercial de Brasil.",
+  suporteBotaoPendente: "Escríbenos por WhatsApp",
+  suporteMensagemPendente: (n) =>
+    `¡Hola! Necesito ayuda con el pago del pedido ${n}.`,
+  suporteTelefoneRotulo: "Teléfono de soporte",
 };
 
 export const TEXTOS: Record<Idioma, Dicionario> = { pt: PT, en: EN, es: ES };

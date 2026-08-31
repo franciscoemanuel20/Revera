@@ -92,6 +92,9 @@ export default async function PedidoPage({
   const status = (atual?.status ?? pedido.status) as string;
   const estornado = (atual?.payment_status ?? pedido.payment_status) === "refunded";
   const pago = !estornado && status !== "new" && status !== "canceled";
+  // O estado da tela "Aguardando pagamento": o pedido existe, o dinheiro
+  // ainda não entrou, e nada deu errado a ponto de cancelar ou estornar.
+  const aguardando = !pago && !estornado && status !== "canceled";
 
   const [{ data: itens }, { data: endereco }, { data: envio }] = await Promise.all([
     supabase
@@ -267,10 +270,22 @@ export default async function PedidoPage({
         </section>
       ) : null}
 
-      {/* O contato só existe DEPOIS do pagamento confirmado — regra comercial
-          do projeto. E o botão não dispara evento de conversão nenhum: o
-          Purchase já saiu na confirmação, contá-lo de novo seria inflar. */}
-      {pago ? <SuportePosCompra numeroPedido={pedido.order_number} idioma={idioma} /> : null}
+      {/* O contato existe nos dois estados do pedido, com texto diferente em
+          cada um (revisão de 31/08/2026 — antes só aparecia depois do
+          pagamento, e quem travava no Pix ficava sem saída). Continua fora de
+          home, produto, carrinho e checkout: aqui já se está atrás do
+          access_token do próprio pedido. E o botão não dispara evento de
+          conversão nenhum: o Purchase já saiu na confirmação, contá-lo de
+          novo seria inflar. */}
+      {pago ? (
+        <SuportePosCompra numeroPedido={pedido.order_number} idioma={idioma} />
+      ) : aguardando ? (
+        <SuportePosCompra
+          numeroPedido={pedido.order_number}
+          idioma={idioma}
+          variante="aguardando"
+        />
+      ) : null}
     </main>
   );
 }

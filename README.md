@@ -167,11 +167,14 @@ debita a carteira de verdade. A **cotação** é real e foi exercitada
   houve aprovação formal de peça de marca (logo, wordmark) ainda.
 - **Preços reais**: nenhum preço foi inventado. É a decisão que destrava
   metade da lista.
-- **Número de WhatsApp pós-compra**: `SuportePosCompra.tsx` está implementado
-  e só renderiza com pagamento confirmado (Server Component, variável sem
-  `NEXT_PUBLIC_`, conferido por `npm run verify:secrets`). A variável
-  `WHATSAPP_POST_PURCHASE_NUMBER` está **vazia** — sem ela a seção não
-  aparece.
+- **Número de WhatsApp de suporte do pedido**: `SuportePosCompra.tsx` renderiza
+  na página do pedido, nos dois estados — pagamento confirmado e *Aguardando
+  pagamento* (revisão de 31/08/2026; antes era só depois do pagamento, e quem
+  travava no Pix ficava sem saída). Continua fora de home, produto, carrinho e
+  checkout: é Server Component, a variável não tem `NEXT_PUBLIC_`, e
+  `npm run verify:secrets` confere que o número não entra no bundle. A variável
+  `WHATSAPP_POST_PURCHASE_NUMBER` está preenchida em produção e preview, **com
+  DDI** (`5512981409901`) — o link `wa.me` exige o número internacional.
 
 ## O que ainda NÃO existe
 
