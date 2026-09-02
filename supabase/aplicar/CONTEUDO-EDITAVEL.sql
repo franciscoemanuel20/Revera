@@ -1,15 +1,23 @@
 -- ===========================================================================
--- ATENÇÃO — RODE AS DUAS PARTES SEPARADAMENTE (31/08/2026)
+-- ESTE ARQUIVO É A METADE DE CIMA. A DE BAIXO É `CONTEUDO-BUCKET.sql`
 -- ===========================================================================
--- O editor SQL do Supabase roda o script inteiro em UMA TRANSAÇÃO. A PARTE 2
--- mexe em `storage.objects`, que pertence a `supabase_storage_admin` e não ao
--- usuário do editor — se ela falhar por permissão, a transação inteira é
--- desfeita e as TABELAS DA PARTE 1 somem junto, sem aviso.
+-- Rode ESTE primeiro, inteiro. Depois, o outro.
 --
--- Foi o que aconteceu na primeira tentativa, em 31/08/2026: o script parecia
--- ter rodado e não havia criado nada.
+-- Por que são dois arquivos, e não um: tudo roda em UMA TRANSAÇÃO (tanto no
+-- editor SQL do Supabase quanto em scripts/aplicar-migrations.mjs). O outro
+-- arquivo mexe em `storage.objects`, que pertence a `supabase_storage_admin`
+-- e não ao usuário que aplica — se ele falhar por permissão, a transação
+-- inteira é desfeita e as TABELAS DESTE AQUI somem junto, sem aviso.
 --
--- Então: selecione e rode a PARTE 1. Confira. Depois a PARTE 2.
+-- Foi exatamente o que aconteceu em 31/08/2026: pareceu ter rodado, e não
+-- havia criado nada. Em 02/09/2026 o banco de produção ainda estava assim —
+-- `banners` devolvendo 404, `site_texts` inexistente, e o painel de textos
+-- somente-leitura desde que foi construído.
+--
+-- NOTA HISTÓRICA: até 02/09 este arquivo falava em "PARTE 1" e "PARTE 2"
+-- como se as duas estivessem aqui dentro. A PARTE 2 já tinha ido para
+-- `CONTEUDO-BUCKET.sql` e o aviso ficou para trás — quem lesse procuraria
+-- aqui embaixo uma metade que não existe mais.
 -- ===========================================================================
 
 -- ===========================================================================
@@ -33,7 +41,7 @@
 -- ===========================================================================
 
 -- ###########################################################################
--- PARTE 1 — AS TABELAS (rode esta primeiro, sozinha)
+-- AS TABELAS (o balde das fotos está em CONTEUDO-BUCKET.sql)
 -- ###########################################################################
 
 create table if not exists site_texts (
@@ -142,7 +150,7 @@ create policy "auth write banners" on banners for all
 -- PARA QUEM JÁ TINHA RODADO ESTE ARQUIVO ANTES DE 02/09/2026
 -- ===========================================================================
 -- `create table if not exists` não altera tabela que já existe: num banco
--- onde a PARTE 1 já rodou, a restrição continuaria sem 'imagem', e salvar
+-- onde este arquivo já rodou, a restrição continuaria sem 'imagem', e salvar
 -- uma foto pelo painel falharia com erro de banco.
 --
 -- O bloco abaixo é a migration 14 inteira. Em banco novo ele não faz
@@ -153,7 +161,7 @@ create policy "auth write banners" on banners for all
 do $$
 begin
   if to_regclass('public.site_texts') is null then
-    raise notice 'site_texts não existe — a PARTE 1 acima não rodou.';
+    raise notice 'site_texts não existe — o bloco de tabelas acima não rodou.';
     return;
   end if;
   alter table site_texts drop constraint if exists site_texts_tipo_check;

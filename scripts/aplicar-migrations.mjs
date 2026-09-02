@@ -119,6 +119,25 @@ try {
  * parecidos. A contagem estava certa; a expectativa é que era errada.
  * Conferir por nome não tem esse problema: pergunta exatamente pelas que
  * ESTE arquivo cria.
+ *
+ * ===========================================================================
+ * A CONFERÊNCIA SAI DO ARQUIVO APLICADO (02/09/2026)
+ * ===========================================================================
+ * Em 31/08 o script passou a aceitar QUAL arquivo aplicar como argumento —
+ * mas esta conferência continuou perguntando pelas coisas do PENDENTES.sql:
+ * o índice de etiqueta, o balde `color-help`, as 12 colunas de atribuição,
+ * a tabela `conversion_logs`.
+ *
+ * O efeito, descoberto ao aplicar CONTEUDO-EDITAVEL.sql: o SQL entra, o
+ * COMMIT acontece, e AÍ o script imprime "Algo não bateu" e sai com erro —
+ * porque procurou coisas que aquele arquivo nunca prometeu criar. Quem lê
+ * conclui que falhou, quando na verdade deu certo. Um script de conferência
+ * que mente é pior que nenhum: ele gasta a confiança justamente na hora em
+ * que ela é necessária.
+ *
+ * Agora as expectativas são LIDAS DO PRÓPRIO SQL — policies, tabelas e
+ * baldes que aquele arquivo declara. Arquivo novo passa a ser conferido
+ * sozinho, sem ninguém lembrar de vir aqui.
  */
 const esperadas = [...sql.matchAll(/create policy\s+"([^"]+)"/g)].map((m) => m[1]);
 const { rows: encontradas } = await cliente.query(
@@ -126,42 +145,58 @@ const { rows: encontradas } = await cliente.query(
   [esperadas]
 );
 const nomesEncontrados = new Set(encontradas.map((r) => r.policyname));
-const faltando = esperadas.filter((n) => !nomesEncontrados.has(n));
-const policies = [{ n: esperadas.length - faltando.length }];
-const { rows: indices } = await cliente.query(
-  `select count(*)::int as n from pg_indexes where indexname = 'shipments_order_id_unico'`
-);
-const { rows: baldes } = await cliente.query(
-  `select count(*)::int as n from storage.buckets where id = 'color-help'`
-);
-const { rows: colunas } = await cliente.query(
-  `select count(*)::int as n from information_schema.columns
-   where table_name = 'orders'
-     and column_name in ('fbp','fbc','ga_client_id','client_ip','user_agent',
-                         'utm_source','utm_medium','utm_campaign','utm_content',
-                         'utm_term','fbclid','gclid')`
-);
-const { rows: tabelas } = await cliente.query(
-  `select count(*)::int as n from information_schema.tables where table_name = 'conversion_logs'`
-);
+const policiesFaltando = esperadas.filter((n) => !nomesEncontrados.has(n));
 
-console.log(
-  `  policies deste arquivo:        ${policies[0].n}/${esperadas.length}`
+// Tabelas que o arquivo diz criar. `create table if not exists x (` — o
+// nome pode vir com o schema colado ("public.x"), então o prefixo sai fora
+// antes de comparar com information_schema, que guarda os dois separados.
+const tabelasEsperadas = [
+  ...sql.matchAll(/create table\s+if not exists\s+([A-Za-z0-9_."]+)/gi),
+].map((m) => m[1].replace(/"/g, "").split(".").pop());
+const { rows: tabelasEncontradas } = await cliente.query(
+  "select table_name from information_schema.tables where table_name = any($1::text[])",
+  [tabelasEsperadas]
 );
-console.log(`  trava de etiqueta duplicada:   ${indices[0].n}/1`);
-console.log(`  balde privado das fotos:       ${baldes[0].n}/1`);
-console.log(`  colunas de atribuição:         ${colunas[0].n}/12`);
-console.log(`  tabela conversion_logs:        ${tabelas[0].n}/1`);
-if (faltando.length > 0) {
-  console.log(`\n  não encontradas: ${faltando.join(", ")}`);
+const nomesTabelas = new Set(tabelasEncontradas.map((r) => r.table_name));
+const tabelasFaltando = tabelasEsperadas.filter((n) => !nomesTabelas.has(n));
+
+// Baldes de storage que o arquivo insere.
+const baldesEsperados = [
+  ...sql.matchAll(/insert into storage\.buckets[\s\S]{0,400}?values\s*\(\s*'([^']+)'/gi),
+].map((m) => m[1]);
+let baldesFaltando = [];
+if (baldesEsperados.length > 0) {
+  const { rows: baldesEncontrados } = await cliente.query(
+    "select id from storage.buckets where id = any($1::text[])",
+    [baldesEsperados]
+  );
+  const ids = new Set(baldesEncontrados.map((r) => r.id));
+  baldesFaltando = baldesEsperados.filter((b) => !ids.has(b));
+}
+
+function linha(rotulo, esperado, faltando) {
+  if (esperado.length === 0) return;
+  console.log(
+    `  ${rotulo.padEnd(30)} ${esperado.length - faltando.length}/${esperado.length}`
+  );
+  if (faltando.length > 0) console.log(`      faltando: ${faltando.join(", ")}`);
+}
+
+linha("tabelas:", tabelasEsperadas, tabelasFaltando);
+linha("policies:", esperadas, policiesFaltando);
+linha("baldes de storage:", baldesEsperados, baldesFaltando);
+
+if (esperadas.length + tabelasEsperadas.length + baldesEsperados.length === 0) {
+  console.log(
+    "  (este arquivo não cria tabela, policy nem balde — nada a conferir\n" +
+      "   além do COMMIT, que já aconteceu)"
+  );
 }
 
 const ok =
-  faltando.length === 0 &&
-  indices[0].n === 1 &&
-  baldes[0].n === 1 &&
-  colunas[0].n === 12 &&
-  tabelas[0].n === 1;
+  policiesFaltando.length === 0 &&
+  tabelasFaltando.length === 0 &&
+  baldesFaltando.length === 0;
 console.log(ok ? "\nTudo no lugar.\n" : "\nAlgo não bateu — confira acima.\n");
 
 await cliente.end();
