@@ -2,7 +2,16 @@ import { createClient } from "@/lib/supabase/server";
 import { REGISTRO, paginasComTexto, chavesDaPagina, nomeDaPagina } from "@/lib/conteudo/registro";
 import { TextosManager, type GrupoTextos } from "./TextosManager";
 
-// Painel de textos editáveis (30/08/2026).
+// Painel de textos editáveis (30/08/2026); ganhou as FOTOS em 02/09/2026.
+//
+// A foto entrou por aqui, e não numa tela nova, porque para quem usa o
+// painel não existe a diferença entre "trocar o título da seção" e "trocar
+// a foto da seção": é a mesma seção da mesma página. Separar em duas telas
+// obrigaria a lembrar em qual delas mora cada pedaço.
+//
+// Por dentro, a foto também é o mesmo mecanismo: chave no registro, valor
+// em site_texts, ausência de linha = volta ao que veio no código. Só a
+// caixa que o painel desenha muda (ver TextoRegistrado.tipo).
 //
 // A LISTA vem do REGISTRO (src/lib/conteudo/registro.ts), não da tabela
 // site_texts — essa foi a correção de rota do Francisco depois da primeira
@@ -62,11 +71,12 @@ export default async function TextosPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-16">
-      <h1 className="font-display text-2xl text-ink">Textos do site</h1>
+      <h1 className="font-display text-2xl text-ink">Textos e fotos do site</h1>
       <p className="text-sm text-ink/60">
         Edite um texto e clique em salvar — a mudança aparece no site em instantes.
-        &quot;Voltar ao texto original&quot; apaga a edição e devolve o texto que está
-        escrito no código.
+        Nas fotos, escolha um arquivo do computador e clique em &quot;Enviar e
+        trocar&quot;. Em qualquer um dos dois, &quot;voltar ao original&quot; apaga a
+        alteração e devolve o que veio no site.
       </p>
 
       {somenteLeitura ? (
@@ -75,7 +85,8 @@ export default async function TextosPage() {
           encontrada no banco. O mais provável é que a migration
           00000000000012_conteudo_editavel.sql não tenha sido aplicada no Supabase
           — aplique-a e recarregue esta página. Enquanto isso, os textos abaixo são
-          os mesmos que já estão no site, só que sem poder editar.
+          os mesmos que já estão no site, só que sem poder editar — e as fotos
+          não podem ser trocadas.
         </p>
       ) : null}
 

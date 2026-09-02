@@ -134,9 +134,15 @@ const NAV_ITEMS = [
   // Entram em 30/08/2026, do pedido do Francisco de mexer no site sem
   // depender de deploy. Ficam ao lado de "Conteúdo" e não dentro dele
   // porque são coisas diferentes: "Conteúdo" é o que já vinha do banco
-  // (FAQ, depoimentos), "Textos" é o que estava preso no código, e "Fotos"
-  // é arquivo.
-  { href: "/admin/textos", label: "Textos" },
-  { href: "/admin/midia", label: "Fotos" },
+  // (FAQ, depoimentos), "Textos e fotos" é o que estava preso no código, e
+  // "Biblioteca" é arquivo.
+  //
+  // 02/09/2026 — os dois últimos foram renomeados no mesmo dia em que a
+  // tela de textos passou a trocar foto também. Antes eram "Textos" e
+  // "Fotos", e a partir dali "Fotos" seria a tela ERRADA para quem quisesse
+  // trocar a foto de uma página: ela lista arquivos, não lugares do site.
+  // Nome de menu que leva ao lugar errado custa mais caro que nome feio.
+  { href: "/admin/textos", label: "Textos e fotos" },
+  { href: "/admin/midia", label: "Biblioteca" },
   { href: "/admin/configuracoes", label: "Configurações" },
 ] as const;

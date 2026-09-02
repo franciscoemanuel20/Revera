@@ -53,9 +53,38 @@ export interface TextoRegistrado {
   pagina: string;
   /** O rótulo em português que o painel mostra. Nunca a chave crua. */
   rotulo: string;
-  /** Caixa de uma linha ou área grande. */
-  tipo: "texto" | "paragrafo";
-  /** O texto que está no site hoje, e que volta quando a edição é apagada. */
+  /**
+   * O que o painel desenha para editar isto.
+   *
+   * "texto"     — caixa de uma linha.
+   * "paragrafo" — área grande.
+   * "imagem"    — miniatura da foto + botão de trocar (02/09/2026).
+   *
+   * A IMAGEM ENTROU AQUI, E NÃO NUMA TABELA PRÓPRIA, DE PROPÓSITO
+   * ------------------------------------------------------------------
+   * O caminho óbvio seria uma tabela `site_images`. Ela repetiria, linha
+   * por linha, tudo que `site_texts` já faz: chave estável, valor que
+   * sobrescreve o código, ausência de linha = volta ao original. Duas
+   * tabelas com a mesma regra é a mesma regra escrita duas vezes — e
+   * regra escrita duas vezes é regra que um dia diverge.
+   *
+   * O que muda entre um título e uma foto não é o ARMAZENAMENTO (os dois
+   * são um texto curto que substitui o do código); é só a CAIXA que o
+   * painel desenha. Então é isso, e só isso, que o tipo controla.
+   *
+   * Para uma chave "imagem", `padrao` é o caminho da foto que veio no
+   * código ("/media/base/base-com-fios.jpg") e o valor editado é a URL da
+   * foto enviada pelo painel. A página não precisa saber a diferença.
+   */
+  tipo: "texto" | "paragrafo" | "imagem";
+  /**
+   * O que está no site hoje, e que volta quando a edição é apagada.
+   *
+   * Para `tipo: "imagem"`, é o caminho dentro de `public/` — a foto que
+   * está versionada no código. É ela que aparece se o banco estiver fora
+   * do ar, se a migration não tiver sido aplicada, ou se alguém apagar a
+   * edição. Nunca fica sem foto.
+   */
   padrao: string;
 }
 

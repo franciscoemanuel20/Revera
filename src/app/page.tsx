@@ -155,7 +155,7 @@ export default async function HomePage() {
             <video
               controls
               preload="metadata"
-              poster="/media/hero/produto-close-1.jpeg"
+              poster={t("home.naturalidade.videoCapa")}
               className="w-full rounded-md bg-ink"
             >
               <source src="/media/hero/implantacao.mp4" type="video/mp4" />
@@ -170,8 +170,8 @@ export default async function HomePage() {
       <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-16 sm:flex-row sm:items-center">
         <Reveal className="group relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand sm:w-1/2">
           <Image
-            src="/media/hero/produto-close-2.jpeg"
-            alt="Close da base Micropele 0,08mm"
+            src={t("home.micropele.foto")}
+            alt={t("home.micropele.fotoAlt")}
             fill
             sizes="(min-width: 640px) 50vw, 100vw"
             className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"

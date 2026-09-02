@@ -55,7 +55,10 @@ create table if not exists site_texts (
   rotulo text not null,
 
   -- Muda a caixa de edição: linha curta ou área de texto grande.
-  tipo text not null default 'texto' check (tipo in ('texto', 'paragrafo')),
+  -- 'imagem' entrou em 02/09/2026 (migration 14): a foto de uma página é
+  -- guardada aqui do mesmo jeito que um título — o que muda é só a caixa
+  -- que o painel desenha. O `valor` passa a ser o endereço da foto.
+  tipo text not null default 'texto' check (tipo in ('texto', 'paragrafo', 'imagem')),
 
   sort_order int not null default 0,
   updated_at timestamptz not null default now(),
@@ -133,3 +136,55 @@ create policy "auth write banners" on banners for all
 -- o aplicador roda tudo numa transação, e uma recusa de permissão no storage
 -- derrubaria as tabelas criadas acima sem deixar rastro.
 -- ===========================================================================
+
+
+-- ===========================================================================
+-- PARA QUEM JÁ TINHA RODADO ESTE ARQUIVO ANTES DE 02/09/2026
+-- ===========================================================================
+-- `create table if not exists` não altera tabela que já existe: num banco
+-- onde a PARTE 1 já rodou, a restrição continuaria sem 'imagem', e salvar
+-- uma foto pelo painel falharia com erro de banco.
+--
+-- O bloco abaixo é a migration 14 inteira. Em banco novo ele não faz
+-- diferença (a restrição já nasceu certa acima); em banco antigo, é ele que
+-- conserta. Rodar de novo não faz mal.
+-- ===========================================================================
+
+do $$
+begin
+  if to_regclass('public.site_texts') is null then
+    raise notice 'site_texts não existe — a PARTE 1 acima não rodou.';
+    return;
+  end if;
+  alter table site_texts drop constraint if exists site_texts_tipo_check;
+  alter table site_texts
+    add constraint site_texts_tipo_check
+    check (tipo in ('texto', 'paragrafo', 'imagem'));
+end
+$$;
+
+
+-- ===========================================================================
+-- LIMPEZA — A SEÇÃO "COMO ESCOLHER" DE /sobre-as-proteses FOI APOSENTADA
+-- ===========================================================================
+-- Cinco chaves saíram do registro em 02/09/2026 junto com o bloco delas na
+-- página (pedido do Francisco). Se alguém já as tinha editado pelo painel, a
+-- linha ficou em `site_texts` sem dono: invisível no painel (que lista o
+-- registro, não a tabela) e ignorada pela página.
+--
+-- Não quebra nada — é só linha ocupando espaço. Apagar aqui é o que o
+-- cabeçalho de registro.ts manda fazer ao aposentar um texto.
+--
+-- Em 02/09/2026 a tabela nem existia neste banco, então isto vai apagar zero
+-- linhas. Fica registrado para o dia em que este arquivo for aplicado a um
+-- banco que tenha histórico.
+-- ===========================================================================
+
+delete from site_texts
+ where chave in (
+   'sobre.comoEscolher.titulo',
+   'sobre.comoEscolher.texto1',
+   'sobre.comoEscolher.link1',
+   'sobre.comoEscolher.texto2',
+   'sobre.comoEscolher.link2'
+ );
