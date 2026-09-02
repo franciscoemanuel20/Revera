@@ -5,6 +5,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
 import { REGISTRO, rotaDaPagina, type ChaveDeTexto } from "@/lib/conteudo/registro";
+import {
+  BUCKET_MIDIA,
+  TAMANHO_MAXIMO_BYTES,
+  motivoDeImagemInvalida,
+  nomeArquivoSeguro,
+  tipoAceito,
+} from "@/lib/conteudo/midia";
 
 // Server Actions do painel /admin/textos. Esta tela nunca CRIA chave nova —
 // o conjunto de chaves possíveis é o REGISTRO (src/lib/conteudo/registro.ts,
@@ -64,6 +71,15 @@ export async function salvarTexto(chave: string, valor: string): Promise<Resulta
 
   if (valorLimpo === "" || valorLimpo === padrao.trim()) {
     return restaurarOriginal(chave);
+  }
+
+  // Chave de foto nunca aceita um endereço qualquer. Ver o comentário de
+  // motivoDeImagemInvalida: um `src` ruim não deixa a foto quebrada, deixa
+  // a PÁGINA quebrada — e a promessa da migration 12 é justamente que
+  // nenhuma edição feita no painel consiga derrubar uma página.
+  if (REGISTRO[parsedChave.data].tipo === "imagem") {
+    const motivo = motivoDeImagemInvalida(valorLimpo);
+    if (motivo) return { error: motivo };
   }
 
   const supabase = await createClient();
@@ -130,4 +146,103 @@ export async function restaurarOriginal(chave: string): Promise<ResultadoTexto> 
 
   revalidarRotas(REGISTRO[parsedChave.data].pagina);
   return { ok: true };
+}
+
+export type ResultadoTrocarImagem = { error: string } | { ok: true; url: string };
+
+/**
+ * Envia uma foto do computador e já a coloca no lugar de `chave` — um passo
+ * só.
+ *
+ * POR QUE NÃO REAPROVEITOU `enviarImagem` DE /admin/midia
+ * ---------------------------------------------------------------------------
+ * Aquela ação faz metade disto: sobe o arquivo e devolve a URL. Chamá-la
+ * daqui e depois chamar `salvarTexto` funcionaria, e foi a primeira ideia. O
+ * problema é o meio do caminho: se o upload dá certo e o salvar falha, sobra
+ * uma foto no bucket que ninguém referencia e que ninguém sabe que existe —
+ * e /admin/midia passa a mostrar lixo acumulado que nem dá para excluir com
+ * segurança, porque quem olha não sabe mais o que é lixo e o que está em uso.
+ *
+ * Aqui os dois passos vivem na mesma função, então o caso "subiu mas não
+ * colou" tem dono: a foto órfã é apagada antes de a mensagem de erro sair.
+ *
+ * O FLUXO EM SI é o pedido do Francisco de 02/09: "tudo que você puder fazer
+ * para ela conseguir alterar dentro do administrador". Trocar uma foto tinha
+ * três passos (ir na Biblioteca, subir, copiar a URL, voltar e colar) e um
+ * deles era copiar uma URL à mão — que é exatamente onde uma pessoa que não
+ * é programadora erra, e o erro derruba a página.
+ */
+export async function trocarImagem(
+  chave: string,
+  formData: FormData
+): Promise<ResultadoTrocarImagem> {
+  const parsedChave = chaveSchema.safeParse(chave);
+  if (!parsedChave.success) {
+    return { error: parsedChave.error.issues[0]?.message ?? "Chave inválida." };
+  }
+  if (REGISTRO[parsedChave.data].tipo !== "imagem") {
+    return { error: "Este item do site não é uma foto." };
+  }
+
+  const arquivo = formData.get("arquivo");
+  if (!(arquivo instanceof File) || arquivo.size === 0) {
+    return { error: "Escolha uma foto antes de enviar." };
+  }
+  // Pelo content-type real, não pela extensão do nome: o nome quem escolhe é
+  // quem envia. Mesmo critério de /admin/midia e de /cores.
+  if (!tipoAceito(arquivo.type) || !arquivo.type.startsWith("image/")) {
+    return { error: "Formato não aceito. Envie uma foto em JPG, PNG, WEBP ou AVIF." };
+  }
+  if (arquivo.size > TAMANHO_MAXIMO_BYTES) {
+    return { error: "A foto é grande demais. O tamanho máximo é 5 MB." };
+  }
+
+  const supabase = await createClient();
+  const caminho = nomeArquivoSeguro(arquivo.name, arquivo.type);
+
+  const { error: erroUpload } = await supabase.storage
+    .from(BUCKET_MIDIA)
+    .upload(caminho, await arquivo.arrayBuffer(), {
+      contentType: arquivo.type,
+      upsert: false, // o nome já sai com sufixo aleatório; colisão aqui seria bug
+    });
+
+  if (erroUpload) {
+    const bucketAusente = erroUpload.message?.toLowerCase().includes("bucket not found");
+    return {
+      error: bucketAusente
+        ? "O espaço das fotos do site ainda não foi criado no banco (falta aplicar supabase/aplicar/CONTEUDO-BUCKET.sql). Avise quem cuida do site."
+        : "Não foi possível enviar a foto agora. Tente de novo em instantes.",
+    };
+  }
+
+  const { data: publicUrlData } = supabase.storage.from(BUCKET_MIDIA).getPublicUrl(caminho);
+  const url = publicUrlData.publicUrl;
+
+  // A MESMA validação da digitação à mão, aplicada ao que o próprio Storage
+  // devolveu. Parece paranoia e não é: se um dia o bucket deixar de ser
+  // público, ou a URL vier em http, o que chega aqui é um endereço que o
+  // next/image recusa — e o estrago sairia na página pública, não aqui.
+  const motivo = motivoDeImagemInvalida(url);
+  if (motivo) {
+    await supabase.storage.from(BUCKET_MIDIA).remove([caminho]);
+    return { error: "A foto foi enviada, mas o endereço gerado não serve para o site. Avise quem cuida do site." };
+  }
+
+  const resultado = await salvarTexto(parsedChave.data, url);
+  if ("error" in resultado) {
+    // Não colou: a foto não pode ficar no bucket sem dono (ver o cabeçalho).
+    await supabase.storage.from(BUCKET_MIDIA).remove([caminho]);
+    return resultado;
+  }
+
+  await registrarAuditoria(supabase, {
+    action: "textos.trocarImagem",
+    entityType: "site_texts",
+    entityId: parsedChave.data,
+    diff: { arquivo: caminho, nomeOriginal: arquivo.name, tamanho: arquivo.size },
+  });
+
+  revalidatePath("/admin/midia");
+  return { ok: true, url };
 }

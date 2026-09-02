@@ -95,3 +95,57 @@ export function formatarBytes(bytes: number): string {
   if (kb < 1024) return `${kb.toFixed(0)} KB`;
   return `${(kb / 1024).toFixed(1)} MB`;
 }
+
+/**
+ * A foto que o painel gravou vai parar direto no `src` de um <Image> do Next
+ * — e o next/image ESTOURA a página inteira quando o `src` não presta
+ * (host fora de `images.remotePatterns`, string vazia, caminho relativo).
+ * Não é a foto que fica quebrada: é a página.
+ *
+ * Isso contraria a regra que governa todo o conteúdo editável ("nenhuma
+ * edição no painel consegue derrubar a página", cabeçalho da migration 12).
+ * O jeito de manter a regra de pé é não deixar entrar um valor capaz de
+ * quebrar — por isso a validação é na GRAVAÇÃO, e não na leitura: barrada
+ * aqui, a pessoa vê uma frase em português no painel; barrada na leitura,
+ * ela veria a página no ar quebrada e sem explicação.
+ *
+ * Só duas formas passam:
+ *
+ *   /media/base/foto.jpg
+ *       arquivo versionado em public/. É o que todo `padrao` do registro é.
+ *
+ *   https://<projeto>.supabase.co/storage/v1/object/public/site-media/...
+ *       foto enviada pelo painel. Precisa ser https (http não passa em
+ *       remotePatterns) e precisa estar no bucket público — os outros dois
+ *       buckets guardam foto de cliente e saem por URL assinada, que expira.
+ *
+ * O que fica de fora, e por quê: URL de site de terceiro (o host não está em
+ * remotePatterns, então quebraria), `data:` e `blob:` (o otimizador do Next
+ * não lida com eles), e caminho sem a barra inicial (vira relativo à rota
+ * atual e some em qualquer página aninhada).
+ */
+export function motivoDeImagemInvalida(valor: string): string | null {
+  const limpo = valor.trim();
+  if (limpo === "") return "Escolha uma foto.";
+
+  if (limpo.startsWith("/")) {
+    // "//outro-site.com/foto.jpg" é URL de protocolo relativo, não caminho
+    // local — parece caminho e não é.
+    if (limpo.startsWith("//")) return "Endereço de foto inválido.";
+    return null;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(limpo);
+  } catch {
+    return "Endereço de foto inválido. Envie a foto pelo botão acima em vez de digitar o endereço.";
+  }
+  if (url.protocol !== "https:") {
+    return "O endereço da foto precisa começar com https.";
+  }
+  if (!url.pathname.includes(`/object/public/${BUCKET_MIDIA}/`)) {
+    return "Esta foto não está na biblioteca de fotos do site. Envie-a pelo botão acima.";
+  }
+  return null;
+}

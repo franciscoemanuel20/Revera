@@ -79,25 +79,65 @@ export const HOME = {
       "A naturalidade do resultado depende não apenas da qualidade da prótese, mas também da escolha da peça, preparação, corte, coloração e técnicas utilizadas pelo profissional.",
   },
 
+  "home.naturalidade.videoCapa": {
+    pagina: "home",
+    rotulo: "Capa do vídeo (a imagem parada, antes de dar play)",
+    tipo: "imagem",
+    // O VÍDEO EM SI NÃO ENTROU NO REGISTRO, só a capa dele — e a diferença
+    // não é preguiça. Uma capa trocada por engano é uma imagem estranha
+    // por alguns segundos; um .mp4 trocado por engano é a peça central da
+    // home no ar errada, num arquivo de dezenas de MB que nem passa pelo
+    // limite de 6 MB das Server Actions (next.config.js). Trocar o vídeo
+    // continua sendo deploy, de propósito.
+    padrao: "/media/hero/produto-close-1.jpeg",
+  },
+
   "home.micropele.eyebrow": {
     pagina: "home",
     rotulo: "Etiqueta da seção da linha Micropele",
     tipo: "texto",
     padrao: "Linha micropele",
   },
+  // 02/09/2026 — a mesma correção de fato feita em registro/sobre.ts.
+  //
+  // O título era "A mais fina da linha" e o texto falava só de 0,08mm.
+  // Isso descrevia a peça, e virou mentira quando a Micropele 0,06mm
+  // entrou no catálogo (as duas estão `status: active` no banco, com
+  // preço e variante — conferido em 02/09). O título agora fala da LINHA
+  // Micropele contra as outras (Cacho Aberto, Cacho Fechado, Afro, Full
+  // Lace, Austrália), o que continua verdadeiro, e o texto cita as duas
+  // espessuras.
   "home.micropele.titulo": {
     pagina: "home",
     rotulo: "Título da seção da linha Micropele",
     tipo: "texto",
-    padrao: "A mais fina da linha",
+    padrao: "A linha mais fina da Reverá",
   },
   "home.micropele.texto": {
     pagina: "home",
     rotulo: "Texto da seção da linha Micropele",
     tipo: "paragrafo",
     padrao:
-      "Base ultrafina de 0,08mm, com acabamento natural na linha frontal — o carro-chefe da Reverá.",
+      "Base ultrafina em duas espessuras — 0,08mm e 0,06mm, a mais fina da linha —, com acabamento natural na linha frontal. É o carro-chefe da Reverá.",
   },
+  "home.micropele.foto": {
+    pagina: "home",
+    rotulo: "Foto da seção da linha Micropele",
+    tipo: "imagem",
+    padrao: "/media/hero/produto-close-2.jpeg",
+  },
+  "home.micropele.fotoAlt": {
+    pagina: "home",
+    rotulo: "Foto da linha Micropele — descrição (leitor de tela e Google)",
+    tipo: "texto",
+    // Estava fixa no código como "Close da base Micropele 0,08mm". Virou
+    // editável junto com a foto pelo mesmo motivo de registro/sobre.ts: se
+    // a foto pode mudar sem deploy, a descrição precisa acompanhar, senão
+    // ela passa a descrever uma foto que não está mais ali — e é o tipo de
+    // erro que só quem usa leitor de tela percebe.
+    padrao: "Close da base Micropele",
+  },
+
   "home.micropele.linkComProduto": {
     pagina: "home",
     rotulo: "Link da seção Micropele — quando há produto publicado",

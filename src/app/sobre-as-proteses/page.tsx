@@ -8,16 +8,27 @@ import type { Metadata } from "next";
 // (1) explicação genérica sobre a categoria "prótese capilar" (como o
 // mercado em geral descreve base, espessura, fio), sem citar concorrente
 // nem prometer resultado; (2) fato específico da Reverá já confirmado em
-// outra página ou no seed (ver seeds/faq.json e seeds/products.json). A
-// linha "0,08mm — a base mais fina da linha, com acabamento natural na
-// linha frontal" é copiada literalmente da FAQ (pergunta "Qual é a
-// espessura da Micropele?", is_visible=true) — não é texto novo.
+// outra página ou no seed (ver seeds/faq.json e seeds/products.json).
 //
-// As duas fotos de "produto-close" (public/media/hero/produto-close-1.jpeg
-// e -2.jpeg) foram propositalmente deixadas de fora: são a base por baixo,
-// com resíduo de cola, reprovadas para vitrine na própria missão que criou
-// esta página. As fotos usadas aqui vêm de public/media/cores/ (fio, não
-// base), as mesmas que a página /cores já expõe.
+// ESPESSURA — corrigido em 02/09/2026. Esta página dizia, copiando a FAQ
+// palavra por palavra, que a 0,08mm era "a base mais fina da linha". Era
+// verdade quando a FAQ foi escrita e deixou de ser quando a 0,06mm entrou
+// no catálogo. A frase certa agora vive em registro/sobre.ts
+// ("sobre.medida008.texto"); a FAQ e a home foram corrigidas junto.
+//
+// FOTOS — trocadas em 02/09/2026 (pedido do Francisco).
+//
+// Até aqui o grid mostrava três fotos de public/media/cores/: textura de
+// FIO, nas cores 3, 5 e 7. Elas ilustravam, logo abaixo do texto "O que é a
+// base", um assunto que não era o delas. Agora são três fotos da BASE
+// (public/media/base/), enviadas por ele: a peça inteira, o close da
+// membrana e a ilustração do nó duplo.
+//
+// E não são mais fixas no código: os caminhos abaixo são só o PADRÃO. As
+// três entraram no registro de conteúdo (registro/sobre.ts), então a
+// administradora troca qualquer uma pelo painel, sem deploy. O caminho de
+// public/ é o que aparece se nunca ninguém trocar — e o que volta se
+// alguém clicar em "voltar à foto original".
 import Image from "next/image";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
@@ -75,22 +86,36 @@ export default async function SobreAsProtesesPage() {
         </section>
       </Reveal>
 
-      <Reveal delayMs={120} className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {[
-          { file: "3.jpg", cor: "3" },
-          { file: "5.jpg", cor: "5" },
-          { file: "7.jpg", cor: "7" },
-        ].map((item) => (
+      {/* object-CONTAIN, e não object-cover como no grid antigo.
+          As fotos de fio eram textura: cortar as bordas não tirava nada
+          delas. Estas três não são. A terceira é uma ilustração com o
+          texto "Nó duplo" escrito no canto — um corte quadrado comeria a
+          palavra, e o defeito apareceria só depois de publicado. Como as
+          três têm fundo claro, "contain" sobre o fundo da página não
+          mostra tarja nenhuma: a foto simplesmente cabe inteira.
+
+          Uma coluna no celular (não duas): a ilustração tem texto, e texto
+          dentro de um quadro de ~150px não se lê. */}
+      <Reveal delayMs={120} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {([
+          { foto: "sobre.fotosBase.foto1", alt: "sobre.fotosBase.alt1" },
+          { foto: "sobre.fotosBase.foto2", alt: "sobre.fotosBase.alt2" },
+          { foto: "sobre.fotosBase.foto3", alt: "sobre.fotosBase.alt3" },
+          // `as const` não é enfeite: sem ele o TypeScript infere `string`
+          // para as chaves, e `t()` só aceita ChaveDeTexto — que é
+          // exatamente a trava que impede um erro de digitação virar um
+          // espaço em branco na página (ver o cabeçalho de registro.ts).
+        ] as const).map((item) => (
           <div
-            key={item.file}
-            className="relative aspect-square overflow-hidden rounded-lg bg-sand"
+            key={item.foto}
+            className="relative aspect-[4/3] overflow-hidden rounded-lg border border-sand bg-paper p-2"
           >
             <Image
-              src={`/media/cores/${item.file}`}
-              alt={`Textura de fio — cor ${item.cor}`}
+              src={t(item.foto)}
+              alt={t(item.alt)}
               fill
-              sizes="(min-width: 640px) 33vw, 50vw"
-              className="object-cover"
+              sizes="(min-width: 640px) 33vw, 100vw"
+              className="object-contain"
             />
           </div>
         ))}
@@ -123,25 +148,6 @@ export default async function SobreAsProtesesPage() {
         </section>
       </Reveal>
 
-      <Reveal delayMs={0}>
-        <section className="flex flex-col gap-3 border-t border-sand pt-6">
-          <h2 className="font-display text-xl text-ink">{t("sobre.comoEscolher.titulo")}</h2>
-          <p className="text-ink/80">
-            {t("sobre.comoEscolher.texto1")}{" "}
-            <a href="/cores" className="text-ink underline decoration-gold underline-offset-4 hover:text-gold-deep">
-              {t("sobre.comoEscolher.link1")}
-            </a>{" "}
-            {t("sobre.comoEscolher.texto2")}{" "}
-            <a
-              href="/naturalidade"
-              className="text-ink underline decoration-gold underline-offset-4 hover:text-gold-deep"
-            >
-              {t("sobre.comoEscolher.link2")}
-            </a>
-            .
-          </p>
-        </section>
-      </Reveal>
     </main>
   );
 }
