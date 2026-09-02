@@ -50,8 +50,11 @@ export const metadata: Metadata = {
     default: "Reverá — Prótese capilar com acabamento natural",
     template: "%s — Reverá",
   },
+  // 02/09/2026 — as três descrições abaixo citavam só a 0,08mm. A 0,06mm
+  // está ativa no catálogo e é a mais fina; a descrição que o Google e o
+  // WhatsApp mostram é o primeiro lugar em que alguém lê o que a loja vende.
   description:
-    "Próteses capilares premium. Base ultrafina de 0,08mm, acabamento natural na linha frontal. Envio para todo o Brasil.",
+    "Próteses capilares premium. Base ultrafina em 0,08mm e 0,06mm, acabamento natural na linha frontal. Envio para todo o Brasil.",
   applicationName: "Reverá",
   authors: [{ name: "Reverá" }],
   alternates: { canonical: "/" },
@@ -61,7 +64,7 @@ export const metadata: Metadata = {
     siteName: "Reverá",
     title: "Reverá — Prótese capilar com acabamento natural",
     description:
-      "Base ultrafina de 0,08mm, acabamento natural na linha frontal. Envio para todo o Brasil.",
+      "Base ultrafina em 0,08mm e 0,06mm, acabamento natural na linha frontal. Envio para todo o Brasil.",
     images: [
       {
         // Foto real do produto (public/media/hero), não arte gerada.
@@ -76,7 +79,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Reverá — Prótese capilar com acabamento natural",
     description:
-      "Base ultrafina de 0,08mm, acabamento natural na linha frontal.",
+      "Base ultrafina em 0,08mm e 0,06mm, acabamento natural na linha frontal.",
     images: ["/media/hero/produto-close-1.jpeg"],
   },
   robots: { index: true, follow: true },

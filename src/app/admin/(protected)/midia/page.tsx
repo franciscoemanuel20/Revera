@@ -64,8 +64,13 @@ export default async function MidiaPage() {
         <div>
           <h2 className="font-display text-xl text-ink">Fotos que vieram com o site</h2>
           <p className="text-sm text-ink/70">
-            Estas fotos fazem parte do código do site, não do painel. Trocar qualquer uma delas exige um
-            deploy — por isso não há botão de excluir aqui.
+            Estas fotos fazem parte do código do site, não do painel — por isso não há botão de
+            excluir aqui. As fotos das páginas que já podem ser trocadas (as três de &quot;O que é a
+            base&quot;, a foto e a capa do vídeo da home) ficam na aba{" "}
+            <a href="/admin/textos" className="underline decoration-gold underline-offset-4">
+              Textos e fotos
+            </a>
+            ; as demais ainda exigem um deploy.
           </p>
         </div>
 
