@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { CheckoutSummary } from "@/components/ui/CheckoutSummary";
 import { FormField } from "@/components/ui/FormField";
 import { Toast } from "@/components/ui/Toast";
-import { formatarCPF } from "@/lib/format/cpf";
+import { cpfValido, formatarCPF, limparCPF } from "@/lib/format/cpf";
 import { criarPedidoAction } from "./actions";
 import type { CheckoutInput } from "./schema";
 
@@ -120,6 +120,34 @@ export function CheckoutForm() {
       const proximo = { ...atual };
       delete proximo[campo];
       return proximo;
+    });
+  }
+
+  /**
+   * Valida o CPF assim que a pessoa sai do campo — não só no envio.
+   *
+   * O servidor continua sendo a validação que decide (mesma regra, em
+   * schema.ts). Isto é só o aviso adiantado: quem erra um dígito vê o
+   * problema ao lado do campo na hora, em vez de preencher o resto do
+   * formulário e levar o erro no fim. A mensagem é IDÊNTICA à do schema
+   * ("CPF inválido — confira os números digitados.") de propósito — a
+   * pessoa não pode ver um texto no blur e outro no submit para o mesmo
+   * erro. `atualizarCampo` já limpa o erro conforme ela corrige (no
+   * onChange), então aqui só precisamos setar quando está inválido.
+   *
+   * Campo vazio não vira erro no blur: "obrigatório" é assunto do envio
+   * (schema), não de quem só passou o cursor pelo campo sem digitar.
+   */
+  function validarCpfNoBlur() {
+    const valor = campos.cpf.trim();
+    setErros((atual) => {
+      if (valor === "" || cpfValido(limparCPF(valor))) {
+        if (!atual.cpf) return atual;
+        const proximo = { ...atual };
+        delete proximo.cpf;
+        return proximo;
+      }
+      return { ...atual, cpf: "CPF inválido — confira os números digitados." };
     });
   }
 
@@ -335,6 +363,7 @@ export function CheckoutForm() {
               required
               value={campos.cpf}
               onChange={(e) => atualizarCampo("cpf", formatarCPF(e.target.value))}
+              onBlur={validarCpfNoBlur}
               className={inputClass}
               inputMode="numeric"
               maxLength={14}
