@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { BUCKET_MIDIA } from "@/lib/conteudo/midia";
+import { listarFotosDoRepositorio } from "@/lib/conteudo/fotos-do-repositorio";
 import { ProductForm } from "../ProductForm";
+import { FotosDoProduto, type FotoDisponivel } from "../FotosDoProduto";
 
 // cents -> string de reais com 2 casas fixas, para não jogar float bruto
 // (ex.: "123.45000000000001") no valor de um <input type="number">.
@@ -13,14 +16,21 @@ export default async function EditarProdutoPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: produto }, { data: variantes }, { data: regras }, { data: sizes }, { data: colors }, { data: grayLevels }] =
+  const [{ data: produto }, { data: variantes }, { data: regras }, { data: sizes }, { data: colors }, { data: grayLevels }, { data: fotos }] =
     await Promise.all([
       supabase.from("products").select("*").eq("id", id).maybeSingle(),
       supabase.from("product_variants").select("*").eq("product_id", id).order("created_at"),
       supabase.from("quantity_discount_rules").select("*").eq("product_id", id).order("min_qty"),
       supabase.from("sizes").select("id, label").order("sort_order"),
-      supabase.from("colors").select("id, code, name").order("sort_order"),
+      // `is_active` entra na leitura porque a tela de fotos avisa quando a cor
+      // está desativada: a foto até grava, mas o cliente nunca chega nela.
+      supabase.from("colors").select("id, code, name, is_active").order("sort_order"),
       supabase.from("gray_levels").select("id, percent, label").order("sort_order"),
+      supabase
+        .from("product_media")
+        .select("id, url, alt_text, type, variant_id, sort_order, is_primary")
+        .eq("product_id", id)
+        .order("sort_order"),
     ]);
 
   if (!produto) {
@@ -29,6 +39,58 @@ export default async function EditarProdutoPage({ params }: { params: Promise<{ 
     // ver comentário em src/app/admin/produtos/page.tsx.
     notFound();
   }
+
+  /**
+   * As variantes viram opções de COR na tela de fotos — "variante" é jargão,
+   * e neste catálogo variante é (produto × cor). Variante sem cor fica de fora
+   * da lista: escolher "sem cor" ali seria o mesmo que deixar a foto geral, e
+   * duas opções para a mesma coisa só confundem.
+   */
+  const corPorId = new Map(
+    (colors ?? []).map((c) => [
+      c.id as string,
+      { rotulo: c.name as string, ativa: c.is_active !== false },
+    ])
+  );
+
+  const variantesParaFoto = (variantes ?? [])
+    .filter((v) => v.color_id)
+    .map((v) => {
+      const cor = corPorId.get(v.color_id as string);
+      return {
+        id: v.id as string,
+        rotulo: cor ? `Cor ${cor.rotulo}` : `Variante ${v.sku as string}`,
+        corAtiva: cor?.ativa ?? true,
+      };
+    });
+
+  /**
+   * O que pode ser escolhido como foto: o que foi enviado pelo painel (bucket
+   * "site-media") e o que veio junto com o código (public/media). São as duas
+   * origens que a Biblioteca de fotos já mostra — aqui elas viram opções de um
+   * campo, para ninguém precisar copiar e colar URL entre duas abas.
+   *
+   * Nenhuma das duas leituras derruba a página: bucket ausente (migration 12
+   * não aplicada) e pasta ausente viram lista vazia, e o campo continua
+   * utilizável com o que sobrou.
+   */
+  const { data: objetos } = await supabase.storage
+    .from(BUCKET_MIDIA)
+    .list("", { sortBy: { column: "created_at", order: "desc" } });
+
+  const enviadas: FotoDisponivel[] = (objetos ?? [])
+    .filter((item) => item.metadata != null)
+    .map((item) => ({
+      url: supabase.storage.from(BUCKET_MIDIA).getPublicUrl(item.name).data.publicUrl,
+      rotulo: item.name,
+      grupo: "Enviadas pelo painel",
+    }));
+
+  const doRepositorio: FotoDisponivel[] = (await listarFotosDoRepositorio()).map((f) => ({
+    url: f.caminho,
+    rotulo: f.caminho,
+    grupo: "Vieram com o site",
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -90,6 +152,21 @@ export default async function EditarProdutoPage({ params }: { params: Promise<{ 
             isActive: r.is_active,
           })),
         }}
+      />
+
+      <FotosDoProduto
+        productId={produto.id as string}
+        variantes={variantesParaFoto}
+        disponiveis={[...enviadas, ...doRepositorio]}
+        fotosIniciais={(fotos ?? []).map((m) => ({
+          id: m.id as string,
+          url: m.url as string,
+          altText: (m.alt_text as string | null) ?? "",
+          variantId: (m.variant_id as string | null) ?? null,
+          sortOrder: (m.sort_order as number | null) ?? 0,
+          isPrimary: Boolean(m.is_primary),
+          tipo: (m.type as string) === "video" ? "video" : "image",
+        }))}
       />
     </div>
   );

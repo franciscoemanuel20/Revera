@@ -144,8 +144,69 @@ export function motivoDeImagemInvalida(valor: string): string | null {
   if (url.protocol !== "https:") {
     return "O endereço da foto precisa começar com https.";
   }
-  if (!url.pathname.includes(`/object/public/${BUCKET_MIDIA}/`)) {
+
+  /**
+   * O HOST TAMBÉM É CONFERIDO (03/09/2026, achado do Codex).
+   *
+   * Até aqui bastava o caminho conter "/object/public/site-media/" — e o
+   * caminho é escolhido por quem escreve a URL. Isto passava:
+   *
+   *   https://site-de-terceiro.com/storage/v1/object/public/site-media/x.jpg
+   *
+   * `remotePatterns` (next.config.js) libera esse caminho SÓ no host do
+   * projeto Supabase. Aceito na gravação e recusado na renderização, o
+   * resultado é o pior possível: a página do produto cai inteira, e não só
+   * a foto — exatamente o que esta função existe para impedir.
+   *
+   * `startsWith` no lugar de `includes` pelo mesmo motivo: o padrão do Next
+   * é "/storage/v1/object/public/site-media/**", que ancora no começo do
+   * caminho. "/qualquer/coisa/storage/v1/object/public/site-media/x.jpg"
+   * casava aqui e não casa lá.
+   */
+  if (!url.pathname.startsWith(CAMINHO_PUBLICO_MIDIA)) {
     return "Esta foto não está na biblioteca de fotos do site. Envie-a pelo botão acima.";
   }
+  if (!hostDeMidiaAceito(url.hostname)) {
+    return "Esta foto está hospedada fora do site. Envie-a pelo botão acima.";
+  }
   return null;
+}
+
+const CAMINHO_PUBLICO_MIDIA = `/storage/v1/object/public/${BUCKET_MIDIA}/`;
+
+/**
+ * O mesmo host que `remotePatterns` libera — lido da mesma variável, para as
+ * duas listas não poderem divergir.
+ *
+ * Sem a variável (build sem Supabase configurado, e nos testes de unidade),
+ * cai para "tem que ser um host .supabase.co". Não é tão preciso quanto a
+ * comparação exata, mas continua fechando o buraco que motivou a checagem:
+ * host de terceiro não passa dos dois jeitos.
+ */
+function hostDeMidiaAceito(hostname: string): boolean {
+  let hostDoProjeto: string | undefined;
+  try {
+    hostDoProjeto = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").hostname;
+  } catch {
+    hostDoProjeto = undefined;
+  }
+  if (hostDoProjeto) return hostname === hostDoProjeto;
+  return hostname.endsWith(".supabase.co");
+}
+
+/**
+ * `product_media.type` a partir da URL — 'image' ou 'video'.
+ *
+ * A coluna tem CHECK (type in ('image','video')) e a galeria da página do
+ * produto descarta o que não for 'image' (um .mp4 dentro de um <Image> do
+ * Next derrubaria a página). Quem cadastra a foto pelo painel não deveria
+ * precisar saber disso, então o tipo é deduzido da extensão em vez de virar
+ * mais um campo na tela.
+ *
+ * Na dúvida devolve 'image': é o caso comum, e o erro nessa direção deixa a
+ * foto de fora da galeria em vez de mandar vídeo para o otimizador.
+ */
+export function tipoDeMidiaPelaUrl(url: string): "image" | "video" {
+  const semQuery = url.split(/[?#]/)[0]?.toLowerCase() ?? "";
+  return /\.(mp4|webm|mov|m4v)$/.test(semQuery) ? "video" : "image";
 }

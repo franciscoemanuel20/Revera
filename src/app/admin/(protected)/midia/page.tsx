@@ -1,21 +1,7 @@
-import fs from "node:fs/promises";
-import type { Dirent } from "node:fs";
-import path from "node:path";
 import { createClient } from "@/lib/supabase/server";
 import { BUCKET_MIDIA, formatarBytes } from "@/lib/conteudo/midia";
+import { listarFotosDoRepositorio } from "@/lib/conteudo/fotos-do-repositorio";
 import { MidiaManager, type FotoEnviada } from "./MidiaManager";
-
-// Extensões de IMAGEM que a seção somente-leitura mostra. Vídeo (há um em
-// public/media/hero/implantacao.mp4) fica de fora desta lista de propósito:
-// a missão pediu miniatura de foto, e gerar preview de vídeo estático a
-// partir de um arquivo do disco exigiria decodificar o .mp4 (ffmpeg ou
-// afim) — trabalho que esta tela não precisa fazer para cumprir o pedido.
-const EXTENSOES_IMAGEM = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif"]);
-
-interface FotoDoRepositorio {
-  caminho: string; // já é a URL pública — public/ é servido em "/" pelo Next
-  tamanho: number;
-}
 
 export default async function MidiaPage() {
   const supabase = await createClient();
@@ -95,45 +81,4 @@ export default async function MidiaPage() {
       </section>
     </div>
   );
-}
-
-/**
- * Varre public/media recursivamente. O caminho relativo a public/ já É a URL
- * pública (o Next serve tudo dentro de public/ na raiz do site) — não existe
- * tabela nem API para essa lista, os arquivos só estão no disco do deploy.
- *
- * Nunca lança: pasta ausente (ex.: alguém apagou public/media num ambiente
- * de teste) vira lista vazia, não erro de página — mesmo princípio dos
- * outros lugares desta tela.
- */
-async function listarFotosDoRepositorio(): Promise<FotoDoRepositorio[]> {
-  const raizPublic = path.join(process.cwd(), "public");
-  const raizMedia = path.join(raizPublic, "media");
-  const resultado: FotoDoRepositorio[] = [];
-
-  async function percorrer(diretorio: string): Promise<void> {
-    let itens: Dirent[];
-    try {
-      itens = await fs.readdir(diretorio, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const item of itens) {
-      const caminhoAbsoluto = path.join(diretorio, item.name);
-      if (item.isDirectory()) {
-        await percorrer(caminhoAbsoluto);
-        continue;
-      }
-      if (!EXTENSOES_IMAGEM.has(path.extname(item.name).toLowerCase())) continue;
-
-      const info = await fs.stat(caminhoAbsoluto).catch(() => null);
-      if (!info) continue;
-
-      const relativo = path.relative(raizPublic, caminhoAbsoluto).split(path.sep).join("/");
-      resultado.push({ caminho: `/${relativo}`, tamanho: info.size });
-    }
-  }
-
-  await percorrer(raizMedia);
-  return resultado.sort((a, b) => a.caminho.localeCompare(b.caminho));
 }
