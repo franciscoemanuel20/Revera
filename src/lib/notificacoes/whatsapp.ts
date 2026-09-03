@@ -35,7 +35,26 @@
 
 import { descricaoDoAmbiente, podeUsarServicosReais } from "@/lib/config/ambiente";
 
-export type ModoWhatsApp = "desligado" | "simulado" | "meta";
+/**
+ * ===========================================================================
+ * O QUARTO MODO: `clint` (03/09/2026)
+ * ===========================================================================
+ * O modo `meta` exige um número NOSSO na Cloud API. Não temos: o número
+ * oficial (+55 11 91032-0991) está sob a Clint como BSP, e app próprio leva
+ * `(#200)` ao tentar mandar por ele. O que funciona — provado no app da
+ * prótese em 02/09/2026 — é a API da própria Clint: `POST
+ * /v2/messages/template`, que acha ou CRIA a conversa e manda o template.
+ *
+ * Neste modo o template é FIXO, sem variável: o aviso diz "nova venda, abra
+ * o painel" e os detalhes ficam no painel. Mapear sete variáveis na Clint
+ * é frágil e cada erro de contagem é envio recusado em silêncio. Por isso
+ * `mensagem.parametros` é ignorado aqui, de propósito.
+ *
+ * Variáveis: CLINT_API_TOKEN, CLINT_CANAL_ID (channel_account_id do canal
+ * que envia) e CLINT_TEMPLATE_ID (UUID do template APROVADO naquele canal).
+ * O destino continua sendo WHATSAPP_DESTINO.
+ */
+export type ModoWhatsApp = "desligado" | "simulado" | "meta" | "clint";
 
 export interface MensagemWhatsApp {
   /** Só dígitos, com DDI. Ex.: 5512981409901 */
@@ -54,7 +73,7 @@ export type ResultadoEnvio =
 export function modoWhatsApp(): ModoWhatsApp {
   const bruto = (process.env.WHATSAPP_PROVIDER ?? "").trim().toLowerCase();
 
-  if (bruto === "meta") {
+  if (bruto === "meta" || bruto === "clint") {
     /**
      * Envio real SÓ em produção, mesmo com a variável pedindo `meta`.
      *
@@ -75,7 +94,7 @@ export function modoWhatsApp(): ModoWhatsApp {
       );
       return "simulado";
     }
-    return "meta";
+    return bruto;
   }
 
   if (bruto === "simulado") return "simulado";
@@ -113,6 +132,10 @@ export async function enviarWhatsApp(mensagem: MensagemWhatsApp): Promise<Result
       `[whatsapp:simulado] para=${mascarar(mensagem.para)} :: ${mensagem.texto.replace(/\n/g, " | ")}`
     );
     return { estado: "enviado", providerMessageId: null };
+  }
+
+  if (modo === "clint") {
+    return enviarPelaClint(mensagem);
   }
 
   try {
@@ -173,4 +196,111 @@ export async function enviarWhatsApp(mensagem: MensagemWhatsApp): Promise<Result
 function mascarar(numero: string): string {
   if (numero.length < 8) return "***";
   return `${numero.slice(0, 4)}****${numero.slice(-4)}`;
+}
+
+const CLINT_BASE = "https://api.clint.digital";
+
+/**
+ * Acha o contato do destino na Clint pelo telefone, ou cria. A Clint só
+ * envia template para `contact_id`, nunca para número cru. A busca compara
+ * os 8 últimos dígitos porque a Clint devolve o telefone em formatos
+ * diferentes conforme o cadastro (com DDI, sem DDI, com máscara).
+ */
+async function contatoNaClint(
+  token: string,
+  telefone: string
+): Promise<{ id: string } | { erro: string }> {
+  const so = telefone.replace(/\D/g, "");
+  for (const q of [`phone=${encodeURIComponent(so)}`, `search=${encodeURIComponent(so)}`]) {
+    try {
+      const busca = await fetch(`${CLINT_BASE}/v1/contacts?${q}&limit=5`, {
+        headers: { "api-token": token, accept: "application/json" },
+        cache: "no-store",
+      });
+      if (!busca.ok) continue;
+      const lista = (await busca.json().catch(() => null)) as unknown;
+      const itens: Array<{ id?: string; phone?: unknown; telefone?: unknown }> = Array.isArray(
+        lista
+      )
+        ? lista
+        : ((lista as { data?: unknown[] } | null)?.data as never[]) ?? [];
+      const achado = itens.find((c) =>
+        JSON.stringify(c?.phone ?? c?.telefone ?? "")
+          .replace(/\D/g, "")
+          .endsWith(so.slice(-8))
+      );
+      if (achado?.id) return { id: achado.id };
+    } catch {
+      continue;
+    }
+  }
+  try {
+    const criado = await fetch(`${CLINT_BASE}/v1/contacts`, {
+      method: "POST",
+      headers: { "api-token": token, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Equipe Reverá", phone: so }),
+    });
+    const corpo = (await criado.json().catch(() => ({}))) as {
+      id?: string;
+      data?: { id?: string };
+    };
+    const id = corpo?.data?.id ?? corpo?.id;
+    if (!criado.ok || !id) {
+      return { erro: `Clint não criou o contato (HTTP ${criado.status})` };
+    }
+    return { id };
+  } catch (erro) {
+    return {
+      erro: erro instanceof Error ? erro.message : "erro de rede ao criar contato na Clint",
+    };
+  }
+}
+
+async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnvio> {
+  try {
+    const token = exigir("CLINT_API_TOKEN");
+    const canalId = exigir("CLINT_CANAL_ID");
+    const templateId = exigir("CLINT_TEMPLATE_ID");
+
+    const contato = await contatoNaClint(token, mensagem.para);
+    if ("erro" in contato) {
+      return { estado: "erro", motivo: `Clint: ${contato.erro}` };
+    }
+
+    // Sem `chat_id`: a Clint acha ou cria a conversa. Sem `parameters`: o
+    // template deste modo é fixo (ver o cabeçalho do arquivo).
+    const resposta = await fetch(`${CLINT_BASE}/v2/messages/template`, {
+      method: "POST",
+      headers: { "api-token": token, "content-type": "application/json" },
+      body: JSON.stringify({
+        channel_account_id: canalId,
+        contact_id: contato.id,
+        template_id: templateId,
+      }),
+    });
+    const corpo = (await resposta.json().catch(() => null)) as {
+      id?: string;
+      data?: { id?: string };
+      message?: string;
+      error?: string | { message?: string };
+    } | null;
+
+    if (!resposta.ok) {
+      const erro = corpo?.error;
+      const motivo =
+        (typeof erro === "string" ? erro : erro?.message) ??
+        corpo?.message ??
+        `HTTP ${resposta.status}`;
+      // A resposta da Clint não carrega o token; guardar o motivo é seguro
+      // e é o que diz se o template sumiu, foi reprovado ou o canal caiu.
+      return { estado: "erro", motivo: `Clint recusou: ${motivo}` };
+    }
+
+    return { estado: "enviado", providerMessageId: corpo?.data?.id ?? corpo?.id ?? null };
+  } catch (erro) {
+    return {
+      estado: "erro",
+      motivo: erro instanceof Error ? erro.message : "falha desconhecida ao chamar a Clint",
+    };
+  }
 }
