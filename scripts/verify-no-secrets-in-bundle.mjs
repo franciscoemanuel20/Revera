@@ -26,7 +26,6 @@ const NOMES_SENSIVEIS = [
   "SUPERFRETE_TOKEN",
   "META_CAPI_TOKEN",
   "GA4_API_SECRET",
-  "WHATSAPP_POST_PURCHASE_NUMBER",
 ];
 
 function* arquivosJs(dir) {
@@ -64,9 +63,6 @@ if (existsSync(envLocal)) {
   }
 }
 
-const numeroPosCompra = process.env.WHATSAPP_POST_PURCHASE_NUMBER ?? "12981409901";
-const digitos = numeroPosCompra.replace(/\D/g, "");
-
 /**
  * Os SEGREDOS em si.
  *
@@ -90,12 +86,21 @@ const SEGREDOS_REAIS = [
   .map((nome) => ({ nome, valor: process.env[nome] }))
   .filter((s) => s.valor && s.valor.length >= 16);
 
-const VALORES_PROIBIDOS = [
-  digitos,
-  `55${digitos}`,
-  `${digitos.slice(0, 2)} ${digitos.slice(2, 7)}-${digitos.slice(7)}`,
-  `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`,
-].filter((v) => v.length >= 8);
+/**
+ * O TELEFONE SAIU DESTA LISTA EM 03/09/2026.
+ *
+ * Até aqui este script varria o bundle atrás do telefone da Reverá, porque a
+ * regra de 26/08 dizia que ele só podia aparecer na página do pedido. Nessa
+ * data o Francisco trocou o número e mandou publicá-lo — ele sai no `href`
+ * do botão de /para-profissionais, que é página aberta a qualquer visitante
+ * (ver src/lib/config/whatsapp.ts).
+ *
+ * Continuar procurando por ele seria um teste que não protege nada e que
+ * quebraria no primeiro uso legítimo. Guarda que não guarda é pior que
+ * guarda nenhuma: ensina a ignorar o alarme. As linhas abaixo continuam
+ * cuidando do que é segredo de verdade.
+ */
+const VALORES_PROIBIDOS = [];
 
 let achados = [];
 for (const arquivo of arquivosJs(BUNDLE_DIR)) {
@@ -136,6 +141,4 @@ if (achados.length > 0) {
   process.exit(1);
 }
 
-console.log(
-  "OK — nem nome sensível nem o telefone pós-compra em .next/static."
-);
+console.log("OK — nenhum nome nem valor sensível em .next/static.");

@@ -11,20 +11,15 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { textosDaPagina } from "@/lib/conteudo/textos";
+import { linkWhatsApp } from "@/lib/config/whatsapp";
 import { ProfessionalLeadForm } from "./ProfessionalLeadForm";
 
 /**
- * WhatsApp da Reverá para quem chega por esta página — pedido do Francisco
- * em 03/09/2026. É um número DIFERENTE do `WHATSAPP_POST_PURCHASE_NUMBER`
- * (suporte de quem JÁ comprou): aqui é venda, lá é pós-venda, e misturar os
- * dois faria a equipe de suporte receber lead frio e vice-versa.
- *
- * O DDI é escrito junto (55) porque o `wa.me` EXIGE número internacional
- * completo — a mesma armadilha já paga em SuportePosCompra.tsx: sem o 55, o
- * link abre o WhatsApp num contato inexistente, falha silenciosa que só
- * aparece quando um cliente reclama.
+ * A mensagem que o cliente encontra já digitada. Fica aqui, e não no
+ * lead-schema nem no registro de conteúdo, porque é texto de UMA tela só.
+ * O número vem de src/lib/config/whatsapp.ts — é o mesmo da loja inteira
+ * desde 03/09/2026.
  */
-const WHATSAPP_PROFISSIONAIS = "5512981499901";
 const WHATSAPP_MENSAGEM = "Olá vim do Site e quero comprar prótese capilar";
 
 /**
@@ -83,9 +78,7 @@ export default async function ParaProfissionaisPage() {
             {t("profissionais.cadastro.titulo")}
           </h2>
           <ProfessionalLeadForm
-            whatsappHref={`https://wa.me/${WHATSAPP_PROFISSIONAIS}?text=${encodeURIComponent(
-              WHATSAPP_MENSAGEM
-            )}`}
+            whatsappHref={linkWhatsApp(WHATSAPP_MENSAGEM)}
             textos={{
               nomeRotulo: t("profissionais.campo.nome.rotulo"),
               telefoneRotulo: t("profissionais.campo.telefone.rotulo"),

@@ -140,7 +140,7 @@ export function casaBuscaLocal(venda: VendaResumo, termo: string): boolean {
     .toLowerCase();
   if (alvo.includes(termo)) return true;
 
-  // Telefone e CPF casam por dígitos: "(12) 98140" deve achar "+55 12 98140…".
+  // Telefone e CPF casam por dígitos: "(11) 97654" deve achar "+55 11 97654…".
   const soDigitos = termo.replace(/\D/g, "");
   if (soDigitos.length < 4) return false;
   return [venda.telefone ?? "", venda.cpf ?? ""].some((v) =>

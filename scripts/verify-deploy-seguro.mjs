@@ -306,7 +306,6 @@ for (const nome of [
   "GA4_API_SECRET",
   "SUPERFRETE_TOKEN",
   "PAYMENT_WEBHOOK_SECRET",
-  "WHATSAPP_POST_PURCHASE_NUMBER",
 ]) {
   if (env(`NEXT_PUBLIC_${nome}`)) {
     problemas.push(

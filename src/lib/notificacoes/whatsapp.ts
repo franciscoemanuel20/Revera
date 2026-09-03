@@ -57,7 +57,7 @@ import { descricaoDoAmbiente, podeUsarServicosReais } from "@/lib/config/ambient
 export type ModoWhatsApp = "desligado" | "simulado" | "meta" | "clint";
 
 export interface MensagemWhatsApp {
-  /** Só dígitos, com DDI. Ex.: 5512981409901 */
+  /** Só dígitos, com DDI. Ex.: 5511976543210 */
   para: string;
   /** Texto já montado — usado no modo simulado e como corpo do template. */
   texto: string;
@@ -192,7 +192,7 @@ export async function enviarWhatsApp(mensagem: MensagemWhatsApp): Promise<Result
   }
 }
 
-/** 5512981409901 -> 5512****9901. Para log, nunca para a mensagem. */
+/** 5511976543210 -> 5511****3210. Para log, nunca para a mensagem. */
 function mascarar(numero: string): string {
   if (numero.length < 8) return "***";
   return `${numero.slice(0, 4)}****${numero.slice(-4)}`;
