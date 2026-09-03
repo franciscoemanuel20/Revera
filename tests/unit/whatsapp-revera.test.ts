@@ -16,6 +16,7 @@ import {
   linkWhatsApp,
   whatsappLegivel,
 } from "../../src/lib/config/whatsapp";
+import { destinoDoAviso } from "../../src/lib/notificacoes/venda-paga";
 
 const NUMERO_ANTIGO = "12981409901";
 
@@ -38,11 +39,32 @@ describe("WhatsApp da Reverá", () => {
     expect(whatsappLegivel(true)).toBe("+55 12 98149-9901");
   });
 
+  // Destino do aviso de venda: o caso que derruba é o branco invisível.
+  // "WHATSAPP_DESTINO= " passa por qualquer teste de "está preenchida?" e
+  // vira destino vazio na hora de enviar — a venda acontece e ninguém sabe.
+  it.each([
+    ["ausente", undefined],
+    ["vazia", ""],
+    ["só espaços", "   "],
+    ["só um TAB", "\t"],
+    ["pontuação sem dígito", "-- ()"],
+  ])("aviso de venda cai no número da loja quando a variável está %s", (_, valor) => {
+    expect(destinoDoAviso(valor as string | undefined)).toBe(WHATSAPP_REVERA);
+  });
+
+  it("aviso de venda respeita o destino configurado, limpo de pontuação", () => {
+    expect(destinoDoAviso(" +55 (11) 99999-0000 ")).toBe("5511999990000");
+  });
+
   // Varre código E documentação: a primeira revisão desta mudança pegou o
   // número velho vivo no README, mandando configurar de novo a variável que
   // acabara de ser aposentada. Documento errado reintroduz o defeito pela
   // mão do próximo que ler.
   it("não deixou nenhum resto do número antigo no projeto", () => {
+    // `docs/` fica de fora: são atas datadas do que foi feito e conferido em
+    // cada dia. Reescrever ata para o teste passar é apagar história — o que
+    // não pode existir é INSTRUÇÃO viva mandando usar o número velho, e essa
+    // mora em código, script, README ou .env.example.
     const alvos = [...arquivos("src"), ...arquivos("scripts"), "README.md", ".env.example"];
     const sobras = alvos.filter((arquivo) => {
       // O comentário histórico de whatsapp.ts cita o antigo de propósito: é

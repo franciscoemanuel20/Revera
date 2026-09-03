@@ -40,6 +40,24 @@ import { nomeDoPais } from "@/lib/internacional/paises";
 import { WHATSAPP_REVERA } from "@/lib/config/whatsapp";
 import { enviarWhatsApp, modoWhatsApp } from "./whatsapp";
 
+/**
+ * Para ONDE o aviso de venda paga chega — a equipe —, e não o número que o
+ * cliente vê. Por isso `WHATSAPP_DESTINO` não virou constante junto com
+ * `WHATSAPP_REVERA` em 03/09/2026: são papéis diferentes, e um dia o aviso
+ * pode ir para alguém que não atende cliente nenhum.
+ *
+ * A limpeza vem ANTES da escolha, e não depois. `WHATSAPP_DESTINO=" "` é
+ * verdadeiro para o `||` e vira string vazia no `replace` — o aviso sairia
+ * para destino nenhum, calado, e a venda ficaria sem ninguém sabendo. É a
+ * mesma família do TAB que parou a loja de cobrar em 29/08 (ver
+ * src/lib/config/urls.ts): espaço em branco em variável de ambiente é
+ * invisível para quem configura e fatal para quem usa.
+ */
+export function destinoDoAviso(bruto: string | undefined): string {
+  const digitos = (bruto ?? "").replace(/\D/g, "");
+  return digitos || WHATSAPP_REVERA;
+}
+
 type Supabase = ReturnType<typeof createAdminClient>;
 
 export type ResultadoAviso =
@@ -95,12 +113,7 @@ export async function avisarVendaPaga(
       return { estado: "erro", motivo: "pedido não encontrado" };
     }
 
-    // WHATSAPP_DESTINO é para ONDE o aviso CHEGA — a equipe —, não o número
-    // que o cliente vê. Por isso ele não virou constante junto com
-    // WHATSAPP_REVERA em 03/09/2026: são papéis diferentes, e um dia o aviso
-    // pode ir para um número que não atende cliente nenhum. Sem a variável,
-    // porém, cair no número da loja é melhor que não avisar ninguém.
-    const destino = (process.env.WHATSAPP_DESTINO || WHATSAPP_REVERA).replace(/\D/g, "");
+    const destino = destinoDoAviso(process.env.WHATSAPP_DESTINO);
     const { texto, parametros } = montarAvisoVendaPaga(dados);
     const envio = await enviarWhatsApp({ para: destino, texto, parametros });
 

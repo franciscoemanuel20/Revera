@@ -19,7 +19,7 @@ let ambienteProducao = true;
 import { enviarWhatsApp, modoWhatsApp } from "@/lib/notificacoes/whatsapp";
 
 const ORIGINAL = { ...process.env };
-const DESTINO = "5512981409901";
+const DESTINO = "5511999990000";
 
 type Chamada = { url: string; init?: RequestInit };
 let chamadas: Chamada[] = [];
@@ -103,7 +103,7 @@ describe("modo clint", () => {
       "fetch",
       fetchFalso((c) => {
         if (c.url.includes("/v1/contacts?")) {
-          return respostaJson(200, [{ id: "c-equipe", phone: "+55 (12) 98140-9901" }]);
+          return respostaJson(200, [{ id: "c-equipe", phone: "+55 (11) 99999-0000" }]);
         }
         if (c.url.endsWith("/v2/messages/template")) {
           return respostaJson(200, { data: { id: "msg-1" } });

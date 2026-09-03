@@ -38,7 +38,7 @@ const BR_VALIDO = {
   bairro: "Centro",
   cidade: "São José dos Campos",
   uf: "sp",
-  telefone: "(12) 98140-9901",
+  telefone: "(11) 97654-3210",
 };
 
 describe("Brasil continua funcionando exatamente como antes", () => {
@@ -53,7 +53,7 @@ describe("Brasil continua funcionando exatamente como antes", () => {
     if (!ehEnderecoBR(r.endereco)) throw new Error("deveria ser BR");
     expect(r.endereco.cep).toBe("12245000");
     expect(r.endereco.uf).toBe("SP");
-    expect(r.endereco.telefone).toBe("12981409901");
+    expect(r.endereco.telefone).toBe("11976543210");
   });
 
   it("brasileiro SEM bairro continua sendo recusado", () => {

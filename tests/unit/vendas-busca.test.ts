@@ -78,7 +78,7 @@ describe("casaBuscaLocal — os cinco campos prometidos pela tela", () => {
   });
 
   it("casa telefone por dígitos, ignorando máscara", () => {
-    expect(casaBuscaLocal(venda({ telefone: "+55 12 98140-9901" }), "(12) 98140")).toBe(true);
+    expect(casaBuscaLocal(venda({ telefone: "+55 11 97654-3210" }), "(11) 97654")).toBe(true);
   });
 
   it("casa CPF por dígitos", () => {
@@ -88,7 +88,7 @@ describe("casaBuscaLocal — os cinco campos prometidos pela tela", () => {
   it("dígitos curtos demais não casam telefone (evita falso positivo)", () => {
     // numero sem "12" para isolar o caminho dos dígitos do caminho de texto
     expect(
-      casaBuscaLocal(venda({ numero: "REV-XYZWQK", telefone: "+55 12 98140-9901" }), "12")
+      casaBuscaLocal(venda({ numero: "REV-XYZWQK", telefone: "+55 11 97654-3210" }), "11")
     ).toBe(false);
   });
 
