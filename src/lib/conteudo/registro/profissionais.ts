@@ -126,6 +126,33 @@ export const PROFISSIONAIS = {
     tipo: "texto",
     padrao: "Quero ser contatado",
   },
+  /*
+   * 03/09/2026 — depois de enviar o cadastro, a tela passa a MOSTRAR o
+   * WhatsApp em vez de só mandar a pessoa para lá. A conversa abre sozinha
+   * numa aba nova, mas aba nova é justamente o que o navegador bloqueia
+   * calado: sem estes textos, quem tinha bloqueador ficava olhando uma
+   * confirmação e nenhum caminho.
+   */
+  "profissionais.whatsapp.botao": {
+    pagina: "profissionais",
+    rotulo: "Depois de enviar — rótulo do botão de WhatsApp",
+    tipo: "texto",
+    padrao: "Falar no WhatsApp agora",
+  },
+  "profissionais.whatsapp.dica": {
+    pagina: "profissionais",
+    rotulo: "Depois de enviar — frase acima do botão de WhatsApp",
+    tipo: "paragrafo",
+    padrao:
+      "A conversa abre numa aba nova. Se não abrir, toque no botão — ou chame direto no número abaixo.",
+  },
+  "profissionais.whatsapp.telefoneRotulo": {
+    pagina: "profissionais",
+    rotulo: "Depois de enviar — rótulo antes do número escrito",
+    tipo: "texto",
+    padrao: "WhatsApp",
+  },
+
   "profissionais.mensagemSucesso": {
     pagina: "profissionais",
     rotulo: "Formulário — mensagem depois de enviar",

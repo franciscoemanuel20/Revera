@@ -17,6 +17,7 @@ import {
   whatsappLegivel,
 } from "../../src/lib/config/whatsapp";
 import { destinoDoAviso } from "../../src/lib/notificacoes/venda-paga";
+import { textos } from "../../src/lib/internacional/idioma";
 
 const NUMERO_ANTIGO = "12981409901"; // numero-antigo-de-proposito
 
@@ -99,3 +100,37 @@ function* arquivos(dir: string): Generator<string> {
     else if (/\.(ts|tsx)$/.test(nome)) yield caminho;
   }
 }
+
+/**
+ * Os textos do WhatsApp existem nos TRÊS idiomas — 03/09/2026.
+ *
+ * A Reverá vende para fora desde 29/08 (Espanha) e cobra em dólar desde
+ * 02/09. Um texto novo escrito só em português não quebra nada: ele
+ * simplesmente não compila se faltar no tipo, e se alguém copiar o
+ * português para as outras chaves, o cliente de fora recebe um botão em
+ * português e não clica. Aqui se confere que cada idioma tem o SEU.
+ */
+describe("convite para comprar de novo, nos três idiomas", () => {
+  const PEDIDO = "REV-ABC123";
+
+  it.each(["pt", "en", "es"] as const)("%s tem botão e mensagem próprios", (idioma) => {
+    const t = textos(idioma);
+    expect(t.recompraBotao.trim().length).toBeGreaterThan(0);
+    // A mensagem precisa citar o pedido: é por ele que a equipe descobre
+    // quem está falando, sem perguntar.
+    expect(t.recompraMensagem(PEDIDO)).toContain(PEDIDO);
+  });
+
+  it("cada idioma escreve o seu — nenhum é cópia do português", () => {
+    const pt = textos("pt");
+    expect(textos("en").recompraBotao).not.toBe(pt.recompraBotao);
+    expect(textos("es").recompraBotao).not.toBe(pt.recompraBotao);
+    expect(textos("en").recompraMensagem(PEDIDO)).not.toBe(pt.recompraMensagem(PEDIDO));
+    expect(textos("es").recompraMensagem(PEDIDO)).not.toBe(pt.recompraMensagem(PEDIDO));
+  });
+
+  it("é conversa diferente da de suporte", () => {
+    const t = textos("pt");
+    expect(t.recompraMensagem(PEDIDO)).not.toBe(t.suporteMensagem(PEDIDO));
+  });
+});

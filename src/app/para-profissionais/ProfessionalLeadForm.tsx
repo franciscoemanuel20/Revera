@@ -34,11 +34,16 @@ export interface ProfessionalLeadFormTextos {
   mensagemDica: string;
   botaoEnviar: string;
   mensagemSucesso: string;
+  whatsappBotao: string;
+  whatsappDica: string;
+  whatsappTelefoneRotulo: string;
 }
 
 export function ProfessionalLeadForm({
   textos,
   whatsappHref,
+  whatsappLegivel,
+  whatsappDigitos,
 }: {
   textos: ProfessionalLeadFormTextos;
   /**
@@ -48,6 +53,10 @@ export function ProfessionalLeadForm({
    * só, junto do comentário que explica por que o DDI é obrigatório.
    */
   whatsappHref: string;
+  /** O número escrito, para quem está no computador e vai digitar no celular. */
+  whatsappLegivel: string;
+  /** Só dígitos com DDI, para o link `tel:`. */
+  whatsappDigitos: string;
 }) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -57,6 +66,8 @@ export function ProfessionalLeadForm({
   const [message, setMessage] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviado, setEnviado] = useState(false);
+  // Gravou de verdade? Só então a tela promete que a equipe vai chamar.
+  const [confirmado, setConfirmado] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
   // 03/09/2026 — o botão deixou de ser um fim de linha. Antes ele gravava o
@@ -135,30 +146,60 @@ export function ProfessionalLeadForm({
     if (abaWhatsApp) {
       abaWhatsApp.opener = null;
       abaWhatsApp.location.href = whatsappHref;
-      // "Recebemos seu contato" só aparece se o contato foi mesmo recebido.
-      // Quando a gravação falha, a página fica como está — a conversa já
-      // seguiu na outra aba, e uma confirmação falsa seria mentira.
-      if (!gravou) return;
-      setEnviado(true);
-      setFullName("");
-      setPhone("");
-      setEmail("");
-      setBusinessName("");
-      setCity("");
-      setMessage("");
-      return;
     }
 
-    window.location.assign(whatsappHref);
+    // A tela do fim aparece SEMPRE, tenha a aba aberto ou não, tenha o
+    // cadastro gravado ou não — porque é ela que mostra o número. Antes a
+    // página se jogava para o WhatsApp quando a aba vinha bloqueada, e
+    // quando a gravação falhava não mostrava nada: os dois caminhos deixavam
+    // gente sem o telefone na mão. Agora o número está escrito ali, e a
+    // conversa acontece mesmo que tudo o mais tenha dado errado.
+    setEnviado(true);
+    setConfirmado(gravou);
+    setFullName("");
+    setPhone("");
+    setEmail("");
+    setBusinessName("");
+    setCity("");
+    setMessage("");
   }
 
   if (enviado) {
     return (
-      <Toast
-        message={textos.mensagemSucesso}
-        variant="success"
-        onClose={() => setEnviado(false)}
-      />
+      <div className="flex flex-col items-center gap-4 text-center">
+        {/* A confirmação só aparece se o cadastro foi mesmo gravado —
+            prometer "nossa equipe entra em contato" quando o insert falhou
+            seria mentira. O WhatsApp abaixo aparece nos dois casos: ele é a
+            saída que independe do nosso banco. */}
+        {confirmado ? (
+          <Toast
+            message={textos.mensagemSucesso}
+            variant="success"
+            onClose={() => setEnviado(false)}
+          />
+        ) : null}
+
+        <p className="text-sm text-ink/70">{textos.whatsappDica}</p>
+
+        <a
+          href={whatsappHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="min-h-toque rounded-md bg-gold-metal px-6 py-3 font-body font-semibold text-ink transition-all duration-300 hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+        >
+          {textos.whatsappBotao}
+        </a>
+
+        <p className="text-sm text-ink/70">
+          {textos.whatsappTelefoneRotulo}:{" "}
+          <a
+            href={`tel:+${whatsappDigitos}`}
+            className="font-semibold text-ink underline underline-offset-4"
+          >
+            {whatsappLegivel}
+          </a>
+        </p>
+      </div>
     );
   }
 

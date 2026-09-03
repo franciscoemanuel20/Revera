@@ -11,7 +11,11 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { textosDaPagina } from "@/lib/conteudo/textos";
-import { linkWhatsApp } from "@/lib/config/whatsapp";
+import {
+  WHATSAPP_REVERA,
+  linkWhatsApp,
+  whatsappLegivel,
+} from "@/lib/config/whatsapp";
 import { ProfessionalLeadForm } from "./ProfessionalLeadForm";
 
 /**
@@ -79,6 +83,8 @@ export default async function ParaProfissionaisPage() {
           </h2>
           <ProfessionalLeadForm
             whatsappHref={linkWhatsApp(WHATSAPP_MENSAGEM)}
+            whatsappLegivel={whatsappLegivel()}
+            whatsappDigitos={WHATSAPP_REVERA}
             textos={{
               nomeRotulo: t("profissionais.campo.nome.rotulo"),
               telefoneRotulo: t("profissionais.campo.telefone.rotulo"),
@@ -93,6 +99,9 @@ export default async function ParaProfissionaisPage() {
               mensagemDica: t("profissionais.campo.mensagem.dica"),
               botaoEnviar: t("profissionais.botao.enviar"),
               mensagemSucesso: t("profissionais.mensagemSucesso"),
+              whatsappBotao: t("profissionais.whatsapp.botao"),
+              whatsappDica: t("profissionais.whatsapp.dica"),
+              whatsappTelefoneRotulo: t("profissionais.whatsapp.telefoneRotulo"),
             }}
           />
         </section>

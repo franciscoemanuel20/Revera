@@ -127,6 +127,9 @@ export interface Dicionario {
   suporteTexto: string;
   suporteBotao: (numeroPedido: string) => string;
   suporteMensagem: (numeroPedido: string) => string;
+  /* --- quem já recebeu e quer comprar de novo (03/09/2026) --- */
+  recompraBotao: string;
+  recompraMensagem: (numeroPedido: string) => string;
   /* --- suporte com o pagamento ainda pendente --- */
   suporteTituloPendente: string;
   suporteTextoPendente: string;
@@ -236,6 +239,9 @@ const PT: Dicionario = {
   suporteTexto: "Fale com a nossa equipe sobre este pedido.",
   suporteBotao: (n) => `Falar sobre o pedido ${n}`,
   suporteMensagem: (n) => `Olá! Tenho uma dúvida sobre o pedido ${n}.`,
+  recompraBotao: "Comprei e quero comprar mais",
+  recompraMensagem: (n) =>
+    `Olá! Comprei o pedido ${n} e gostaria de comprar mais.`,
 
   suporteTituloPendente: "Precisa de ajuda com o pagamento?",
   suporteTextoPendente:
@@ -360,6 +366,9 @@ const EN: Dicionario = {
     "Talk to our team about this order — we reply during Brazilian business hours.",
   suporteBotao: (n) => `Ask about order ${n}`,
   suporteMensagem: (n) => `Hello! I have a question about order ${n}.`,
+  recompraBotao: "I bought, and I want to order more",
+  recompraMensagem: (n) =>
+    `Hello! I placed order ${n} and I would like to order more.`,
 
   suporteTituloPendente: "Need help with the payment?",
   // Mesma razão da frase acrescentada em `suporteTexto`: quem escreve de
@@ -494,6 +503,9 @@ const ES: Dicionario = {
     "Habla con nuestro equipo sobre este pedido — respondemos en horario comercial de Brasil.",
   suporteBotao: (n) => `Preguntar por el pedido ${n}`,
   suporteMensagem: (n) => `¡Hola! Tengo una duda sobre el pedido ${n}.`,
+  recompraBotao: "Ya compré y quiero comprar más",
+  recompraMensagem: (n) =>
+    `¡Hola! Hice el pedido ${n} y me gustaría comprar más.`,
 
   suporteTituloPendente: "¿Necesitas ayuda con el pago?",
   // Mesma frase de fuso que existe no inglês, e pela mesma razão.

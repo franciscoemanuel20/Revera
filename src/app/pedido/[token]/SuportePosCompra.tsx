@@ -1,7 +1,7 @@
 import "server-only";
 
 import { textos, type Idioma } from "@/lib/internacional/idioma";
-import { WHATSAPP_REVERA, whatsappLegivel } from "@/lib/config/whatsapp";
+import { WHATSAPP_REVERA, linkWhatsApp, whatsappLegivel } from "@/lib/config/whatsapp";
 
 /**
  * Contato de suporte de quem já fechou pedido.
@@ -52,9 +52,6 @@ export function SuportePosCompra({
 }) {
   const t = textos(idioma);
   const pendente = variante === "aguardando";
-  const mensagem = encodeURIComponent(
-    pendente ? t.suporteMensagemPendente(numeroPedido) : t.suporteMensagem(numeroPedido)
-  );
 
   return (
     <section className="flex flex-col items-center gap-3 rounded-lg border border-sand p-5 text-center">
@@ -64,27 +61,80 @@ export function SuportePosCompra({
       <p className="text-sm text-ink/70">
         {pendente ? t.suporteTextoPendente : t.suporteTexto}
       </p>
-      <a
-        href={`https://wa.me/${WHATSAPP_REVERA}?text=${mensagem}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="min-h-toque rounded-md bg-gold-metal px-6 py-3 font-body font-semibold text-ink transition-all duration-300 hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+
+      <BotaoWhatsApp
+        href={linkWhatsApp(
+          pendente
+            ? t.suporteMensagemPendente(numeroPedido)
+            : t.suporteMensagem(numeroPedido)
+        )}
+        destaque={pendente}
       >
         {pendente ? t.suporteBotaoPendente : t.suporteBotao(numeroPedido)}
-      </a>
-      {pendente ? (
-        /* Escrito, e não só no botão: quem está com o pagamento travado às
-           vezes está no computador, com o WhatsApp no celular ao lado. */
-        <p className="text-sm text-ink/70">
-          {t.suporteTelefoneRotulo}:{" "}
-          <a
-            href={`tel:+${WHATSAPP_REVERA}`}
-            className="font-semibold text-ink underline underline-offset-4"
-          >
-            {whatsappLegivel(idioma !== "pt")}
-          </a>
-        </p>
+      </BotaoWhatsApp>
+
+      {/* COMPRAR DE NOVO (03/09/2026, pedido do Francisco).
+          Só no estado PAGO, e por um motivo: no "Aguardando pagamento" a
+          pessoa ainda não comprou nada — oferecer "comprei e quero mais" ali
+          seria oferecer o segundo passo a quem tropeçou no primeiro.
+          É um botão SEPARADO, e não uma segunda frase no de suporte, porque
+          são duas conversas diferentes chegando no WhatsApp: uma é problema,
+          a outra é venda. A mensagem já vem escrita para a equipe saber qual
+          é qual sem perguntar.
+          Como todo botão desta tela, ele NÃO dispara conversão: o Purchase
+          já saiu no PurchaseTracker desta mesma página. */}
+      {!pendente ? (
+        <BotaoWhatsApp
+          href={linkWhatsApp(t.recompraMensagem(numeroPedido))}
+          destaque
+        >
+          {t.recompraBotao}
+        </BotaoWhatsApp>
       ) : null}
+
+      {/* O número ESCRITO, não só dentro do botão. Quem está no computador
+          tem o WhatsApp no celular ao lado, e ali o link não ajuda — ele
+          precisa ler os dígitos. Valia para quem travou no pagamento desde
+          31/08; desde 03/09 vale para os dois estados, porque quem acabou de
+          comprar liga tanto quanto quem não conseguiu pagar. */}
+      <p className="text-sm text-ink/70">
+        {t.suporteTelefoneRotulo}:{" "}
+        <a
+          href={`tel:+${WHATSAPP_REVERA}`}
+          className="font-semibold text-ink underline underline-offset-4"
+        >
+          {whatsappLegivel(idioma !== "pt")}
+        </a>
+      </p>
     </section>
+  );
+}
+
+/**
+ * O botão de WhatsApp desta tela. `destaque` é o dourado da marca; sem ele,
+ * a borda discreta — dois botões dourados lado a lado brigam entre si e o
+ * olho não escolhe nenhum.
+ */
+function BotaoWhatsApp({
+  href,
+  destaque = false,
+  children,
+}: {
+  href: string;
+  destaque?: boolean;
+  children: React.ReactNode;
+}) {
+  const estilo = destaque
+    ? "bg-gold-metal text-ink hover:brightness-105"
+    : "border border-ink text-ink hover:bg-sand";
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`min-h-toque rounded-md px-6 py-3 font-body font-semibold transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${estilo}`}
+    >
+      {children}
+    </a>
   );
 }
