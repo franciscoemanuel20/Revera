@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Toast } from "@/components/ui/Toast";
 import { enviarLeadProfissionalAction } from "./actions";
+import { conferirLead } from "./lead-schema";
 
 const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink";
 
@@ -83,19 +84,23 @@ export function ProfessionalLeadForm({
     event.preventDefault();
     setErro(null);
 
-    if (!fullName.trim() || phone.trim().length < 8) {
-      setErro("Preencha nome e telefone (com DDD) para continuar.");
-      return;
-    }
+    const dados = {
+      fullName,
+      phone,
+      email: email.trim() ? email : null,
+      businessName: businessName.trim() ? businessName : null,
+      city: city.trim() ? city : null,
+      message: message.trim() ? message : null,
+    };
 
-    // O e-mail é o único campo restante que ainda pode fazer o zod da action
-    // recusar o lead inteiro (os outros são opcionais e sem formato). Como o
-    // erro da action deixou de aparecer na tela, ele é conferido AQUI: sem
-    // isto, um e-mail digitado errado mandaria a pessoa ao WhatsApp e jogaria
-    // o cadastro fora em silêncio. O formulário tem `noValidate`, então o
-    // navegador não faz essa conferência sozinho.
-    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setErro("Confira o e-mail — ou deixe o campo em branco, ele é opcional.");
+    // A conferência usa o MESMO schema do servidor (lead-schema.ts), não uma
+    // segunda versão da regra escrita à mão: como o erro da action deixou de
+    // aparecer na tela, qualquer campo que o zod recuse e o navegador aceite
+    // vira cadastro perdido em silêncio. O formulário tem `noValidate`, então
+    // o navegador não confere nada sozinho.
+    const falta = conferirLead(dados);
+    if (falta) {
+      setErro(falta);
       return;
     }
 
@@ -113,14 +118,7 @@ export function ProfessionalLeadForm({
     // justamente o beco sem saída que esta mudança existe para eliminar.
     let gravou = false;
     try {
-      const resultado = await enviarLeadProfissionalAction({
-        fullName,
-        phone,
-        email: email.trim() ? email : null,
-        businessName: businessName.trim() ? businessName : null,
-        city: city.trim() ? city : null,
-        message: message.trim() ? message : null,
-      });
+      const resultado = await enviarLeadProfissionalAction(dados);
       gravou = !("error" in resultado);
       if (!gravou) {
         // Sem Toast de erro: o cliente está indo para o WhatsApp e não há

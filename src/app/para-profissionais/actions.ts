@@ -13,23 +13,12 @@
 // que criou esta página foi explícita: só "equipe entra em contato para
 // apresentar condições". Quem decide número é o Francisco, depois, fora
 // deste formulário.
-import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
+// O schema vem de lead-schema.ts, não daqui: arquivo "use server" só
+// exporta função async, e o formulário precisa da MESMA regra para avisar o
+// visitante antes de mandar. Ver o comentário de lá.
+import { leadSchema, type ProfessionalLeadInput } from "./lead-schema";
 
-// Mesmo padrão de src/app/admin/(protected)/produtos/actions.ts: quem
-// chama já converte campo vazio para null antes de mandar (ver
-// ProfessionalLeadForm.tsx) — o schema aqui só valida formato, não
-// reimplementa a conversão texto->null.
-const leadSchema = z.object({
-  fullName: z.string().trim().min(1, "Informe seu nome."),
-  phone: z.string().trim().min(8, "Informe um telefone válido, com DDD."),
-  email: z.string().trim().email("E-mail inválido.").nullable(),
-  businessName: z.string().trim().nullable(),
-  city: z.string().trim().nullable(),
-  message: z.string().trim().nullable(),
-});
-
-export type ProfessionalLeadInput = z.infer<typeof leadSchema>;
 export type ProfessionalLeadResult = { error: string } | { ok: true };
 
 export async function enviarLeadProfissionalAction(
