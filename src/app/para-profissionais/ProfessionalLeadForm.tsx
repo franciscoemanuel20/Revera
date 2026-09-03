@@ -35,7 +35,19 @@ export interface ProfessionalLeadFormTextos {
   mensagemSucesso: string;
 }
 
-export function ProfessionalLeadForm({ textos }: { textos: ProfessionalLeadFormTextos }) {
+export function ProfessionalLeadForm({
+  textos,
+  whatsappHref,
+}: {
+  textos: ProfessionalLeadFormTextos;
+  /**
+   * Link do WhatsApp da Reverá, montado na página server (page.tsx) — é para
+   * lá que o botão leva depois de gravar o lead. Vem por prop, e não montado
+   * aqui, porque número e mensagem são conteúdo comercial: ficam num lugar
+   * só, junto do comentário que explica por que o DDI é obrigatório.
+   */
+  whatsappHref: string;
+}) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -46,9 +58,41 @@ export function ProfessionalLeadForm({ textos }: { textos: ProfessionalLeadFormT
   const [enviado, setEnviado] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
+  // 03/09/2026 — o botão deixou de ser um fim de linha. Antes ele gravava o
+  // lead, mostrava "recebemos seu contato" e a conversa dependia da equipe
+  // lembrar de ligar. Agora ele grava E abre o WhatsApp da Reverá com a
+  // mensagem pronta: quem clicou já sai falando com a loja.
+  //
+  // Três decisões que parecem detalhe e não são:
+  //
+  // 1. O que falta (nome, telefone) é conferido AQUI, antes de qualquer
+  //    envio — erro que o visitante corrige em dois segundos não deve virar
+  //    ida ao servidor nem mandar ninguém para o WhatsApp com o formulário
+  //    pela metade.
+  // 2. Falha do SERVIDOR não segura o cliente. Se o insert cair, o lead se
+  //    perde, mas a conversa acontece — e conversa no WhatsApp vale mais que
+  //    linha no banco. O caminho oposto (mostrar erro e ficar na página) é
+  //    exatamente o beco sem saída que já custou lead nesta operação.
+  // 3. A aba do WhatsApp é aberta VAZIA no clique e só recebe o endereço
+  //    depois do await. Depois de um `await` o navegador não considera mais
+  //    que houve gesto do usuário e bloqueia `window.open` — abrindo antes,
+  //    a permissão já está dada. Se mesmo assim vier bloqueada (`null`), a
+  //    ida acontece na própria aba: melhor perder a confirmação na tela do
+  //    que perder o cliente.
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErro(null);
+
+    if (!fullName.trim() || phone.trim().length < 8) {
+      setErro("Preencha nome e telefone (com DDD) para continuar.");
+      return;
+    }
+
+    // Sem "noopener" na terceira posição de propósito: com ele o navegador
+    // devolve `null` e não sobra handle nenhum para apontar depois do await —
+    // era o oposto do que esta aba existe para fazer. O elo de volta é cortado
+    // logo abaixo, com `opener = null`, antes de a aba sair para o wa.me.
+    const abaWhatsApp = window.open("", "_blank");
     setEnviando(true);
 
     const resultado = await enviarLeadProfissionalAction({
@@ -63,17 +107,25 @@ export function ProfessionalLeadForm({ textos }: { textos: ProfessionalLeadFormT
     setEnviando(false);
 
     if ("error" in resultado) {
-      setErro(resultado.error);
+      // Sem Toast de erro: o cliente está indo para o WhatsApp e não há nada
+      // que ele possa fazer a respeito. Quem precisa saber é quem lê o log.
+      console.error("[para-profissionais] lead não gravado:", resultado.error);
+    }
+
+    if (abaWhatsApp) {
+      abaWhatsApp.opener = null;
+      abaWhatsApp.location.href = whatsappHref;
+      setEnviado(true);
+      setFullName("");
+      setPhone("");
+      setEmail("");
+      setBusinessName("");
+      setCity("");
+      setMessage("");
       return;
     }
 
-    setEnviado(true);
-    setFullName("");
-    setPhone("");
-    setEmail("");
-    setBusinessName("");
-    setCity("");
-    setMessage("");
+    window.location.assign(whatsappHref);
   }
 
   if (enviado) {
