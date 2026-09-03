@@ -66,8 +66,11 @@ export function ProfessionalLeadForm({
   const [message, setMessage] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviado, setEnviado] = useState(false);
-  // Gravou de verdade? Só então a tela promete que a equipe vai chamar.
-  const [confirmado, setConfirmado] = useState(false);
+  // O aviso "recebemos seu contato" — nasce ligado só se o cadastro foi
+  // mesmo gravado, e é a ÚNICA coisa que o "X" fecha. Estado separado de
+  // `enviado` de propósito: fechar o aviso não pode levar embora o número
+  // do WhatsApp, que é justamente o que a tela existe para mostrar.
+  const [avisoDeSucesso, setAvisoDeSucesso] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
   // 03/09/2026 — o botão deixou de ser um fim de linha. Antes ele gravava o
@@ -155,7 +158,7 @@ export function ProfessionalLeadForm({
     // gente sem o telefone na mão. Agora o número está escrito ali, e a
     // conversa acontece mesmo que tudo o mais tenha dado errado.
     setEnviado(true);
-    setConfirmado(gravou);
+    setAvisoDeSucesso(gravou);
     setFullName("");
     setPhone("");
     setEmail("");
@@ -171,11 +174,11 @@ export function ProfessionalLeadForm({
             prometer "nossa equipe entra em contato" quando o insert falhou
             seria mentira. O WhatsApp abaixo aparece nos dois casos: ele é a
             saída que independe do nosso banco. */}
-        {confirmado ? (
+        {avisoDeSucesso ? (
           <Toast
             message={textos.mensagemSucesso}
             variant="success"
-            onClose={() => setEnviado(false)}
+            onClose={() => setAvisoDeSucesso(false)}
           />
         ) : null}
 
