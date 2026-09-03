@@ -65,11 +65,20 @@ describe("WhatsApp da Reverá", () => {
     // cada dia. Reescrever ata para o teste passar é apagar história — o que
     // não pode existir é INSTRUÇÃO viva mandando usar o número velho, e essa
     // mora em código, script, README ou .env.example.
-    const alvos = [...arquivos("src"), ...arquivos("scripts"), "README.md", ".env.example"];
+    const alvos = [
+      ...arquivos("src"),
+      ...arquivos("scripts"),
+      ...arquivos("tests"),
+      "README.md",
+      ".env.example",
+    ];
     const sobras = alvos.filter((arquivo) => {
       // O comentário histórico de whatsapp.ts cita o antigo de propósito: é
       // ele que explica a troca. Qualquer OUTRO lugar é resto de verdade.
+      // Dois arquivos citam o número velho de propósito: o comentário que
+      // conta a troca, e este teste, que precisa saber o que procurar.
       if (arquivo.endsWith(join("config", "whatsapp.ts"))) return false;
+      if (arquivo.endsWith("whatsapp-revera.test.ts")) return false;
       return readFileSync(arquivo, "utf8").replace(/\D/g, "").includes(NUMERO_ANTIGO);
     });
     expect(sobras).toEqual([]);
