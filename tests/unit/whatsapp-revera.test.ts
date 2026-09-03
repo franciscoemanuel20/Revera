@@ -38,15 +38,18 @@ describe("WhatsApp da Reverá", () => {
     expect(whatsappLegivel(true)).toBe("+55 12 98149-9901");
   });
 
-  it("não deixou nenhum resto do número antigo em src/", () => {
-    const sobras: string[] = [];
-    for (const arquivo of arquivos("src")) {
-      const conteudo = readFileSync(arquivo, "utf8");
-      // O comentário histórico de whatsapp.ts pode citar o antigo: é ele que
-      // explica a troca. Qualquer OUTRO arquivo citando é resto de verdade.
-      if (arquivo.endsWith(join("config", "whatsapp.ts"))) continue;
-      if (conteudo.replace(/\D/g, "").includes(NUMERO_ANTIGO)) sobras.push(arquivo);
-    }
+  // Varre código E documentação: a primeira revisão desta mudança pegou o
+  // número velho vivo no README, mandando configurar de novo a variável que
+  // acabara de ser aposentada. Documento errado reintroduz o defeito pela
+  // mão do próximo que ler.
+  it("não deixou nenhum resto do número antigo no projeto", () => {
+    const alvos = [...arquivos("src"), ...arquivos("scripts"), "README.md", ".env.example"];
+    const sobras = alvos.filter((arquivo) => {
+      // O comentário histórico de whatsapp.ts cita o antigo de propósito: é
+      // ele que explica a troca. Qualquer OUTRO lugar é resto de verdade.
+      if (arquivo.endsWith(join("config", "whatsapp.ts"))) return false;
+      return readFileSync(arquivo, "utf8").replace(/\D/g, "").includes(NUMERO_ANTIGO);
+    });
     expect(sobras).toEqual([]);
   });
 });

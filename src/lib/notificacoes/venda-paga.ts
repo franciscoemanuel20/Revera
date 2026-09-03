@@ -37,6 +37,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { formatarBRL } from "@/lib/format/money";
 import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
 import { nomeDoPais } from "@/lib/internacional/paises";
+import { WHATSAPP_REVERA } from "@/lib/config/whatsapp";
 import { enviarWhatsApp, modoWhatsApp } from "./whatsapp";
 
 type Supabase = ReturnType<typeof createAdminClient>;
@@ -94,12 +95,12 @@ export async function avisarVendaPaga(
       return { estado: "erro", motivo: "pedido não encontrado" };
     }
 
-    const destino = (process.env.WHATSAPP_DESTINO ?? "").replace(/\D/g, "");
-    if (!destino) {
-      await registrarFalha(supabase, orderId, "WHATSAPP_DESTINO não definida");
-      return { estado: "erro", motivo: "destino não configurado" };
-    }
-
+    // WHATSAPP_DESTINO é para ONDE o aviso CHEGA — a equipe —, não o número
+    // que o cliente vê. Por isso ele não virou constante junto com
+    // WHATSAPP_REVERA em 03/09/2026: são papéis diferentes, e um dia o aviso
+    // pode ir para um número que não atende cliente nenhum. Sem a variável,
+    // porém, cair no número da loja é melhor que não avisar ninguém.
+    const destino = (process.env.WHATSAPP_DESTINO || WHATSAPP_REVERA).replace(/\D/g, "");
     const { texto, parametros } = montarAvisoVendaPaga(dados);
     const envio = await enviarWhatsApp({ para: destino, texto, parametros });
 

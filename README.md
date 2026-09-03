@@ -167,14 +167,20 @@ debita a carteira de verdade. A **cotação** é real e foi exercitada
   houve aprovação formal de peça de marca (logo, wordmark) ainda.
 - **Preços reais**: nenhum preço foi inventado. É a decisão que destrava
   metade da lista.
-- **Número de WhatsApp de suporte do pedido**: `SuportePosCompra.tsx` renderiza
-  na página do pedido, nos dois estados — pagamento confirmado e *Aguardando
-  pagamento* (revisão de 31/08/2026; antes era só depois do pagamento, e quem
-  travava no Pix ficava sem saída). Continua fora de home, produto, carrinho e
-  checkout: é Server Component, a variável não tem `NEXT_PUBLIC_`, e
-  `npm run verify:secrets` confere que o número não entra no bundle. A variável
-  `WHATSAPP_POST_PURCHASE_NUMBER` está preenchida em produção e preview, **com
-  DDI** (`5512981409901`) — o link `wa.me` exige o número internacional.
+- **Número de WhatsApp da loja**: é **(12) 98149-9901**, e mora em
+  `src/lib/config/whatsapp.ts` — constante, não variável de ambiente (o
+  porquê está escrito lá). Trocado em 03/09/2026: o número anterior está na
+  conta oficial da Meta, e quem escrevia para lá caía na API em vez de numa
+  pessoa. Os dígitos antigos aparecem em UM lugar só, o comentário de
+  `whatsapp.ts` que conta essa história — de propósito, para que nenhum
+  documento os ofereça de volta como valor a configurar. `WHATSAPP_POST_PURCHASE_NUMBER` foi
+  aposentada e **pode ser apagada da Vercel**; ninguém mais a lê.
+  Aparece em dois lugares: a página do pedido (`SuportePosCompra.tsx`, nos
+  dois estados — pago e *Aguardando pagamento*, revisão de 31/08/2026) e o
+  botão de `/para-profissionais`. A regra de 26/08 que o escondia fora da
+  página do pedido caiu junto com a troca: o número é publicado de propósito.
+  `WHATSAPP_DESTINO` é outra coisa — é para ONDE chega o aviso de venda paga,
+  não o que o cliente vê, e continua vindo do ambiente.
 
 ## O que ainda NÃO existe
 
