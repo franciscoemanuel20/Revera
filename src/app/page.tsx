@@ -7,6 +7,7 @@ import { TrustBar } from "@/components/ui/TrustBar";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createClient } from "@/lib/supabase/server";
 import { textosDaPagina } from "@/lib/conteudo/textos";
+import { itensDaTrustBar } from "@/lib/conteudo/registro/trustbar";
 import {
   escolherProdutoVitrine,
   linkDoProdutoVitrine,
@@ -34,7 +35,15 @@ import {
 // cores/page.tsx e faq/page.tsx já usam para as tabelas delas — sem filtro
 // redundante aqui, a RLS já resolve quem pode ver o quê.
 export default async function HomePage() {
-  const t = await textosDaPagina("home");
+  // Dois grupos de conteúdo: o da home e o da TrustBar (grupo "trustbar", que
+  // a home divide com a página de produto — ver registro/trustbar.ts). São
+  // duas consultas de propósito: cada grupo é uma `pagina` própria no painel,
+  // e a edição da barra precisa valer nos dois lugares. Ambas usam o cliente
+  // sem cookie de textos.ts, então não tiram a página do modelo estático.
+  const [t, tSelos] = await Promise.all([
+    textosDaPagina("home"),
+    textosDaPagina("trustbar"),
+  ]);
   const supabase = await createClient();
 
   // P0-1 (27/08/2026): o destino dos CTAs sai do BANCO, não de um slug fixo.
@@ -197,7 +206,7 @@ export default async function HomePage() {
 
       <section className="w-full border-t border-sand bg-paper px-6 py-10">
         <Reveal>
-          <TrustBar />
+          <TrustBar items={itensDaTrustBar(tSelos)} />
         </Reveal>
       </section>
 

@@ -11,7 +11,7 @@ import { Price } from "@/components/ui/Price";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { Reveal } from "@/components/ui/Reveal";
 import { Toast } from "@/components/ui/Toast";
-import { TrustBar } from "@/components/ui/TrustBar";
+import { TrustBar, type TrustBarItem } from "@/components/ui/TrustBar";
 import { medirAdicionarAoCarrinho, medirVerProduto } from "@/lib/tracking/browser";
 import { useCart } from "@/components/cart/CartProvider";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";

@@ -47,6 +47,7 @@ import { SOBRE } from "./registro/sobre";
 import { PROFISSIONAIS } from "./registro/profissionais";
 import { GARANTIA } from "./registro/garantia";
 import { HOME } from "./registro/home";
+import { TRUSTBAR } from "./registro/trustbar";
 
 export interface TextoRegistrado {
   /** Em que página ele aparece. É como o painel agrupa. */
@@ -113,6 +114,11 @@ export interface PaginaRegistrada {
 
 export const PAGINAS: Record<string, PaginaRegistrada> = {
   home: { nome: "Página inicial", rota: "/" },
+  // A TrustBar aparece na home E na página de produto (ver registro/trustbar.ts).
+  // `rota` aponta para a home só para o painel ter uma rota para revalidar; a
+  // página de produto é dinâmica (lê o banco com cookie via createClient), então
+  // já rende de novo a cada visita e não depende de revalidação de cache.
+  trustbar: { nome: "Selos de confiança (home e produtos)", rota: "/" },
   cuidados: { nome: "Cuidados com a prótese", rota: "/cuidados" },
   porque: { nome: "Por que a Reverá", rota: "/por-que-revera" },
   naturalidade: { nome: "Naturalidade", rota: "/naturalidade" },
@@ -131,6 +137,7 @@ export const PAGINAS: Record<string, PaginaRegistrada> = {
  */
 export const REGISTRO = {
   ...HOME,
+  ...TRUSTBAR,
   ...CUIDADOS,
   ...PORQUE,
   ...NATURALIDADE,
