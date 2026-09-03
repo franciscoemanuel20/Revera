@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -34,6 +34,14 @@ export interface FotoProduto {
    * genérica do produto (é o caso de todas hoje). Ver page.tsx.
    */
   variantId?: string | null;
+  /**
+   * Foto de CATÁLOGO DA COR (`colors.photo_url`, /media/cores/*.jpg), não
+   * foto do produto. Muda duas coisas na tela: o enquadramento (as fotos da
+   * cartela são deitadas, 4:3, e as do produto são em pé, 3:4) e a legenda,
+   * que precisa dizer que aquilo é referência de COR — a peça fotografada
+   * pode não ser este modelo. Ver `fotoDaCor()`.
+   */
+  ehFotoDeCor?: boolean;
 }
 
 export interface ProdutoInterativoProps {
@@ -109,11 +117,15 @@ export function ProdutoInterativo({
     () => fotosDoProduto(name, fotosDoBanco),
     [name, fotosDoBanco]
   );
-  const [fotoAtivaIndex, setFotoAtivaIndex] = useState(0);
-  // noUncheckedIndexedAccess (tsconfig) trata fotos[i] como possivelmente
-  // undefined — cai para a primeira foto se o índice guardado no estado
-  // sair da faixa por algum motivo (não deveria, mas o tipo não sabe disso).
-  const fotoAtiva = fotos[fotoAtivaIndex] ?? fotos[0]!;
+  /**
+   * A FOTO GRANDE É GUARDADA PELO `src`, NÃO PELO ÍNDICE (03/09/2026).
+   *
+   * A galeria deixou de ser uma lista fixa: a foto da cor escolhida entra e
+   * sai dela conforme o cliente clica na cartela (ver `galeria` abaixo).
+   * Guardando índice, trocar de cor deslocaria a lista e a foto grande
+   * mudaria sozinha para a peça errada. O `src` não desloca.
+   */
+  const [fotoAtivaSrc, setFotoAtivaSrc] = useState<string | null>(null);
 
   const variantePorCor = useMemo(() => {
     const mapa = new Map<string, VariantData>();
@@ -143,6 +155,99 @@ export function ProdutoInterativo({
   const [corSelecionadaId, setCorSelecionadaId] = useState<string | null>(
     colors.length === 1 ? colors[0]!.id : null
   );
+
+  const corSelecionada = colors.find((c) => c.id === corSelecionadaId) ?? null;
+
+  /**
+   * A PEÇA NA COR ESCOLHIDA, NA FOTO GRANDE (Francisco, 03/09/2026).
+   *
+   * Pedido dele: "quando selecionar a prótese embaixo, trocar a imagem em
+   * cima, para o cliente conseguir visualizar a cor". Numa prótese capilar a
+   * cor É o pedido — escolher olhando uma bolinha de 44px é escolher no
+   * escuro, e a foto de cima ficava a mesma nas quinze cores da Micropele
+   * 0,08.
+   *
+   * De onde a foto sai, NESTA ordem:
+   *
+   *   1. foto do PRODUTO amarrada à variante daquela cor
+   *      (`product_media.variant_id`). É a melhor que existe: é ESTA peça,
+   *      nesta cor. Hoje (03/09/2026) nenhuma linha do banco tem variant_id
+   *      preenchido — o gancho já estava no schema e nunca havia sido lido.
+   *      Quando alguém fotografar peça por peça, entra por aqui sozinho.
+   *   2. a foto de catálogo da cor (`colors.photo_url`, /media/cores/*.jpg):
+   *      a mesma que a página /cores mostra, a peça de verdade com o código
+   *      escrito no canto. O que ela NÃO garante é ser este modelo — daí a
+   *      legenda dizer "referência da cartela" em vez de fingir que é a
+   *      Afro. As quinze cores têm essa foto; conferido no banco em 03/09.
+   *
+   * Sem nenhuma das duas, a foto grande não muda. Melhor não trocar nada do
+   * que mostrar uma peça e chamá-la de outra.
+   */
+  const fotoDaCor = useCallback(
+    (corId: string | null): FotoProduto | null => {
+      if (!corId) return null;
+      const cor = colors.find((c) => c.id === corId);
+      if (!cor) return null;
+
+      const variante = variantePorCor.get(corId);
+      const doProduto = variante
+        ? fotos.find((f) => f.variantId === variante.id)
+        : undefined;
+      if (doProduto) return doProduto;
+
+      /**
+       * A foto da cartela só entra onde existe cor A ESCOLHER.
+       *
+       * Fora da Micropele 0,08 a peça sai só na 1B — não há comparação a
+       * fazer, e a foto da cartela mostra uma peça LISA. Na página da Afro
+       * ela apareceria como "a cor da Afro" e diria uma coisa falsa sobre a
+       * textura. A foto do próprio produto já mostra a Afro na 1B.
+       *
+       * Isto vale só para a foto de catálogo: foto do produto amarrada à
+       * variante (o `if` acima) é esta peça nesta cor e passa sempre, com
+       * uma cor ou com quinze.
+       */
+      if (colors.length < 2) return null;
+      if (!cor.photoUrl) return null;
+      return {
+        src: cor.photoUrl,
+        alt: `Cor ${cor.name} — foto de referência da cartela Reverá`,
+        ehFotoDeCor: true,
+      };
+    },
+    [colors, variantePorCor, fotos]
+  );
+
+  const fotoDaCorEscolhida = useMemo(
+    () => fotoDaCor(corSelecionadaId),
+    [fotoDaCor, corSelecionadaId]
+  );
+
+  /**
+   * A foto da cor entra NO FIM da tira de miniaturas, nunca no começo: as
+   * fotos do produto são as mesmas em toda visita, e vê-las pularem de lugar
+   * a cada clique na cartela custaria mais do que o detalhe vale.
+   */
+  const galeria = useMemo(() => {
+    if (!fotoDaCorEscolhida) return fotos;
+    if (fotos.some((f) => f.src === fotoDaCorEscolhida.src)) return fotos;
+    return [...fotos, fotoDaCorEscolhida];
+  }, [fotos, fotoDaCorEscolhida]);
+
+  // noUncheckedIndexedAccess (tsconfig) trata galeria[i] como possivelmente
+  // undefined — daí o `!`, que aqui é verdade: `fotosDoProduto()` nunca
+  // devolve lista vazia (tem o par genérico de /media/hero como piso).
+  const fotoAtiva = galeria.find((f) => f.src === fotoAtivaSrc) ?? galeria[0]!;
+
+  /**
+   * Escolher a cor troca a foto grande. Sem foto para aquela cor, só a cor
+   * muda — a imagem fica onde estava, de propósito.
+   */
+  function escolherCor(corId: string) {
+    setCorSelecionadaId(corId);
+    const foto = fotoDaCor(corId);
+    if (foto) setFotoAtivaSrc(foto.src);
+  }
   const [quantidade, setQuantidade] = useState(1);
   /**
    * CONFIRMAÇÃO DISCRETA, NO LUGAR DO DRAWER (29/08/2026).
@@ -225,28 +330,77 @@ export function ProdutoInterativo({
             passa pelas cores, quantidade e degraus de desconto. No celular
             fica no fluxo normal: grudar a imagem lá comeria metade da tela
             de quem já está decidindo. */}
-        <div className="sm:sticky" style={{ top: HEADER_HEIGHT_PX + 24 }}>
+        {/* `min-w-0`: item de grade nasce com `min-width: auto`, ou seja,
+            não encolhe abaixo do próprio conteúdo — a tira de miniaturas
+            (352px com cinco) esticava esta coluna para 352px dentro de uma
+            grade de 327px, e a foto grande crescia junto. O overflow-x da
+            tira sozinho não resolve; quem precisa poder encolher é a coluna. */}
+        <div className="min-w-0 sm:sticky" style={{ top: HEADER_HEIGHT_PX + 24 }}>
         <Reveal className="flex flex-col gap-3">
-          <div className="group relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand">
+          {/* O ENQUADRAMENTO SEGUE A FOTO — MAS SÓ A PARTIR DO `sm` (03/09/2026).
+              
+              As fotos do produto são em pé (3:4); as da cartela de cores são
+              deitadas (4:3, é como a página /cores já as mostra). Cortar a
+              foto da cor num quadro em pé comeria as laterais da peça e o
+              código escrito no canto — justamente o que o cliente abriu para
+              ver.
+
+              Por que a proporção só muda no `sm` para cima: dali em diante a
+              galeria e o painel de compra são COLUNAS IRMÃS (sm:grid-cols-2),
+              e encolher a coluna da esquerda não mexe um pixel na cartela, do
+              outro lado. No celular é uma coluna só, a cartela fica ABAIXO da
+              foto — trocar a altura do quadro subiria a cartela ~190px no
+              instante seguinte ao toque, tirando do lugar a bolinha que o
+              dedo acabou de tocar. Então no celular o quadro fica parado e a
+              foto da cor entra inteira dentro dele (object-contain), com as
+              faixas em `bg-sand`. Vale a folga: a alternativa é a página
+              pular na mão de quem está escolhendo. */}
+          <div
+            className={`group relative w-full overflow-hidden rounded-lg bg-sand aspect-[3/4] ${
+              fotoAtiva.ehFotoDeCor ? "sm:aspect-[4/3]" : ""
+            }`}
+          >
             <Image
               src={fotoAtiva.src}
               alt={fotoAtiva.alt}
               fill
               sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+              className={`transition-transform duration-500 ease-out group-hover:scale-[1.03] ${
+                fotoAtiva.ehFotoDeCor ? "object-contain sm:object-cover" : "object-cover"
+              }`}
               priority
             />
           </div>
-          {fotos.length > 1 ? (
-            <div className="flex gap-2">
-              {fotos.map((foto, i) => (
+          {/* A legenda só aparece na foto da cartela, e diz o que ela é: a
+              peça fotografada mostra a COR, não necessariamente este modelo.
+              Some sozinha quando existir foto do produto por variante. */}
+          {fotoAtiva.ehFotoDeCor && corSelecionada ? (
+            <p className="text-sm text-ink/60">
+              Cor {corSelecionada.name} — foto de referência da cartela.
+            </p>
+          ) : null}
+          {/* A TIRA ROLA NA HORIZONTAL (03/09/2026).
+              
+              Cinco miniaturas de 64px com folga de 8px dão 352px — mais que
+              os 328px úteis de um celular de 375px. Sem isto a tira empurra a
+              coluna para 352px, e a FOTO GRANDE cresce junto (medido: 436px
+              de altura viram 469px, a cartela desce 65px no instante do
+              toque). O estouro não nasceu com a foto da cor: qualquer produto
+              com cinco fotos cadastradas já o provocava. */}
+          {galeria.length > 1 ? (
+            <div className="flex gap-2 overflow-x-auto">
+              {galeria.map((foto, i) => (
                 <button
                   key={foto.src}
                   type="button"
-                  aria-label={`Ver foto ${i + 1} de ${fotos.length}`}
-                  aria-pressed={fotoAtivaIndex === i}
+                  aria-label={
+                    foto.ehFotoDeCor && corSelecionada
+                      ? `Ver a cor ${corSelecionada.name}`
+                      : `Ver foto ${i + 1} de ${galeria.length}`
+                  }
+                  aria-pressed={fotoAtiva.src === foto.src}
                   onClick={() => {
-                    setFotoAtivaIndex(i);
+                    setFotoAtivaSrc(foto.src);
                     /**
                      * Foto de uma cor específica também ESCOLHE a cor
                      * (29/08/2026). Se a pessoa clica na foto da peça na cor
@@ -261,7 +415,7 @@ export function ProdutoInterativo({
                     if (corDaFoto) setCorSelecionadaId(corDaFoto);
                   }}
                   className={`relative aspect-square w-16 shrink-0 overflow-hidden rounded-md border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${
-                    fotoAtivaIndex === i ? "border-gold" : "border-sand"
+                    fotoAtiva.src === foto.src ? "border-gold" : "border-sand"
                   }`}
                 >
                   {/* `sizes` explícito: sem ele o Next pede a foto em 3840px
@@ -309,7 +463,7 @@ export function ProdutoInterativo({
               <ColorSelector
                 colors={colors}
                 selectedId={corSelecionadaId}
-                onChange={setCorSelecionadaId}
+                onChange={escolherCor}
                 onNeedHelp={() => router.push("/cores#ajuda")}
               />
             ) : null}
