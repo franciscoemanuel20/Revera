@@ -18,7 +18,7 @@ import {
 } from "../../src/lib/config/whatsapp";
 import { destinoDoAviso } from "../../src/lib/notificacoes/venda-paga";
 
-const NUMERO_ANTIGO = "12981409901";
+const NUMERO_ANTIGO = "12981409901"; // numero-antigo-de-proposito
 
 describe("WhatsApp da Reverá", () => {
   it("é o número novo, com DDI e só dígitos", () => {
@@ -72,15 +72,22 @@ describe("WhatsApp da Reverá", () => {
       "README.md",
       ".env.example",
     ];
-    const sobras = alvos.filter((arquivo) => {
-      // O comentário histórico de whatsapp.ts cita o antigo de propósito: é
-      // ele que explica a troca. Qualquer OUTRO lugar é resto de verdade.
-      // Dois arquivos citam o número velho de propósito: o comentário que
-      // conta a troca, e este teste, que precisa saber o que procurar.
-      if (arquivo.endsWith(join("config", "whatsapp.ts"))) return false;
-      if (arquivo.endsWith("whatsapp-revera.test.ts")) return false;
-      return readFileSync(arquivo, "utf8").replace(/\D/g, "").includes(NUMERO_ANTIGO);
-    });
+    // A conferência é LINHA a linha, e a isenção também. Isentar o arquivo
+    // inteiro (como esta guarda fazia antes) deixaria passar uma sobra nova
+    // escrita logo abaixo da citação legítima. Quem precisa mesmo do número
+    // velho escreve o marcador na própria linha, e só aquela linha escapa.
+    const MARCADOR = ["numero", "antigo", "de", "proposito"].join("-");
+    const sobras: string[] = [];
+    for (const arquivo of alvos) {
+      readFileSync(arquivo, "utf8")
+        .split("\n")
+        .forEach((linha, i) => {
+          if (linha.includes(MARCADOR)) return;
+          if (linha.replace(/\D/g, "").includes(NUMERO_ANTIGO)) {
+            sobras.push(`${arquivo}:${i + 1}`);
+          }
+        });
+    }
     expect(sobras).toEqual([]);
   });
 });

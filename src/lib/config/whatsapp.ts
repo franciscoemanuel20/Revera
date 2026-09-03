@@ -4,7 +4,9 @@
  * ===========================================================================
  * DECISÃO DO FRANCISCO EM 03/09/2026 — o número mudou, e a regra antiga caiu
  * ===========================================================================
- * O número passa a ser **(12) 98149-9901**. O anterior, (12) 98140-9901, está
+ * O número passa a ser **(12) 98149-9901**. O anterior era o
+ * (12) 98140-9901 — numero-antigo-de-proposito, a única citação viva dele em
+ * todo o projeto, e é por isso que a linha carrega esse marcador. Ele está
  * na conta OFICIAL da Meta — quem escrevia para lá caía na API, não numa
  * pessoa. Palavras dele: "esse novo... ele não é oficial da meta". É um
  * WhatsApp comum, com alguém do outro lado, e é para ele que todo cliente
