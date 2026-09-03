@@ -55,7 +55,30 @@ export default async function CoresPage() {
                   sizes="(min-width: 640px) 25vw, 50vw"
                   className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
                 />
-              ) : null}
+              ) : (
+                /**
+                 * COR SEM FOTO NÃO É UM BURACO (03/09/2026).
+                 *
+                 * Até aqui a cor sem `photo_url` rendia um retângulo cor de
+                 * areia e nada mais — e um quadrado vazio numa cartela de
+                 * cores não se lê como "foto pendente", se lê como site
+                 * quebrado. O caso deixou de ser hipotético quando o
+                 * Francisco ativou a 3.20, a 3.30 e a 3.40, que existem no
+                 * catálogo, têm preço e estoque, e ainda não foram
+                 * fotografadas.
+                 *
+                 * A frase é o mínimo honesto: diz que a foto vem, sem
+                 * inventar uma cor que ninguém conferiu. Some sozinha no dia
+                 * em que a foto for cadastrada.
+                 *
+                 * `text-ink/70`, e não mais claro: sobre `bg-sand` o /45 dava
+                 * 3,0:1 de contraste, abaixo dos 4,5:1 que a WCAG AA pede
+                 * para texto deste tamanho (achado do Codex). O /70 dá 6,7:1.
+                 */
+                <span className="flex h-full w-full items-center justify-center px-2 text-center text-sm text-ink/70">
+                  Foto em breve
+                </span>
+              )}
             </div>
             <span className="text-center font-display text-ink">
               {color.name as string}
