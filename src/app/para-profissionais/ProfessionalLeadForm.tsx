@@ -88,6 +88,17 @@ export function ProfessionalLeadForm({
       return;
     }
 
+    // O e-mail é o único campo restante que ainda pode fazer o zod da action
+    // recusar o lead inteiro (os outros são opcionais e sem formato). Como o
+    // erro da action deixou de aparecer na tela, ele é conferido AQUI: sem
+    // isto, um e-mail digitado errado mandaria a pessoa ao WhatsApp e jogaria
+    // o cadastro fora em silêncio. O formulário tem `noValidate`, então o
+    // navegador não faz essa conferência sozinho.
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setErro("Confira o e-mail — ou deixe o campo em branco, ele é opcional.");
+      return;
+    }
+
     // Sem "noopener" na terceira posição de propósito: com ele o navegador
     // devolve `null` e não sobra handle nenhum para apontar depois do await —
     // era o oposto do que esta aba existe para fazer. O elo de volta é cortado
@@ -95,26 +106,41 @@ export function ProfessionalLeadForm({
     const abaWhatsApp = window.open("", "_blank");
     setEnviando(true);
 
-    const resultado = await enviarLeadProfissionalAction({
-      fullName,
-      phone,
-      email: email.trim() ? email : null,
-      businessName: businessName.trim() ? businessName : null,
-      city: city.trim() ? city : null,
-      message: message.trim() ? message : null,
-    });
+    // O try existe porque a Server Action pode ESTOURAR, não só devolver
+    // erro: rede caindo no meio, timeout, cliente do Supabase falhando ao
+    // ser criado. Sem ele a exceção subiria e nada abaixo rodaria — a aba
+    // ficaria em branco para sempre e o botão preso em "Enviando…", que é
+    // justamente o beco sem saída que esta mudança existe para eliminar.
+    let gravou = false;
+    try {
+      const resultado = await enviarLeadProfissionalAction({
+        fullName,
+        phone,
+        email: email.trim() ? email : null,
+        businessName: businessName.trim() ? businessName : null,
+        city: city.trim() ? city : null,
+        message: message.trim() ? message : null,
+      });
+      gravou = !("error" in resultado);
+      if (!gravou) {
+        // Sem Toast de erro: o cliente está indo para o WhatsApp e não há
+        // nada que ele possa fazer a respeito. Quem precisa saber é quem lê
+        // o log.
+        console.error("[para-profissionais] lead não gravado:", resultado);
+      }
+    } catch (e) {
+      console.error("[para-profissionais] falha ao enviar o lead:", e);
+    }
 
     setEnviando(false);
-
-    if ("error" in resultado) {
-      // Sem Toast de erro: o cliente está indo para o WhatsApp e não há nada
-      // que ele possa fazer a respeito. Quem precisa saber é quem lê o log.
-      console.error("[para-profissionais] lead não gravado:", resultado.error);
-    }
 
     if (abaWhatsApp) {
       abaWhatsApp.opener = null;
       abaWhatsApp.location.href = whatsappHref;
+      // "Recebemos seu contato" só aparece se o contato foi mesmo recebido.
+      // Quando a gravação falha, a página fica como está — a conversa já
+      // seguiu na outra aba, e uma confirmação falsa seria mentira.
+      if (!gravou) return;
       setEnviado(true);
       setFullName("");
       setPhone("");
