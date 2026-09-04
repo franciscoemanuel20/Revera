@@ -59,7 +59,19 @@ function requireSecretKey(): string {
     throw new Error("STRIPE_SECRET_KEY ausente — pagamento internacional não configurado.");
   }
   const ambiente = ambienteAtual();
-  const ehLive = key.includes("_live_") || key.startsWith("sk_live");
+  // O TIPO da chave vem antes do ambiente. `includes("_live_")` aceitava uma
+  // chave PUBLICÁVEL (`pk_live_…`), que é pública de propósito e não abre
+  // checkout: a falha só aparecia como 401 com o cliente já dentro do
+  // pagamento. Aqui só passam as duas formas que a Stripe usa para segredo:
+  // `sk_` (secreta) e `rk_` (restrita).
+  if (!/^(sk|rk)_(live|test)_/.test(key)) {
+    const prefixo = key.slice(0, 8);
+    throw new Error(
+      `STRIPE_SECRET_KEY não é uma chave secreta (começa com "${prefixo}…"). ` +
+        `Use a chave sk_live_/sk_test_ — a publicável pk_ não abre checkout.`,
+    );
+  }
+  const ehLive = key.startsWith("sk_live_") || key.startsWith("rk_live_");
   // Chave LIVE fora de produção cobraria cartão de verdade num ambiente de
   // teste; chave TEST em produção aprovaria "compra" sem dinheiro entrar.
   // As duas direções são fail-closed.

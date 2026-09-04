@@ -344,6 +344,29 @@ describe("guarda de chave por ambiente", () => {
     ).rejects.toThrow(/live/);
   });
 
+  // A chave PUBLICÁVEL contém "_live_" e passava na guarda antiga como se
+  // fosse secreta. Ela é pública de propósito e não abre checkout: a falha
+  // só aparecia como 401 com o cliente já dentro do pagamento.
+  it("chave publicável pk_live_ é recusada, não confundida com secreta", async () => {
+    vi.stubEnv("STRIPE_SECRET_KEY", "pk_live_abc123");
+    vi.stubGlobal("fetch", vi.fn());
+    const p = await provider();
+    await expect(
+      p.confirmPayment({ orderId: ORDER, transactionId: "cs_x", invoiceSlug: null, eventId: "e" })
+    ).rejects.toThrow(/não é uma chave secreta/);
+  });
+
+  it("chave restrita rk_test_ é aceita fora de produção", async () => {
+    vi.stubEnv("STRIPE_SECRET_KEY", "rk_test_abc123");
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ id: "cs_1", client_reference_id: ORDER, payment_status: "paid", amount_total: 1, currency: "usd" }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await provider();
+    await p.confirmPayment({ orderId: ORDER, transactionId: "cs_1", invoiceSlug: null, eventId: "e" });
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
   it("STRIPE_API_BASE é obedecida fora de produção (o dublê de staging)", async () => {
     vi.stubEnv("STRIPE_API_BASE", "http://localhost:4242");
     const fetchMock = vi.fn(async () =>
