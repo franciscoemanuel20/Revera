@@ -35,6 +35,7 @@
  * para quem preencheu tudo certo.
  */
 
+import { createAdminClient } from "@/lib/supabase/server";
 import { WHATSAPP_REVERA } from "@/lib/config/whatsapp";
 import { enviarWhatsApp, modoWhatsApp } from "./whatsapp";
 import { destinoDoAviso } from "./venda-paga";
@@ -45,7 +46,68 @@ export type ResultadoAvisoContato =
   | { estado: "enviado" }
   | { estado: "desligado" }
   | { estado: "sem_template" }
+  | { estado: "teto_por_hora" }
   | { estado: "erro"; motivo: string };
+
+/**
+ * Teto de avisos por hora, somando os DOIS formulários.
+ *
+ * ===========================================================================
+ * POR QUE EXISTE (achado P1 do Codex, 05/09/2026)
+ * ===========================================================================
+ * Estes formulários são públicos e sem autenticação. Cada envio válido dispara
+ * uma mensagem paga. Sem teto, um script rodando contra `/para-profissionais`
+ * esvazia o saldo da Clint — a R$ 0,53 por peça de marketing, os R$ 257
+ * recarregados em 05/09 viram ~485 envios, minutos de abuso.
+ *
+ * O cron do carrinho abandonado já tinha teto; este caminho não tinha, e é o
+ * mais exposto dos dois: lá o gatilho é nosso, aqui é de quem visita o site.
+ *
+ * O teto é COMPARTILHADO entre lead profissional e ajuda de cor de propósito:
+ * quem estiver abusando alterna entre os dois formulários, e dois tetos
+ * separados dobrariam o estrago.
+ *
+ * Passado o teto, o lead CONTINUA sendo gravado — só o aviso não sai. Perder
+ * o aviso é recuperável (está no painel); perder o lead não.
+ */
+export const MAX_AVISOS_POR_HORA_PADRAO = 10;
+
+function tetoPorHora(): number {
+  const n = Number.parseInt((process.env.CONTATO_MAX_AVISOS_POR_HORA ?? "").trim(), 10);
+  return Number.isFinite(n) && n >= 0 ? n : MAX_AVISOS_POR_HORA_PADRAO;
+}
+
+/**
+ * Conta os contatos da última hora nas duas tabelas.
+ *
+ * Conta os PRÓPRIOS leads, e não os avisos, porque não existe tabela de
+ * avisos para lead — e criar uma exigiria migration em produção para uma
+ * defesa que precisa existir agora. Cada lead gravado equivale a um aviso
+ * tentado, então a contagem é o mesmo número pelo caminho mais curto.
+ *
+ * Na dúvida (erro de banco), devolve o teto: falha fechada, sem enviar. Um
+ * aviso perdido é recuperável; um saldo drenado por abuso, não.
+ */
+async function contatosNaUltimaHora(): Promise<number> {
+  const desde = new Date(Date.now() - 3600_000).toISOString();
+  try {
+    const supabase = createAdminClient();
+    const [profissionais, cores] = await Promise.all([
+      supabase
+        .from("professional_leads")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", desde),
+      supabase
+        .from("color_help_requests")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", desde),
+    ]);
+    if (profissionais.error || cores.error) return Number.POSITIVE_INFINITY;
+    return (profissionais.count ?? 0) + (cores.count ?? 0);
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
 
 const TEXTO: Record<OrigemDoContato, string> = {
   profissional: "Novo contato de profissional no site da Reverá. Abra o painel para ver.",
@@ -93,6 +155,15 @@ export async function avisarNovoContato(
         `[aviso-contato] CLINT_TEMPLATE_CONTATO_ID não definida — ${origem} gravado, ninguém avisado`
       );
       return { estado: "sem_template" };
+    }
+
+    const teto = tetoPorHora();
+    const naHora = await contatosNaUltimaHora();
+    // `>` e não `>=`: o lead que dispara esta chamada já está gravado, então
+    // ele mesmo está na contagem. Com teto 10, o décimo ainda avisa.
+    if (naHora > teto) {
+      console.warn(`[aviso-contato] teto de ${teto}/h atingido (${naHora}) — ${origem} gravado, aviso não enviado`);
+      return { estado: "teto_por_hora" };
     }
 
     const destino = destinoDoAviso(process.env.WHATSAPP_DESTINO) || WHATSAPP_REVERA;

@@ -12,6 +12,27 @@ vi.mock("@/lib/config/ambiente", () => ({
   descricaoDoAmbiente: () => "teste",
 }));
 
+/**
+ * O Supabase falso serve ao teto por hora: `contatosNaUltimaHora` conta as
+ * linhas das duas tabelas. `contatosNaHora` é o que cada tabela devolve, e
+ * `bancoQuebra` exercita a falha fechada.
+ */
+let contatosNaHora = 0;
+let bancoQuebra = false;
+
+vi.mock("@/lib/supabase/server", () => ({
+  createAdminClient: () => ({
+    from: () => ({
+      select: () => ({
+        gte: async () =>
+          bancoQuebra
+            ? { count: null, error: { message: "banco fora" } }
+            : { count: contatosNaHora, error: null },
+      }),
+    }),
+  }),
+}));
+
 import { avisarNovoContato } from "@/lib/notificacoes/novo-contato";
 
 const ORIGINAL = { ...process.env };
@@ -48,6 +69,8 @@ function configurarClint() {
 }
 
 beforeEach(() => {
+  contatosNaHora = 0;
+  bancoQuebra = false;
   chamadas = [];
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -59,6 +82,7 @@ beforeEach(() => {
     "CLINT_TEMPLATE_ID",
     "CLINT_TEMPLATE_CONTATO_ID",
     "WHATSAPP_DESTINO",
+    "CONTATO_MAX_AVISOS_POR_HORA",
   ]) {
     delete process.env[nome];
   }
@@ -123,6 +147,49 @@ describe("aviso de contato novo", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     await expect(avisarNovoContato("profissional")).resolves.toEqual({ estado: "sem_template" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Achado P1 da segunda rodada do Codex (05/09/2026): os dois formulários
+   * são públicos e sem autenticação, e cada envio válido gasta uma mensagem
+   * paga. A R$ 0,53 a peça de marketing, um script esvazia o saldo da Clint
+   * em minutos. O teto é compartilhado entre os dois formulários porque quem
+   * abusa alterna entre eles.
+   */
+  it("passado o teto por hora, o aviso não sai", async () => {
+    configurarClint();
+    process.env.CLINT_TEMPLATE_CONTATO_ID = "template-do-contato";
+    contatosNaHora = 40; // 80 somando as duas tabelas, acima do teto de 10
+    const fetchSpy = fetchFalso();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(avisarNovoContato("profissional")).resolves.toEqual({ estado: "teto_por_hora" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("teto respeita CONTATO_MAX_AVISOS_POR_HORA", async () => {
+    configurarClint();
+    process.env.CLINT_TEMPLATE_CONTATO_ID = "template-do-contato";
+    process.env.CONTATO_MAX_AVISOS_POR_HORA = "100";
+    contatosNaHora = 40; // 80 no total, agora abaixo do teto
+    vi.stubGlobal("fetch", fetchFalso());
+
+    await expect(avisarNovoContato("profissional")).resolves.toEqual({ estado: "enviado" });
+  });
+
+  /**
+   * Falha fechada: se a contagem não pode ser feita, não se envia. Um aviso
+   * perdido está no painel; um saldo drenado por abuso não volta.
+   */
+  it("banco fora do ar não libera envio", async () => {
+    configurarClint();
+    process.env.CLINT_TEMPLATE_CONTATO_ID = "template-do-contato";
+    bancoQuebra = true;
+    const fetchSpy = fetchFalso();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(avisarNovoContato("ajuda_cor")).resolves.toEqual({ estado: "teto_por_hora" });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

@@ -108,7 +108,12 @@ export async function rodadaDeCarrinhoAbandonado(
       return { ...vazio, motivo: "teto diário atingido" };
     }
 
-    const candidatos = await lerCandidatos(supabase, agora, limites.janelaHoras);
+    const candidatos = await lerCandidatos(
+      supabase,
+      agora,
+      limites.janelaHoras,
+      limites.esperaMinutos
+    );
     const resultado: ResultadoRodada = { executou: true, vistos: candidatos.length, enviados: 0, pulados: {} };
     const conta = (m: keyof ResultadoRodada["pulados"]) => {
       resultado.pulados[m] = (resultado.pulados[m] ?? 0) + 1;
@@ -213,14 +218,29 @@ type Supabase = ReturnType<typeof createAdminClient>;
 async function lerCandidatos(
   supabase: Supabase,
   agora: Date,
-  janelaHoras: number
+  janelaHoras: number,
+  esperaMinutos: number
 ): Promise<PedidoCandidato[]> {
   const limite = new Date(agora.getTime() - janelaHoras * 3600_000).toISOString();
 
+  /**
+   * Os já avisados são lidos SÓ DA JANELA, não do histórico inteiro.
+   *
+   * Achado do Codex em 05/09/2026: a lista vai serializada na URL do
+   * Supabase. Crescendo o histórico, a URL estoura o limite de tamanho da
+   * requisição, a consulta passa a falhar e o fluxo para de mandar — calado,
+   * que é o pior jeito de parar. Além disso a leitura tem limite de linhas
+   * própria, então "histórico inteiro" nunca foi verdade de verdade.
+   *
+   * Só a janela basta porque só pedidos da janela são candidatos: um aviso de
+   * três meses atrás não muda nada aqui. A lista fica do tamanho do que a
+   * loja abandona em 48h.
+   */
   const { data: jaAvisados } = await supabase
     .from("order_notifications")
     .select("order_id")
-    .eq("kind", KIND);
+    .eq("kind", KIND)
+    .gte("created_at", limite);
   const avisados = (jaAvisados ?? []).map((l: { order_id: string }) => l.order_id);
 
   /**
@@ -235,11 +255,26 @@ async function lerCandidatos(
    * O `limit` continua existindo para o caso de a loja crescer: ele protege
    * a memória do processo, não a regra.
    */
+  /**
+   * Os filtros de elegibilidade vão para o BANCO, antes do limite.
+   *
+   * Segundo achado do Codex na mesma linha: 50 pedidos em dólar mais recentes
+   * ocupariam o lote inteiro e um pedido elegível mais antigo nunca seria
+   * alcançado — e, ao contrário dos já avisados, esses nunca ganham reserva,
+   * então ocupariam a vaga em toda rodada até expirarem.
+   *
+   * `currency` pode ser nula em pedido antigo, e `decidir` trata nula como
+   * BRL; a consulta precisa concordar com ela, senão some pedido válido.
+   */
+  const maduroAte = new Date(agora.getTime() - esperaMinutos * 60_000).toISOString();
+
   let consulta = supabase
     .from("orders")
     .select("id, created_at, currency, customers ( phone )")
     .eq("payment_status", "pending")
-    .gte("created_at", limite);
+    .gte("created_at", limite)
+    .lte("created_at", maduroAte)
+    .or("currency.eq.BRL,currency.is.null");
 
   if (avisados.length > 0) {
     consulta = consulta.not("id", "in", `(${avisados.join(",")})`);
