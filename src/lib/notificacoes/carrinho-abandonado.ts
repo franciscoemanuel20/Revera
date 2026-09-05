@@ -54,7 +54,8 @@ export interface ResultadoRodada {
       | "reserva_recusada"
       | "envio_recusado"
       | "mudou_de_estado"
-      | "comprou_em_outro_pedido",
+      | "comprou_em_outro_pedido"
+      | "mesma_pessoa_nesta_rodada",
       number
     >
   >;
@@ -159,6 +160,9 @@ export async function rodadaDeCarrinhoAbandonado(
      * Cada reserva é um custo possivelmente já assumido.
      */
     let reservados = 0;
+    // A mesma pessoa pode ter vários pedidos elegíveis NESTA lista; a leitura
+    // do banco só conhece os avisos de rodadas anteriores.
+    const telefonesDaRodada = new Set<string>();
 
     for (const pedido of candidatos) {
       if (reservados >= limites.maxPorRodada) break;
@@ -173,6 +177,11 @@ export async function rodadaDeCarrinhoAbandonado(
       const destino = comDDI(pedido.telefone);
       if (!destino) {
         conta("sem_telefone");
+        continue;
+      }
+
+      if (telefonesDaRodada.has(destino)) {
+        conta("mesma_pessoa_nesta_rodada");
         continue;
       }
 
@@ -249,6 +258,7 @@ export async function rodadaDeCarrinhoAbandonado(
       }
 
       reservados += 1;
+      telefonesDaRodada.add(destino);
 
       const envio = await enviarWhatsApp({
         // Com DDI, sempre. Sem isso a Clint cria um contato novo com o número
@@ -335,7 +345,17 @@ async function comprouPorOutroPedido(
         .select("id, customers!inner ( id )")
         .eq("payment_status", "paid")
         .eq(`customers.${coluna}`, valor)
-        .gte("created_at", pedido.criadoEm)
+        // `updated_at`, e não `created_at`: é ele que a confirmação de
+        // pagamento carimba (payments/confirmar.ts:202). Comparar pela
+        // CRIAÇÃO do pedido pago erra o caso em que a pessoa abre o checkout
+        // A, abre o B, volta ao A e paga — A nasceu antes de B, então ao
+        // avaliar B o pagamento de A passaria despercebido e ela receberia
+        // "você não finalizou" já tendo comprado.
+        //
+        // Outros updates no pedido pago (etiqueta, envio) também mexem em
+        // `updated_at`. Isso só torna o filtro mais conservador: suprime um
+        // toque a mais, nunca manda um a mais.
+        .gte("updated_at", pedido.criadoEm)
         .limit(1);
       if (error) return true;
       if ((data ?? []).length > 0) return true;
@@ -377,6 +397,30 @@ async function lerCandidatos(
     .eq("kind", KIND)
     .gte("created_at", limite);
   const avisados = (jaAvisados ?? []).map((l: { order_id: string }) => l.order_id);
+
+  /**
+   * Telefones já avisados na janela — a dedupe por PESSOA, não por pedido.
+   *
+   * Achado do Codex em 05/09/2026: quem tenta pagar três vezes gera três
+   * pedidos, três customers e três reservas distintas, e receberia a mesma
+   * mensagem paga três vezes — possivelmente na mesma rodada. A reserva por
+   * `order_id` protege contra mandar duas vezes pelo MESMO pedido; não
+   * protege a pessoa.
+   */
+  const telefonesAvisados = new Set<string>();
+  if (avisados.length > 0) {
+    const { data: pedidosAvisados } = await supabase
+      .from("orders")
+      .select("customers ( phone )")
+      .in("id", avisados);
+    for (const linha of pedidosAvisados ?? []) {
+      const c = (linha as { customers: { phone: string | null } | { phone: string | null }[] | null })
+        .customers;
+      const cliente = Array.isArray(c) ? c[0] : c;
+      const digitos = (cliente?.phone ?? "").replace(/\D/g, "");
+      if (digitos) telefonesAvisados.add(digitos);
+    }
+  }
 
   /**
    * A exclusão dos já avisados vai NO BANCO, antes do `limit` — não depois.
@@ -452,5 +496,9 @@ async function lerCandidatos(
         email: cliente?.email ?? null,
         moeda: linha.currency,
       };
+    })
+    .filter((c: PedidoCandidato) => {
+      const digitos = (c.telefone ?? "").replace(/\D/g, "");
+      return !digitos || !telefonesAvisados.has(digitos);
     });
 }

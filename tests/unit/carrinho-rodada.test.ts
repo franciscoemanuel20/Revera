@@ -93,11 +93,13 @@ beforeEach(() => {
   process.env.CLINT_CANAL_ID = "c";
   process.env.CLINT_TEMPLATE_CARRINHO_ID = "template-carrinho";
   // dez candidatos elegíveis, todos com 2h de idade
+  // Pessoas DIFERENTES: o teto por rodada é o que se testa aqui. Telefones
+  // iguais são o outro teste, o da dedupe por pessoa.
   pedidos = Array.from({ length: 10 }, (_, i) => ({
     id: `pedido-${i}`,
     created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
     currency: "BRL",
-    customers: { phone: "48999887766", email: "cliente@exemplo.com" },
+    customers: { phone: `4899988${String(i).padStart(4, "0")}`, email: `c${i}@exemplo.com` },
   }));
 });
 
@@ -151,6 +153,44 @@ describe("rodada com a Clint recusando tudo", () => {
     expect(r.pulados.comprou_em_outro_pedido).toBe(10);
     expect(reservas).toBe(0);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Achado do Codex (8ª rodada): quem tenta pagar três vezes gera três
+   * pedidos e três customers. A reserva por `order_id` impede repetir pelo
+   * MESMO pedido, mas não protege a pessoa — ela receberia a mesma mensagem
+   * paga três vezes, possivelmente na mesma rodada.
+   */
+  it("três tentativas da mesma pessoa viram UM toque só", async () => {
+    pedidos = Array.from({ length: 3 }, (_, i) => ({
+      id: `tentativa-${i}`,
+      created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+      currency: "BRL",
+      customers: { phone: "48999887766", email: "mesma@pessoa.com" },
+    }));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (entrada: RequestInfo | URL) => {
+        const url = String(entrada);
+        if (url.includes("/v1/contacts")) {
+          return new Response(JSON.stringify({ data: [{ id: "c1", phone: "5548999887766" }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ id: "msg" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      })
+    );
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(reservas).toBe(1);
+    expect(r.enviados).toBe(1);
+    expect(r.pulados.mesma_pessoa_nesta_rodada).toBe(2);
   });
 
   it("teto diário já consumido não abre rodada nenhuma", async () => {
