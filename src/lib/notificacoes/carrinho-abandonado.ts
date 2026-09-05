@@ -331,9 +331,16 @@ export async function rodadaDeCarrinhoAbandonado(
         // A mensagem JÁ foi paga; o que falhou foi anotar. Como o teto conta
         // reservas, a cota continua correta — mas parar a rodada aqui evita
         // insistir contra um banco que acabou de recusar uma escrita.
+        //
+        // `return`, e não `break`: com a paginação sob demanda, um `break`
+        // sairia só do laço de candidatos e o laço de páginas buscaria a
+        // página seguinte, continuando a mandar mensagem paga exatamente
+        // depois da falha que deveria ter parado tudo. Foi assim que este
+        // trecho ficou quando a paginação virou laço externo — achado do
+        // Codex em 05/09/2026.
         if (erroBaixa) {
           console.error("[carrinho] enviado mas não anotado", erroBaixa.message);
-          break;
+          return resultado;
         }
         continue;
       }
