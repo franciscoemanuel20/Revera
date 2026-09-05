@@ -142,9 +142,20 @@ export async function rodadaDeCarrinhoAbandonado(
       resultado.pulados[m] = (resultado.pulados[m] ?? 0) + 1;
     };
 
+    /**
+     * Conta RESERVAS, não sucessos — mesma razão do teto diário.
+     *
+     * Achado do Codex em 05/09/2026: com `resultado.enviados`, uma Clint
+     * recusando tudo (ou respostas perdidas depois de aceitas) não fazia o
+     * contador subir, e a rodada seguia tentando candidato após candidato
+     * até esgotar sozinha o orçamento do DIA inteiro numa única execução.
+     * Cada reserva é um custo possivelmente já assumido.
+     */
+    let reservados = 0;
+
     for (const pedido of candidatos) {
-      if (resultado.enviados >= limites.maxPorRodada) break;
-      if ((hoje ?? 0) + resultado.enviados >= limites.maxPorDia) break;
+      if (reservados >= limites.maxPorRodada) break;
+      if (hoje + reservados >= limites.maxPorDia) break;
 
       const decisao = decidir(pedido, agora, limites);
       if (!decisao.enviar) {
@@ -208,6 +219,8 @@ export async function rodadaDeCarrinhoAbandonado(
         conta("reserva_recusada");
         continue;
       }
+
+      reservados += 1;
 
       const envio = await enviarWhatsApp({
         // Com DDI, sempre. Sem isso a Clint cria um contato novo com o número
