@@ -62,6 +62,17 @@ export interface ProdutoInterativoProps {
     priceCents: number | null;
     imageUrl: string | null;
   }>;
+  /**
+   * Os selos da TrustBar já com a edição do painel aplicada (grupo "trustbar",
+   * ver src/lib/conteudo/registro/trustbar.ts). Vêm prontos da page.tsx porque
+   * este é um componente de cliente e não pode ler o banco: quem lê é a página
+   * de servidor, com o MESMO leitor sem cookie que a home usa (textos.ts).
+   *
+   * Opcional de propósito: se a página não passar (ou se o grupo ainda não
+   * existir), o TrustBar cai no `padrao` do próprio registro — o mesmo texto de
+   * código, nunca uma barra vazia. É a regra "linha ausente = texto do código".
+   */
+  itensTrustBar?: TrustBarItem[];
 }
 
 // Galeria do produto. Desde 27/08/2026 as fotos vêm de `product_media`, uma
@@ -100,6 +111,7 @@ export function ProdutoInterativo({
   colors,
   discountRules,
   outrasTexturas = [],
+  itensTrustBar,
 }: ProdutoInterativoProps) {
   const router = useRouter();
   const { adicionarItem, abrirDrawer, pendente } = useCart();
@@ -406,7 +418,7 @@ export function ProdutoInterativo({
               </p>
             </div>
 
-            <TrustBar />
+            <TrustBar items={itensTrustBar} />
           </Reveal>
         </div>
       </div>

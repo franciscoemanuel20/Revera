@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { baseUrl } from "@/lib/config/urls";
+import { textosDaPagina } from "@/lib/conteudo/textos";
+import { itensDaTrustBar } from "@/lib/conteudo/registro/trustbar";
 import { ProdutoInterativo } from "./ProdutoInterativo";
 
 // Página pública de produto — client de servidor com a chave anon
@@ -237,6 +239,15 @@ export default async function ProdutoPage({
     .filter((v) => v.priceCents > 0 && v.stockQty > 0)
     .sort((a, b) => a.priceCents - b.priceCents)[0];
 
+  // Os selos da TrustBar (grupo "trustbar") aparecem aqui E na home, então a
+  // edição do painel precisa valer nos dois. Lê-se com o leitor sem cookie de
+  // textos.ts — o MESMO que a home usa — de propósito: ele traz a edição por
+  // cima do padrão do código e não puxa a sessão do visitante. Esta página já
+  // é dinâmica (createClient acima lê cookie), então isto não muda seu regime;
+  // e se o banco não responder, itensDaTrustBar cai no `padrao` do registro,
+  // que é o texto de código — nunca uma barra vazia. Ver registro/trustbar.ts.
+  const tSelos = await textosDaPagina("trustbar");
+
   const jsonLd = varianteMaisBarata
     ? {
         "@context": "https://schema.org",
@@ -281,6 +292,7 @@ export default async function ProdutoPage({
       }))}
       discountRules={regrasVigentes}
       outrasTexturas={outrasTexturas}
+      itensTrustBar={itensDaTrustBar(tSelos)}
     />
     </>
   );
