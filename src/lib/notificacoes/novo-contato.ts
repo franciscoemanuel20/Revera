@@ -72,6 +72,21 @@ export type ResultadoAvisoContato =
  */
 export const MAX_AVISOS_POR_HORA_PADRAO = 10;
 
+/**
+ * Quanto tempo o formulário espera pelo aviso antes de desistir dele.
+ *
+ * Achado do Codex em 05/09/2026: este caminho roda DENTRO da Server Action do
+ * formulário. O lead já está gravado quando o aviso é tentado; se a Clint
+ * pendurar, a action bate no limite de execução da Vercel e o visitante vê
+ * falha num envio que deu certo — e o `catch` não salva, porque o processo é
+ * encerrado por fora.
+ *
+ * Seis segundos deixam folga confortável dentro do limite padrão e são mais
+ * que suficientes para três chamadas normais à Clint. Estourando, o lead
+ * continua no painel: perde-se o aviso, nunca o lead.
+ */
+const TEMPO_MAXIMO_MS = 6000;
+
 function tetoPorHora(): number {
   const n = Number.parseInt((process.env.CONTATO_MAX_AVISOS_POR_HORA ?? "").trim(), 10);
   return Number.isFinite(n) && n >= 0 ? n : MAX_AVISOS_POR_HORA_PADRAO;
@@ -172,6 +187,7 @@ export async function avisarNovoContato(
       texto: TEXTO[origem],
       parametros: [],
       template,
+      sinal: AbortSignal.timeout(TEMPO_MAXIMO_MS),
     });
 
     if (envio.estado === "erro") {

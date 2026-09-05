@@ -64,6 +64,17 @@ export interface MensagemWhatsApp {
   /** Parâmetros na ordem em que o template os espera. */
   parametros: string[];
   /**
+   * Corta o envio se o provedor demorar demais.
+   *
+   * Existe para o caminho que roda DENTRO de um formulário público: a Server
+   * Action já gravou o lead e só falta responder ao visitante. Se a Clint
+   * pendurar, sem isto a resposta ficaria esperando até o limite de execução
+   * da Vercel — o visitante veria erro num envio que deu certo. Preferimos
+   * perder o aviso a perder a resposta.
+   */
+  sinal?: AbortSignal;
+
+  /**
    * UUID do template a usar no modo `clint`, quando não é o da venda paga.
    *
    * Existe porque o aviso de venda e o de contato novo dizem coisas
@@ -219,7 +230,8 @@ const CLINT_BASE = "https://api.clint.digital";
  */
 async function contatoNaClint(
   token: string,
-  telefone: string
+  telefone: string,
+  sinal?: AbortSignal
 ): Promise<{ id: string } | { erro: string }> {
   const so = telefone.replace(/\D/g, "");
   for (const q of [`phone=${encodeURIComponent(so)}`, `search=${encodeURIComponent(so)}`]) {
@@ -227,6 +239,7 @@ async function contatoNaClint(
       const busca = await fetch(`${CLINT_BASE}/v1/contacts?${q}&limit=5`, {
         headers: { "api-token": token, accept: "application/json" },
         cache: "no-store",
+        signal: sinal,
       });
       if (!busca.ok) continue;
       const lista = (await busca.json().catch(() => null)) as unknown;
@@ -250,6 +263,7 @@ async function contatoNaClint(
       method: "POST",
       headers: { "api-token": token, "content-type": "application/json" },
       body: JSON.stringify({ name: "Equipe Reverá", phone: so }),
+      signal: sinal,
     });
     const corpo = (await criado.json().catch(() => ({}))) as {
       id?: string;
@@ -276,7 +290,7 @@ async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnv
     // o dele não está configurado. Sem ele, o comportamento de sempre.
     const templateId = mensagem.template?.trim() || exigir("CLINT_TEMPLATE_ID");
 
-    const contato = await contatoNaClint(token, mensagem.para);
+    const contato = await contatoNaClint(token, mensagem.para, mensagem.sinal);
     if ("erro" in contato) {
       return { estado: "erro", motivo: `Clint: ${contato.erro}` };
     }
@@ -291,6 +305,7 @@ async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnv
         contact_id: contato.id,
         template_id: templateId,
       }),
+      signal: mensagem.sinal,
     });
     const corpo = (await resposta.json().catch(() => null)) as {
       id?: string;

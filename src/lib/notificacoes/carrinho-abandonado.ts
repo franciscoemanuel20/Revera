@@ -99,15 +99,28 @@ export async function rodadaDeCarrinhoAbandonado(
 
     const desdeDia = new Date(agora.getTime());
     desdeDia.setUTCHours(0, 0, 0, 0);
-    // `count` vem NULO quando a consulta falha, e o supabase-js não lança.
-    // Ler nulo como zero liberaria o dia inteiro justamente quando não dá
-    // para saber quanto já foi gasto. Falha fechada.
+    /**
+     * O teto conta RESERVAS do dia, não mensagens confirmadas.
+     *
+     * Achado do Codex em 05/09/2026: se a Clint aceita a mensagem e o UPDATE
+     * de `sent_at` falha depois (ou o processo morre no meio), a linha fica
+     * com `sent_at` nulo. Contando só as confirmadas, aquele envio PAGO
+     * desapareceria da cota e o dia poderia estourar o teto.
+     *
+     * Reserva é o momento em que assumimos o custo; é ela que deve pesar no
+     * orçamento. O erro para o lado seguro: uma reserva que não virou envio
+     * consome uma vaga do dia, o que custa um toque a menos, não dinheiro a
+     * mais.
+     *
+     * `count` vem NULO quando a consulta falha, e o supabase-js não lança.
+     * Ler nulo como zero liberaria o dia inteiro justamente quando não dá
+     * para saber quanto já foi gasto. Falha fechada.
+     */
     const { count: hoje, error: erroConta } = await supabase
       .from("order_notifications")
       .select("id", { count: "exact", head: true })
       .eq("kind", KIND)
-      .not("sent_at", "is", null)
-      .gte("sent_at", desdeDia.toISOString());
+      .gte("created_at", desdeDia.toISOString());
 
     if (erroConta || hoje === null) {
       console.error("[carrinho] não deu para contar o dia — rodada abortada", erroConta?.message);
@@ -155,8 +168,7 @@ export async function rodadaDeCarrinhoAbandonado(
         .from("order_notifications")
         .select("id", { count: "exact", head: true })
         .eq("kind", KIND)
-        .not("sent_at", "is", null)
-        .gte("sent_at", desdeDia.toISOString());
+        .gte("created_at", desdeDia.toISOString());
       if (erroRecontagem || agoraHoje === null || agoraHoje >= limites.maxPorDia) break;
 
       /**
@@ -207,7 +219,7 @@ export async function rodadaDeCarrinhoAbandonado(
       });
 
       if (envio.estado === "enviado") {
-        await supabase
+        const { error: erroBaixa } = await supabase
           .from("order_notifications")
           .update({
             sent_at: new Date().toISOString(),
@@ -216,7 +228,16 @@ export async function rodadaDeCarrinhoAbandonado(
           })
           .eq("order_id", pedido.id)
           .eq("kind", KIND);
+
         resultado.enviados += 1;
+
+        // A mensagem JÁ foi paga; o que falhou foi anotar. Como o teto conta
+        // reservas, a cota continua correta — mas parar a rodada aqui evita
+        // insistir contra um banco que acabou de recusar uma escrita.
+        if (erroBaixa) {
+          console.error("[carrinho] enviado mas não anotado", erroBaixa.message);
+          break;
+        }
         continue;
       }
 

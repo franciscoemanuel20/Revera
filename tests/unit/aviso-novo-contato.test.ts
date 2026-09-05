@@ -36,13 +36,13 @@ vi.mock("@/lib/supabase/server", () => ({
 import { avisarNovoContato } from "@/lib/notificacoes/novo-contato";
 
 const ORIGINAL = { ...process.env };
-let chamadas: Array<{ url: string; corpo: Record<string, unknown> }> = [];
+let chamadas: Array<{ url: string; corpo: Record<string, unknown>; sinal?: AbortSignal | null }> = [];
 
 function fetchFalso(status = 200) {
   return vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
     const url = String(entrada);
     const corpo = init?.body ? JSON.parse(String(init.body)) : {};
-    chamadas.push({ url, corpo });
+    chamadas.push({ url, corpo, sinal: init?.signal });
     if (url.includes("/v1/contacts")) {
       // Devolve o contato COM o telefone que foi buscado: a Clint casa pelos
       // 8 últimos dígitos, então um número fixo aqui faria o código achar
@@ -191,6 +191,23 @@ describe("aviso de contato novo", () => {
 
     await expect(avisarNovoContato("ajuda_cor")).resolves.toEqual({ estado: "teto_por_hora" });
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Achado do Codex (4ª rodada, 05/09/2026): este envio roda dentro da Server
+   * Action do formulário público. Sem limite de tempo, uma Clint pendurada
+   * levaria a action ao limite de execução da Vercel e o visitante veria
+   * falha num cadastro que deu certo.
+   */
+  it("o envio leva um limite de tempo, para o formulário sempre responder", async () => {
+    configurarClint();
+    process.env.CLINT_TEMPLATE_CONTATO_ID = "template-do-contato";
+    vi.stubGlobal("fetch", fetchFalso());
+
+    await avisarNovoContato("profissional");
+
+    const comSinal = chamadas.filter((c) => c.sinal instanceof AbortSignal);
+    expect(comSinal.length).toBeGreaterThan(0);
   });
 
   it("recusa da Clint vira erro com motivo, nunca exceção", async () => {
