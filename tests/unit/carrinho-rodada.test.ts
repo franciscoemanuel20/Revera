@@ -19,7 +19,7 @@ let pedidos: Array<{
   id: string;
   created_at: string;
   currency: string;
-  customers: { phone: string; email: string };
+  customers: { phone: string; email: string; full_name: string };
 }> = [];
 let reservas = 0;
 let contagemDoDia = 0;
@@ -103,7 +103,7 @@ beforeEach(() => {
     id: `pedido-${i}`,
     created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
     currency: "BRL",
-    customers: { phone: `4899988${String(i).padStart(4, "0")}`, email: `c${i}@exemplo.com` },
+    customers: { phone: `4899988${String(i).padStart(4, "0")}`, email: `c${i}@exemplo.com`, full_name: `Cliente ${i}` },
   }));
 });
 
@@ -170,7 +170,7 @@ describe("rodada com a Clint recusando tudo", () => {
       id: `tentativa-${i}`,
       created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
       currency: "BRL",
-      customers: { phone: "48999887766", email: "mesma@pessoa.com" },
+      customers: { phone: "48999887766", email: "mesma@pessoa.com", full_name: "Maria Souza" },
     }));
 
     vi.stubGlobal(
@@ -195,6 +195,55 @@ describe("rodada com a Clint recusando tudo", () => {
     expect(reservas).toBe(1);
     expect(r.enviados).toBe(1);
     expect(r.pulados.mesma_pessoa_nesta_rodada).toBe(2);
+  });
+
+  /**
+   * Achado do Codex (13ª rodada): `contatoNaClint` criava todo contato com o
+   * nome fixo "Equipe Reverá", que era certo quando só a equipe recebia. Num
+   * fluxo que fala com o CLIENTE, cadastraria cada comprador como se fosse a
+   * loja — e a atendente veria "Equipe Reverá" do outro lado da conversa.
+   */
+  it("cliente novo entra na Clint com o nome dele, não como a equipe", async () => {
+    const criacoes: Array<Record<string, unknown>> = [];
+    pedidos = [
+      {
+        id: "pedido-unico",
+        created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+        currency: "BRL",
+        customers: { phone: "48999887766", email: "maria@exemplo.com", full_name: "Maria Souza" },
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(entrada);
+        if (url.includes("/v1/contacts")) {
+          if (init?.method === "POST") {
+            criacoes.push(JSON.parse(String(init.body)));
+            return new Response(JSON.stringify({ id: "novo" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
+          // Não encontrado: força o caminho de criação.
+          return new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ id: "msg" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      })
+    );
+
+    await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(criacoes).toHaveLength(1);
+    expect(criacoes[0]!.name).toBe("Maria Souza");
+    expect(criacoes[0]!.name).not.toBe("Equipe Reverá");
   });
 
   /**

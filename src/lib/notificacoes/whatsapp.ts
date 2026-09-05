@@ -64,6 +64,18 @@ export interface MensagemWhatsApp {
   /** Parâmetros na ordem em que o template os espera. */
   parametros: string[];
   /**
+   * Nome com que o contato é CRIADO na Clint, quando ele ainda não existe.
+   *
+   * Não vai na mensagem: os templates deste projeto são fixos, sem variável.
+   * É a identidade no CRM — e é por isso que importa. O padrão histórico era
+   * "Equipe Reverá", certo enquanto o único destinatário era a própria
+   * equipe; num fluxo que fala com CLIENTE, cadastraria cada comprador como
+   * se fosse a loja, e a atendente veria "Equipe Reverá" do outro lado da
+   * conversa. Achado do Codex em 05/09/2026.
+   */
+  nomeDoContato?: string;
+
+  /**
    * Corta o envio se o provedor demorar demais.
    *
    * Existe para o caminho que roda DENTRO de um formulário público: a Server
@@ -231,7 +243,8 @@ const CLINT_BASE = "https://api.clint.digital";
 async function contatoNaClint(
   token: string,
   telefone: string,
-  sinal?: AbortSignal
+  sinal?: AbortSignal,
+  nome = "Equipe Reverá"
 ): Promise<{ id: string } | { erro: string }> {
   const so = telefone.replace(/\D/g, "");
   for (const q of [`phone=${encodeURIComponent(so)}`, `search=${encodeURIComponent(so)}`]) {
@@ -262,7 +275,7 @@ async function contatoNaClint(
     const criado = await fetch(`${CLINT_BASE}/v1/contacts`, {
       method: "POST",
       headers: { "api-token": token, "content-type": "application/json" },
-      body: JSON.stringify({ name: "Equipe Reverá", phone: so }),
+      body: JSON.stringify({ name: nome, phone: so }),
       signal: sinal,
     });
     const corpo = (await criado.json().catch(() => ({}))) as {
@@ -290,7 +303,12 @@ async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnv
     // o dele não está configurado. Sem ele, o comportamento de sempre.
     const templateId = mensagem.template?.trim() || exigir("CLINT_TEMPLATE_ID");
 
-    const contato = await contatoNaClint(token, mensagem.para, mensagem.sinal);
+    const contato = await contatoNaClint(
+      token,
+      mensagem.para,
+      mensagem.sinal,
+      mensagem.nomeDoContato
+    );
     if ("erro" in contato) {
       return { estado: "erro", motivo: `Clint: ${contato.erro}` };
     }

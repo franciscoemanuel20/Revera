@@ -117,6 +117,8 @@ export interface PedidoCandidato {
   moeda: string | null;
   /** Para achar compra feita por OUTRO checkout — o customer_id muda a cada um. */
   email?: string | null;
+  /** Só para cadastrar o contato na Clint com o nome certo; não vai na mensagem. */
+  nome?: string | null;
 }
 
 export type MotivoPulo = "sem_telefone" | "fora_da_janela" | "moeda_sem_template";

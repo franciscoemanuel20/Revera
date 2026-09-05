@@ -310,6 +310,9 @@ export async function rodadaDeCarrinhoAbandonado(
         // Com DDI, sempre. Sem isso a Clint cria um contato novo com o número
         // incompleto e a mensagem paga vai para quem não é o cliente.
         para: destino,
+        // Quem recebe aqui é o CLIENTE. Sem isto ele entraria no CRM como
+        // "Equipe Reverá", o padrão do aviso interno.
+        nomeDoContato: (pedido.nome ?? "").trim() || "Cliente Reverá",
         texto: "Você começou uma compra na Reverá e não finalizou. Posso ajudar?",
         parametros: [],
         template,
@@ -504,7 +507,7 @@ async function lerPagina(
 
   const { data, error } = await supabase
     .from("orders")
-    .select("id, created_at, currency, customers ( phone, email )")
+    .select("id, created_at, currency, customers ( phone, email, full_name )")
     .eq("payment_status", "pending")
     // Cancelar NÃO mexe em payment_status: a action do painel grava só
     // `canceled_at` (admin/pedidos/actions.ts). Sem este filtro, um pedido que
@@ -526,8 +529,8 @@ async function lerPagina(
     created_at: string;
     currency: string | null;
     customers:
-      | { phone: string | null; email: string | null }
-      | { phone: string | null; email: string | null }[]
+      | { phone: string | null; email: string | null; full_name: string | null }
+      | { phone: string | null; email: string | null; full_name: string | null }[]
       | null;
   };
 
@@ -545,6 +548,7 @@ async function lerPagina(
       criadoEm: linha.created_at,
       telefone: cliente?.phone ?? null,
       email: cliente?.email ?? null,
+      nome: cliente?.full_name ?? null,
       moeda: linha.currency,
     });
   }
