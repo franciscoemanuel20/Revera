@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  comDDI,
   decidir,
   dentroDoHorario,
   horaEmSaoPaulo,
@@ -118,5 +119,55 @@ describe("limites do ambiente", () => {
   it("valor válido manda", () => {
     const l = limitesDoAmbiente({ CARRINHO_MAX_POR_DIA: "5" } as unknown as NodeJS.ProcessEnv);
     expect(l.maxPorDia).toBe(5);
+  });
+});
+
+
+/**
+ * Achado P1 do Codex em 05/09/2026. O checkout guarda 10-11 dígitos sem o
+ * `55` (schema.ts), e os 7 clientes reais no banco estão assim, começando em
+ * "4899". Sem DDI a Clint não acha o contato, CRIA um novo com o número
+ * incompleto, e a mensagem paga vai para quem não é o cliente.
+ */
+describe("telefone com DDI", () => {
+  it("celular do checkout (11 dígitos) ganha o 55", () => {
+    expect(comDDI("48999887766")).toBe("5548999887766");
+  });
+
+  it("fixo do checkout (10 dígitos) ganha o 55", () => {
+    expect(comDDI("4833445566")).toBe("554833445566");
+  });
+
+  it("aceita máscara e espaços", () => {
+    expect(comDDI("(48) 99988-7766")).toBe("5548999887766");
+  });
+
+  it("número que já tem DDI não ganha outro", () => {
+    expect(comDDI("5548999887766")).toBe("5548999887766");
+  });
+
+  /**
+   * A armadilha: 55 também é DDD (Santa Maria/RS). Decidir por "começa com
+   * 55" mandaria o gaúcho sem DDI. Quem decide é o TAMANHO.
+   */
+  it("DDD 55 do Rio Grande do Sul ainda ganha o DDI", () => {
+    expect(comDDI("55996622326")).toBe("5555996622326");
+  });
+
+  it("lixo e vazio viram null em vez de virar envio", () => {
+    expect(comDDI("123")).toBeNull();
+    expect(comDDI("")).toBeNull();
+    expect(comDDI(null)).toBeNull();
+    expect(comDDI("999999999999999")).toBeNull();
+  });
+
+  it("decidir recusa o pedido cujo telefone não vira número válido", () => {
+    const p = {
+      id: "x",
+      criadoEm: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+      telefone: "123",
+      moeda: "BRL",
+    };
+    expect(decidir(p, AGORA, LIMITES)).toEqual({ enviar: false, motivo: "sem_telefone" });
   });
 });

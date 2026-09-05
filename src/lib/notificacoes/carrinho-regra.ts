@@ -78,6 +78,38 @@ export function dentroDoHorario(agora: Date, limites: Limites): boolean {
   return hora >= limites.horaInicio && hora < limites.horaFim;
 }
 
+/**
+ * Telefone do checkout no formato que a Clint exige (com DDI), ou `null` se
+ * não dá para confiar nele.
+ *
+ * ===========================================================================
+ * POR QUE ISTO EXISTE (achado do Codex, 05/09/2026)
+ * ===========================================================================
+ * O checkout valida e guarda 10 ou 11 dígitos — DDD + número, SEM o `55`
+ * (`src/app/checkout/schema.ts`). Os 7 clientes reais no banco estão assim,
+ * começando em "4899". Mandar isso para a Clint é pior que falhar: ela
+ * procura o contato pelos 8 últimos dígitos e, quando não acha, **cria** um
+ * contato novo com o número incompleto. O resultado é mensagem paga indo
+ * para um número que não é o do cliente.
+ *
+ * ===========================================================================
+ * A ARMADILHA: 55 TAMBÉM É DDD (Santa Maria/RS)
+ * ===========================================================================
+ * A tentação é decidir por "já começa com 55?". Isso quebra justamente o
+ * gaúcho: `55 99662-2326` são 11 dígitos que começam com 55 e ainda assim
+ * precisam do DDI. Por isso quem decide aqui é o TAMANHO, não o prefixo —
+ * 10 ou 11 dígitos é sempre nacional. É a mesma armadilha documentada no app
+ * da prótese em `src/lib/telefone.ts`.
+ */
+export function comDDI(bruto: string | null | undefined): string | null {
+  const digitos = (bruto ?? "").replace(/\D/g, "");
+  if (digitos.length === 10 || digitos.length === 11) return `55${digitos}`;
+  if ((digitos.length === 12 || digitos.length === 13) && digitos.startsWith("55")) {
+    return digitos;
+  }
+  return null;
+}
+
 export interface PedidoCandidato {
   id: string;
   criadoEm: string;
@@ -103,8 +135,9 @@ export function decidir(
   agora: Date,
   limites: Limites
 ): Decisao {
-  const telefone = (pedido.telefone ?? "").replace(/\D/g, "");
-  if (telefone.length < 10) return { enviar: false, motivo: "sem_telefone" };
+  // `comDDI` recusa o que não dá para enviar; quem chama usa o valor que ela
+  // devolve, nunca o do banco.
+  if (!comDDI(pedido.telefone)) return { enviar: false, motivo: "sem_telefone" };
 
   const moeda = (pedido.moeda ?? "BRL").trim().toUpperCase();
   if (moeda !== "BRL") return { enviar: false, motivo: "moeda_sem_template" };

@@ -77,6 +77,13 @@ export async function avisarNovoContato(
     const modo = modoWhatsApp();
     if (modo === "desligado") return { estado: "desligado" };
 
+    // O modo `meta` não serve aqui pelo mesmo motivo do carrinho abandonado:
+    // no caminho da Cloud API, `enviarWhatsApp` ignora `mensagem.template` e
+    // usa `WHATSAPP_TEMPLATE_NOME` — o aviso de venda paga, com sete
+    // parâmetros, contra os zero que este fluxo manda. Achado do Codex em
+    // 05/09/2026. Sai quando existir template Meta próprio.
+    if (modo === "meta") return { estado: "sem_template" };
+
     // No modo `clint` o template precisa existir ANTES de tentar: sem ele,
     // `enviarPelaClint` cairia no template da venda paga e a equipe leria
     // "nova venda" por causa de um lead. Melhor não mandar nada.

@@ -109,6 +109,23 @@ describe("aviso de contato novo", () => {
     expect(enviado.corpo.parameters).toBeUndefined();
   });
 
+  /**
+   * Achado P2 do Codex em 05/09/2026: no modo `meta`, `enviarWhatsApp` ignora
+   * `mensagem.template` e usa `WHATSAPP_TEMPLATE_NOME` — o aviso INTERNO de
+   * venda paga, que espera sete parâmetros. Este fluxo manda zero. Ou a Meta
+   * recusa, ou o template fixo faz alguém receber "nova venda, abra o
+   * painel". Enquanto não houver template Meta próprio, o fluxo não sai.
+   */
+  it("no modo meta não manda nada — o template seria o da venda paga", async () => {
+    process.env.WHATSAPP_PROVIDER = "meta";
+    process.env.CLINT_TEMPLATE_CONTATO_ID = "template-do-contato";
+    const fetchSpy = fetchFalso();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(avisarNovoContato("profissional")).resolves.toEqual({ estado: "sem_template" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("recusa da Clint vira erro com motivo, nunca exceção", async () => {
     configurarClint();
     process.env.CLINT_TEMPLATE_CONTATO_ID = "template-do-contato";

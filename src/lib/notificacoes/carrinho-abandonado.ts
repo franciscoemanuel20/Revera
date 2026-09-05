@@ -33,6 +33,7 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { enviarWhatsApp, modoWhatsApp } from "./whatsapp";
 import {
+  comDDI,
   decidir,
   dentroDoHorario,
   limitesDoAmbiente,
@@ -66,6 +67,18 @@ export async function rodadaDeCarrinhoAbandonado(
   try {
     const modo = modoWhatsApp();
     if (modo === "desligado") return { ...vazio, motivo: "whatsapp desligado" };
+
+    // O modo `meta` NÃO serve para este fluxo, e o motivo é grave o bastante
+    // para valer uma recusa explícita: `enviarWhatsApp` ignora
+    // `mensagem.template` no caminho da Cloud API e usa sempre
+    // `WHATSAPP_TEMPLATE_NOME`, que é o aviso INTERNO de venda paga, com sete
+    // parâmetros. Este fluxo manda zero. Ou a Meta recusa a entrega, ou —
+    // se o template for fixo — o CLIENTE recebe "nova venda, abra o painel".
+    // Achado do Codex em 05/09/2026. Quando existir template Meta próprio,
+    // esta trava sai junto com a implementação.
+    if (modo === "meta") {
+      return { ...vazio, motivo: "modo meta não suportado neste fluxo" };
+    }
 
     const template = templateDoCarrinho();
     if (modo === "clint" && !template) {
@@ -111,6 +124,26 @@ export async function rodadaDeCarrinhoAbandonado(
         continue;
       }
 
+      const destino = comDDI(pedido.telefone);
+      if (!destino) {
+        conta("sem_telefone");
+        continue;
+      }
+
+      // Reconfere o teto do dia IMEDIATAMENTE antes de reservar, e não só no
+      // começo da rodada. Duas rodadas sobrepostas (o cron pode atrasar)
+      // leriam a mesma contagem no início e cada uma gastaria seu saldo
+      // achando que era o mesmo — 19 enviados viram 21. Reler aqui não é
+      // um lock, mas encolhe a janela de segundos para milissegundos, que é
+      // a mesma escolha feita na recuperação de lead frio do agente.
+      const { count: agoraHoje } = await supabase
+        .from("order_notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("kind", KIND)
+        .not("sent_at", "is", null)
+        .gte("sent_at", desdeDia.toISOString());
+      if ((agoraHoje ?? 0) >= limites.maxPorDia) break;
+
       // Reserva primeiro. Se duas rodadas se cruzarem (o cron pode atrasar e
       // sobrepor), quem perder o INSERT sabe disso antes de gastar mensagem.
       const { error: erroReserva } = await supabase
@@ -130,7 +163,9 @@ export async function rodadaDeCarrinhoAbandonado(
       }
 
       const envio = await enviarWhatsApp({
-        para: (pedido.telefone ?? "").replace(/\D/g, ""),
+        // Com DDI, sempre. Sem isso a Clint cria um contato novo com o número
+        // incompleto e a mensagem paga vai para quem não é o cliente.
+        para: destino,
         texto: "Você começou uma compra na Reverá e não finalizou. Posso ajudar?",
         parametros: [],
         template,
@@ -186,13 +221,31 @@ async function lerCandidatos(
     .from("order_notifications")
     .select("order_id")
     .eq("kind", KIND);
-  const avisados = new Set((jaAvisados ?? []).map((l: { order_id: string }) => l.order_id));
+  const avisados = (jaAvisados ?? []).map((l: { order_id: string }) => l.order_id);
 
-  const { data, error } = await supabase
+  /**
+   * A exclusão dos já avisados vai NO BANCO, antes do `limit` — não depois.
+   *
+   * Achado do Codex em 05/09/2026: filtrar em memória depois de pedir "os 50
+   * mais recentes" faz os já avisados ocuparem as vagas. Passados 50 pedidos
+   * na janela, os elegíveis mais antigos nunca mais apareceriam, e sairiam da
+   * janela de 48h sem nunca terem sido tocados — uma fila que envelhece
+   * calada, que é o pior tipo de bug: não dá erro, só deixa de vender.
+   *
+   * O `limit` continua existindo para o caso de a loja crescer: ele protege
+   * a memória do processo, não a regra.
+   */
+  let consulta = supabase
     .from("orders")
     .select("id, created_at, currency, customers ( phone )")
     .eq("payment_status", "pending")
-    .gte("created_at", limite)
+    .gte("created_at", limite);
+
+  if (avisados.length > 0) {
+    consulta = consulta.not("id", "in", `(${avisados.join(",")})`);
+  }
+
+  const { data, error } = await consulta
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -208,8 +261,11 @@ async function lerCandidatos(
     customers: { phone: string | null } | { phone: string | null }[] | null;
   };
 
+  const jaVistos = new Set(avisados);
   return (data ?? [])
-    .filter((linha: Linha) => !avisados.has(linha.id))
+    // Cinto e suspensório: se a exclusão no banco falhar por qualquer motivo,
+    // a reserva por unique ainda pega — mas melhor não gastar a ida.
+    .filter((linha: Linha) => !jaVistos.has(linha.id))
     .map((linha: Linha) => {
       const cliente = Array.isArray(linha.customers) ? linha.customers[0] : linha.customers;
       return {
