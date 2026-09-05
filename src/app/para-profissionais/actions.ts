@@ -18,6 +18,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 // exporta função async, e o formulário precisa da MESMA regra para avisar o
 // visitante antes de mandar. Ver o comentário de lá.
 import { leadSchema, type ProfessionalLeadInput } from "./lead-schema";
+import { avisarNovoContato } from "@/lib/notificacoes/novo-contato";
 
 export type ProfessionalLeadResult = { error: string } | { ok: true };
 
@@ -45,6 +46,12 @@ export async function enviarLeadProfissionalAction(
   if (error) {
     return { error: "Não foi possível enviar seu contato agora. Tente novamente em instantes." };
   }
+
+  // Avisa DEPOIS de gravar e antes de responder: se o WhatsApp falhar, o
+  // lead já está salvo e `avisarNovoContato` não lança (ver o cabeçalho de
+  // novo-contato.ts). O `await` é de propósito — em Server Action, promessa
+  // solta pode ser cortada quando a resposta é devolvida.
+  await avisarNovoContato("profissional");
 
   return { ok: true };
 }

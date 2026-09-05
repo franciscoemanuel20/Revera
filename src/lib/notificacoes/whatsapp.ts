@@ -63,6 +63,17 @@ export interface MensagemWhatsApp {
   texto: string;
   /** Parâmetros na ordem em que o template os espera. */
   parametros: string[];
+  /**
+   * UUID do template a usar no modo `clint`, quando não é o da venda paga.
+   *
+   * Existe porque o aviso de venda e o de contato novo dizem coisas
+   * diferentes e a Meta cobra por peça aprovada: reusar `nova_venda_revera`
+   * para um lead faria a equipe ler "nova venda" quando ninguém comprou —
+   * um alarme falso é pior que nenhum aviso, porque ensina a ignorar.
+   *
+   * Ausente, cai em `CLINT_TEMPLATE_ID` (a venda paga, o caso original).
+   */
+  template?: string;
 }
 
 export type ResultadoEnvio =
@@ -260,7 +271,10 @@ async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnv
   try {
     const token = exigir("CLINT_API_TOKEN");
     const canalId = exigir("CLINT_CANAL_ID");
-    const templateId = exigir("CLINT_TEMPLATE_ID");
+    // `mensagem.template` já vem resolvido por quem chama — quem escolhe o
+    // template sabe qual é o seu, e cada chamador falha do seu jeito quando
+    // o dele não está configurado. Sem ele, o comportamento de sempre.
+    const templateId = mensagem.template?.trim() || exigir("CLINT_TEMPLATE_ID");
 
     const contato = await contatoNaClint(token, mensagem.para);
     if ("erro" in contato) {

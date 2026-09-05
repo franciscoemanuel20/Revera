@@ -18,6 +18,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
+import { avisarNovoContato } from "@/lib/notificacoes/novo-contato";
 
 const TAMANHO_MAXIMO_BYTES = 5 * 1024 * 1024; // 5MB — limite pedido na missão
 
@@ -80,6 +81,10 @@ export async function enviarPedidoAjudaCorAction(formData: FormData): Promise<Co
   if (erroInsert) {
     return { error: "Não foi possível registrar seu pedido agora. Tente novamente." };
   }
+
+  // Mesma regra do lead profissional: grava, avisa, responde. O aviso nunca
+  // derruba o formulário — ver novo-contato.ts.
+  await avisarNovoContato("ajuda_cor");
 
   return { ok: true };
 }
