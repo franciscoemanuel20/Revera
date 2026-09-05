@@ -19,7 +19,7 @@ let pedidos: Array<{
   id: string;
   created_at: string;
   currency: string;
-  customers: { phone: string; email_normalizado: string };
+  customers: { phone: string; email: string };
 }> = [];
 let reservas = 0;
 let contagemDoDia = 0;
@@ -97,7 +97,7 @@ beforeEach(() => {
     id: `pedido-${i}`,
     created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
     currency: "BRL",
-    customers: { phone: "48999887766", email_normalizado: "cliente@exemplo.com" },
+    customers: { phone: "48999887766", email: "cliente@exemplo.com" },
   }));
 });
 

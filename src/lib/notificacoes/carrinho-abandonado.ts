@@ -307,6 +307,13 @@ type Supabase = ReturnType<typeof createAdminClient>;
  * Existe pedido PAGO da mesma pessoa depois deste? Telefone e e-mail são as
  * chaves porque o customer_id muda a cada checkout.
  *
+ * Usa `customers.email`, e não `email_normalizado`. As duas colunas existem no
+ * banco de produção, mas só `email` está nas migrations deste repositório —
+ * apontar para a coluna não versionada faria a consulta falhar em qualquer
+ * ambiente recriado do repo, e `lerCandidatos` devolveria lista vazia: o
+ * fluxo pararia calado, sem erro visível. Comparar `email` cru é seguro
+ * porque o checkout já grava em minúsculas (`checkout/schema.ts`).
+ *
  * Na dúvida (erro de consulta) devolve `true`: não mandar é o erro barato.
  */
 async function comprouPorOutroPedido(
@@ -320,7 +327,7 @@ async function comprouPorOutroPedido(
   try {
     for (const [coluna, valor] of [
       ["phone", telefone],
-      ["email_normalizado", email],
+      ["email", email],
     ] as const) {
       if (!valor) continue;
       const { data, error } = await supabase
@@ -398,7 +405,7 @@ async function lerCandidatos(
 
   let consulta = supabase
     .from("orders")
-    .select("id, created_at, currency, customers ( phone, email_normalizado )")
+    .select("id, created_at, currency, customers ( phone, email )")
     .eq("payment_status", "pending")
     // Cancelar NÃO mexe em payment_status: a action do painel grava só
     // `canceled_at` (admin/pedidos/actions.ts). Sem este filtro, um pedido
@@ -426,8 +433,8 @@ async function lerCandidatos(
     created_at: string;
     currency: string | null;
     customers:
-      | { phone: string | null; email_normalizado: string | null }
-      | { phone: string | null; email_normalizado: string | null }[]
+      | { phone: string | null; email: string | null }
+      | { phone: string | null; email: string | null }[]
       | null;
   };
 
@@ -442,7 +449,7 @@ async function lerCandidatos(
         id: linha.id,
         criadoEm: linha.created_at,
         telefone: cliente?.phone ?? null,
-        email: cliente?.email_normalizado ?? null,
+        email: cliente?.email ?? null,
         moeda: linha.currency,
       };
     });
