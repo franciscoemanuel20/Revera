@@ -25,6 +25,8 @@ let reservas = 0;
 let contagemDoDia = 0;
 /** Simula "esta pessoa já pagou por outro checkout". */
 let jaComprouPorOutro = false;
+/** Simula histórico de avisos ilegível (erro de consulta). */
+let historicoQuebrado = false;
 
 /**
  * Supabase falso: cada método encadeável devolve o próprio objeto, e o
@@ -46,6 +48,7 @@ vi.mock("@/lib/supabase/server", () => {
               }
               if (estado.op === "update") return resolver({ error: null });
               if (estado.contando) return resolver({ count: contagemDoDia, error: null });
+              if (historicoQuebrado) return resolver({ data: null, error: { message: "banco fora" } });
               return resolver({ data: [], error: null });
             }
             if (estado.single) {
@@ -86,6 +89,7 @@ beforeEach(() => {
   reservas = 0;
   contagemDoDia = 0;
   jaComprouPorOutro = false;
+  historicoQuebrado = false;
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   process.env.WHATSAPP_PROVIDER = "clint";
@@ -191,6 +195,24 @@ describe("rodada com a Clint recusando tudo", () => {
     expect(reservas).toBe(1);
     expect(r.enviados).toBe(1);
     expect(r.pulados.mesma_pessoa_nesta_rodada).toBe(2);
+  });
+
+  /**
+   * Achado do Codex (9ª rodada): ler o histórico como vazio quando a consulta
+   * FALHA desliga a dedupe por pessoa justamente quando não se sabe o que já
+   * saiu — e a constraint (order_id, kind) não protege a pessoa. Melhor não
+   * mandar nada.
+   */
+  it("histórico de avisos ilegível aborta a rodada", async () => {
+    historicoQuebrado = true;
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.executou).toBe(false);
+    expect(reservas).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("teto diário já consumido não abre rodada nenhuma", async () => {
