@@ -1,4 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "node scripts/verify-deploy-seguro.mjs && npm run build"
+  "buildCommand": "node scripts/verify-deploy-seguro.mjs && npm run build",
+  "crons": [
+    {
+      "path": "/api/cron/carrinho-abandonado",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

@@ -101,11 +101,12 @@ describe("aviso de contato novo", () => {
 
     const envios = chamadas.filter((c) => c.url.includes("/v2/messages/template"));
     expect(envios).toHaveLength(1);
-    expect(envios[0].corpo.template_id).toBe("template-do-contato");
-    expect(envios[0].corpo.contact_id).toBe("contato-1");
+    const enviado = envios[0]!;
+    expect(enviado.corpo.template_id).toBe("template-do-contato");
+    expect(enviado.corpo.contact_id).toBe("contato-1");
     // Template fixo: sem parâmetros, e portanto sem nome de cliente na
     // mensagem. Ver o comentário em novo-contato.ts.
-    expect(envios[0].corpo.parameters).toBeUndefined();
+    expect(enviado.corpo.parameters).toBeUndefined();
   });
 
   it("recusa da Clint vira erro com motivo, nunca exceção", async () => {
