@@ -69,6 +69,93 @@ Purchase, ambiente da SuperFrete, preço zero, duplo clique).
 `tests/integration` e `tests/e2e` continuam vazios — não há teste de
 integração nem E2E automatizado.
 
+## Variáveis de ambiente
+
+Lista das variáveis que o código realmente lê (`process.env`), por área. Ver
+`.env.example` para instruções de preenchimento e o histórico de cada uma.
+
+### Supabase
+
+- `NEXT_PUBLIC_SUPABASE_URL` — URL do projeto Supabase, usada no cliente e no servidor.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — chave anônima do Supabase, usada no cliente e no servidor.
+- `SUPABASE_SERVICE_ROLE_KEY` — chave de service role, só no servidor (contorna RLS).
+- `DATABASE_URL` — conexão direta usada por `scripts/aplicar-migrations.mjs` (`npm run db:aplicar`).
+
+### Pagamento
+
+- `PAYMENT_PROVIDER` — escolhe o gateway ativo (`mock` ou `infinitepay`); sem ela o pagamento fica indisponível de propósito.
+- `INFINITEPAY_HANDLE` — identifica a conta InfinitePay que recebe o pagamento; obrigatória quando `PAYMENT_PROVIDER=infinitepay`.
+- `PAYMENT_WEBHOOK_SECRET` — segredo que forma o caminho do webhook de pagamento; sem ela o pagamento não abre.
+- `STRIPE_SECRET_KEY` — chave secreta do gateway internacional (Stripe).
+- `STRIPE_WEBHOOK_SECRET` — segredo para validar o webhook da Stripe.
+- `STRIPE_API_BASE` — aponta o adapter da Stripe para um dublê local; só fora de produção.
+
+### Frete (SuperFrete)
+
+- `SUPERFRETE_TOKEN` — token da conta SuperFrete; a presença dele troca o mock pela API real.
+- `SUPERFRETE_SANDBOX` — `"1"` para sandbox, `"0"` para produção; obrigatória quando o token existe.
+- `SUPERFRETE_USER_AGENT` — identificação exigida pela SuperFrete em toda requisição.
+- `SUPERFRETE_CEP_ORIGEM` — CEP de onde a peça sai (tem padrão embutido no código).
+- `SUPERFRETE_REMETENTE_NOME` — nome do remetente na etiqueta.
+- `SUPERFRETE_REMETENTE_RUA` — rua do endereço de origem.
+- `SUPERFRETE_REMETENTE_NUMERO` — número do endereço de origem.
+- `SUPERFRETE_REMETENTE_COMPLEMENTO` — complemento do endereço de origem.
+- `SUPERFRETE_REMETENTE_BAIRRO` — bairro do endereço de origem.
+- `SUPERFRETE_REMETENTE_CIDADE` — cidade do endereço de origem.
+- `SUPERFRETE_REMETENTE_UF` — UF do endereço de origem.
+- `SUPERFRETE_CAIXA_PESO_GRAMAS` — peso da caixa por peça, em gramas.
+- `SUPERFRETE_CAIXA_COMPRIMENTO_CM` — comprimento da caixa, em cm.
+- `SUPERFRETE_CAIXA_LARGURA_CM` — largura da caixa, em cm.
+- `SUPERFRETE_CAIXA_ALTURA_CM` — altura da caixa, em cm.
+
+### Rastreamento de conversão
+
+- `NEXT_PUBLIC_META_PIXEL_ID` — ID do pixel da Meta, exposto ao navegador.
+- `NEXT_PUBLIC_GOOGLE_TAG_ID` — tag do Google (`GT-` carrega GA4+Ads, `G-` só GA4).
+- `NEXT_PUBLIC_GA4_MEASUREMENT_ID` — measurement ID do GA4 usado no envio de servidor.
+- `META_CAPI_TOKEN` — token da Conversions API da Meta (segredo, só servidor).
+- `GA4_API_SECRET` — secret do Measurement Protocol do GA4 (segredo, só servidor).
+- `TRACKING_ALLOW_DEV_SEND` — libera envio de rastreamento fora de produção, só junto com `META_TEST_EVENT_CODE`.
+- `META_TEST_EVENT_CODE` — código do Gerenciador de Eventos da Meta para marcar envios como teste.
+
+### WhatsApp / notificações
+
+- `WHATSAPP_PROVIDER` — escolhe o provedor de envio (`meta` ou `clint`); ausente ou outro valor desliga o envio.
+- `WHATSAPP_PHONE_NUMBER_ID` — ID do número de telefone na API oficial da Meta (modo `meta`).
+- `WHATSAPP_TOKEN` — token de acesso da API oficial da Meta (modo `meta`).
+- `WHATSAPP_TEMPLATE_NOME` — nome do template aprovado usado no envio via Meta.
+- `WHATSAPP_TEMPLATE_IDIOMA` — idioma do template da Meta (padrão `pt_BR`).
+- `CLINT_API_TOKEN` — token de acesso da API da Clint (modo `clint`).
+- `CLINT_CANAL_ID` — ID do canal usado para enviar pela Clint.
+- `CLINT_TEMPLATE_ID` — template padrão da Clint quando quem chama não passa um específico.
+- `CLINT_TEMPLATE_CONTATO_ID` — template da Clint usado no aviso de novo contato/formulário.
+- `WHATSAPP_DESTINO` — número que recebe o aviso de venda paga e o aviso de novo contato.
+
+### Internacional
+
+- `CHECKOUT_PAISES` — países abertos no checkout além do Brasil (ISO-2, separados por vírgula).
+- `NFE_PROVIDER_ATIVO` — liga o provedor de emissão de NF-e para exportação (`"1"`).
+- `INVOICE_ATIVA` — liga a emissão de invoice de exportação (`"1"`).
+- `DHL_ATIVA` — liga a integração com a DHL para exportação (`"1"`).
+
+### Site e ambiente
+
+- `NEXT_PUBLIC_SITE_URL` — URL pública do site, usada para montar webhook, redirect do gateway e links de admin.
+- `APP_ENV` — força o ambiente lógico da aplicação (ex.: `staging`) quando a Vercel não distingue sozinha.
+
+### Fornecidas automaticamente pela plataforma (não precisa definir)
+
+- `VERCEL_ENV` — ambiente da Vercel (`production`, `preview`, `development`); usada para decidir o ambiente lógico.
+- `VERCEL_URL` — domínio do deploy atual; fallback de `NEXT_PUBLIC_SITE_URL`.
+- `VERCEL_PROJECT_PRODUCTION_URL` — domínio de produção do projeto; fallback de `NEXT_PUBLIC_SITE_URL`.
+- `NODE_ENV` — ambiente do Node/Next (`development`, `test`, `production`); afeta o cookie do carrinho e a detecção de ambiente.
+- `PORT` — porta usada para montar a URL local em desenvolvimento (padrão `3001`).
+
+### Scripts locais (fora do runtime da aplicação)
+
+- `FAKE_STRIPE_PORT` — porta do dublê local da Stripe (`scripts/stripe-fake.mjs`).
+- `APP_BASE` — URL base usada pelo dublê local da Stripe para montar o webhook.
+
 ## Banco de dados
 
 Schema completo em `supabase/migrations/00000000000001_init.sql` — uma
