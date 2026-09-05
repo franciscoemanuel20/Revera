@@ -103,7 +103,7 @@ function tetoPorHora(): number {
  * Na dúvida (erro de banco), devolve o teto: falha fechada, sem enviar. Um
  * aviso perdido é recuperável; um saldo drenado por abuso, não.
  */
-async function contatosNaUltimaHora(): Promise<number> {
+async function contatosNaUltimaHora(prazo: AbortSignal): Promise<number> {
   const desde = new Date(Date.now() - 3600_000).toISOString();
   try {
     const supabase = createAdminClient();
@@ -111,11 +111,13 @@ async function contatosNaUltimaHora(): Promise<number> {
       supabase
         .from("professional_leads")
         .select("id", { count: "exact", head: true })
-        .gte("created_at", desde),
+        .gte("created_at", desde)
+        .abortSignal(prazo),
       supabase
         .from("color_help_requests")
         .select("id", { count: "exact", head: true })
-        .gte("created_at", desde),
+        .gte("created_at", desde)
+        .abortSignal(prazo),
     ]);
     if (profissionais.error || cores.error) return Number.POSITIVE_INFINITY;
     return (profissionais.count ?? 0) + (cores.count ?? 0);
@@ -172,8 +174,19 @@ export async function avisarNovoContato(
       return { estado: "sem_template" };
     }
 
+    /**
+     * O prazo começa AQUI, antes da primeira ida ao banco.
+     *
+     * Achado do Codex em 05/09/2026: criado só na hora de chamar a Clint, ele
+     * deixava as duas contagens do Supabase sem limite. Uma consulta pendurada
+     * segurava a Server Action até o limite de execução da Vercel, e o
+     * visitante via falha num cadastro que já estava salvo — exatamente o que
+     * o prazo existe para evitar.
+     */
+    const prazo = AbortSignal.timeout(TEMPO_MAXIMO_MS);
+
     const teto = tetoPorHora();
-    const naHora = await contatosNaUltimaHora();
+    const naHora = await contatosNaUltimaHora(prazo);
     // `>` e não `>=`: o lead que dispara esta chamada já está gravado, então
     // ele mesmo está na contagem. Com teto 10, o décimo ainda avisa.
     if (naHora > teto) {
@@ -187,7 +200,7 @@ export async function avisarNovoContato(
       texto: TEXTO[origem],
       parametros: [],
       template,
-      sinal: AbortSignal.timeout(TEMPO_MAXIMO_MS),
+      sinal: prazo,
     });
 
     if (envio.estado === "erro") {

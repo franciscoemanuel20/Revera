@@ -24,10 +24,18 @@ vi.mock("@/lib/supabase/server", () => ({
   createAdminClient: () => ({
     from: () => ({
       select: () => ({
-        gte: async () =>
-          bancoQuebra
+        // `gte` é thenable E tem `abortSignal`, porque o código encadeia
+        // `.gte(...).abortSignal(prazo)` — o prazo cobre o banco, não só a
+        // Clint.
+        gte: () => {
+          const resposta = bancoQuebra
             ? { count: null, error: { message: "banco fora" } }
-            : { count: contatosNaHora, error: null },
+            : { count: contatosNaHora, error: null };
+          return {
+            abortSignal: () => Promise.resolve(resposta),
+            then: (r: (v: unknown) => void) => r(resposta),
+          };
+        },
       }),
     }),
   }),
