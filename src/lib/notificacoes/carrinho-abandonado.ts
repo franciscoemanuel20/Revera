@@ -48,7 +48,9 @@ export interface ResultadoRodada {
   motivo?: string;
   vistos: number;
   enviados: number;
-  pulados: Partial<Record<MotivoPulo | "reserva_recusada" | "envio_recusado", number>>;
+  pulados: Partial<
+    Record<MotivoPulo | "reserva_recusada" | "envio_recusado" | "mudou_de_estado", number>
+  >;
 }
 
 function templateDoCarrinho(): string {
@@ -97,14 +99,22 @@ export async function rodadaDeCarrinhoAbandonado(
 
     const desdeDia = new Date(agora.getTime());
     desdeDia.setUTCHours(0, 0, 0, 0);
-    const { count: hoje } = await supabase
+    // `count` vem NULO quando a consulta falha, e o supabase-js não lança.
+    // Ler nulo como zero liberaria o dia inteiro justamente quando não dá
+    // para saber quanto já foi gasto. Falha fechada.
+    const { count: hoje, error: erroConta } = await supabase
       .from("order_notifications")
       .select("id", { count: "exact", head: true })
       .eq("kind", KIND)
       .not("sent_at", "is", null)
       .gte("sent_at", desdeDia.toISOString());
 
-    if ((hoje ?? 0) >= limites.maxPorDia) {
+    if (erroConta || hoje === null) {
+      console.error("[carrinho] não deu para contar o dia — rodada abortada", erroConta?.message);
+      return { ...vazio, motivo: "contagem do dia indisponível" };
+    }
+
+    if (hoje >= limites.maxPorDia) {
       return { ...vazio, motivo: "teto diário atingido" };
     }
 
@@ -141,13 +151,33 @@ export async function rodadaDeCarrinhoAbandonado(
       // achando que era o mesmo — 19 enviados viram 21. Reler aqui não é
       // um lock, mas encolhe a janela de segundos para milissegundos, que é
       // a mesma escolha feita na recuperação de lead frio do agente.
-      const { count: agoraHoje } = await supabase
+      const { count: agoraHoje, error: erroRecontagem } = await supabase
         .from("order_notifications")
         .select("id", { count: "exact", head: true })
         .eq("kind", KIND)
         .not("sent_at", "is", null)
         .gte("sent_at", desdeDia.toISOString());
-      if ((agoraHoje ?? 0) >= limites.maxPorDia) break;
+      if (erroRecontagem || agoraHoje === null || agoraHoje >= limites.maxPorDia) break;
+
+      /**
+       * Relê o pedido imediatamente antes de reservar.
+       *
+       * A lista de candidatos é montada de uma vez, e depois cada envio passa
+       * por idas ao banco e à Clint. Nesse intervalo o cliente pode ter
+       * PAGO — e aí ele receberia "você não finalizou" logo depois de pagar,
+       * que é pior que não mandar nada. A reserva por unique protege contra
+       * mandar duas vezes, não contra mandar para quem já pagou.
+       */
+      const { data: atual } = await supabase
+        .from("orders")
+        .select("payment_status, canceled_at")
+        .eq("id", pedido.id)
+        .maybeSingle();
+
+      if (!atual || atual.payment_status !== "pending" || atual.canceled_at) {
+        conta("mudou_de_estado");
+        continue;
+      }
 
       // Reserva primeiro. Se duas rodadas se cruzarem (o cron pode atrasar e
       // sobrepor), quem perder o INSERT sabe disso antes de gastar mensagem.
@@ -272,6 +302,10 @@ async function lerCandidatos(
     .from("orders")
     .select("id, created_at, currency, customers ( phone )")
     .eq("payment_status", "pending")
+    // Cancelar NÃO mexe em payment_status: a action do painel grava só
+    // `canceled_at` (admin/pedidos/actions.ts). Sem este filtro, um pedido
+    // que a equipe cancelou de propósito receberia "você não finalizou".
+    .is("canceled_at", null)
     .gte("created_at", limite)
     .lte("created_at", maduroAte)
     .or("currency.eq.BRL,currency.is.null");
