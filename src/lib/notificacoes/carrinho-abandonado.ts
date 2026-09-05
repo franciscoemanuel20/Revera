@@ -37,6 +37,7 @@ import {
   decidir,
   dentroDoHorario,
   limitesDoAmbiente,
+  type Limites,
   type MotivoPulo,
   type PedidoCandidato,
 } from "./carrinho-regra";
@@ -139,18 +140,12 @@ export async function rodadaDeCarrinhoAbandonado(
       return { ...vazio, motivo: "teto diário atingido" };
     }
 
-    const leitura = await lerCandidatos(
-      supabase,
-      agora,
-      limites.janelaHoras,
-      limites.esperaMinutos,
-      limites.maxPorRodada
-    );
-    if (leitura.erro) {
+    const historico = await lerHistorico(supabase, agora, limites.janelaHoras);
+    if (historico.erro) {
       return { ...vazio, motivo: "não deu para montar a fila com segurança" };
     }
-    const candidatos = leitura.candidatos;
-    const resultado: ResultadoRodada = { executou: true, vistos: candidatos.length, enviados: 0, pulados: {} };
+
+    const resultado: ResultadoRodada = { executou: true, vistos: 0, enviados: 0, pulados: {} };
     const conta = (m: keyof ResultadoRodada["pulados"]) => {
       resultado.pulados[m] = (resultado.pulados[m] ?? 0) + 1;
     };
@@ -169,9 +164,31 @@ export async function rodadaDeCarrinhoAbandonado(
     // do banco só conhece os avisos de rodadas anteriores.
     const telefonesDaRodada = new Set<string>();
 
-    for (const pedido of candidatos) {
+    /**
+     * Pagina SOB DEMANDA, e não uma vez só antes do laço.
+     *
+     * Achado do Codex em 05/09/2026: as exclusões caras — "esta pessoa já
+     * comprou por outro checkout" — só podem ser avaliadas pedido a pedido,
+     * depois da leitura. Se os 50 mais recentes caírem todos nelas, a rodada
+     * enviava zero e nunca chegava aos elegíveis mais antigos; e como pedido
+     * pulado não ganha reserva, a rodada seguinte traria os mesmos 50 até
+     * todos expirarem na janela. Agora busca a próxima página enquanto
+     * houver orçamento, com o teto de páginas de sempre.
+     */
+    for (let pagina = 0; pagina < MAX_PAGINAS; pagina += 1) {
       if (reservados >= limites.maxPorRodada) break;
       if (hoje + reservados >= limites.maxPorDia) break;
+
+      const leitura = await lerPagina(supabase, agora, limites, pagina, historico);
+      if (leitura.erro) {
+        return { ...vazio, motivo: "não deu para montar a fila com segurança" };
+      }
+
+      resultado.vistos += leitura.candidatos.length;
+
+      for (const pedido of leitura.candidatos) {
+        if (reservados >= limites.maxPorRodada) break;
+        if (hoje + reservados >= limites.maxPorDia) break;
 
       const decisao = decidir(pedido, agora, limites);
       if (!decisao.enviar) {
@@ -186,6 +203,30 @@ export async function rodadaDeCarrinhoAbandonado(
       }
 
       if (telefonesDaRodada.has(destino)) {
+        conta("mesma_pessoa_nesta_rodada");
+        continue;
+      }
+
+      /**
+       * Relê os avisados imediatamente antes de reservar.
+       *
+       * Achado do Codex em 05/09/2026: com duas rodadas sobrepostas e a mesma
+       * pessoa em dois pedidos, cada uma carrega seu histórico no início; uma
+       * reserva o pedido A, a outra perde esse INSERT mas segue para o B com
+       * o `telefonesDaRodada` vazio e manda de novo para a mesma pessoa. A
+       * constraint `(order_id, kind)` não vê isso.
+       *
+       * Isto não é um lock — é a mesma escolha feita no teto diário: encolher
+       * a janela de segundos para milissegundos. Um lock de verdade exigiria
+       * tabela de supressão por destinatário e migration; para uma loja com
+       * sete pedidos em dez dias, o custo do resto do caminho é maior que o
+       * risco que ele cobre. Está anotado como limite conhecido.
+       */
+      const recente = await lerHistorico(supabase, agora, limites.janelaHoras);
+      if (recente.erro) {
+        return { ...vazio, motivo: "não deu para conferir o histórico antes de enviar" };
+      }
+      if (recente.telefonesAvisados.has(destino.replace(/^55/, ""))) {
         conta("mesma_pessoa_nesta_rodada");
         continue;
       }
@@ -306,7 +347,10 @@ export async function rodadaDeCarrinhoAbandonado(
         .update({ last_error: motivo })
         .eq("order_id", pedido.id)
         .eq("kind", KIND);
-      conta("envio_recusado");
+        conta("envio_recusado");
+      }
+
+      if (leitura.fim) break;
     }
 
     return resultado;
@@ -375,56 +419,99 @@ async function comprouPorOutroPedido(
  * Pendentes ainda dentro da janela, sem aviso reservado, do mais novo para o
  * mais velho — quem abandonou há pouco é quem ainda lembra do carrinho.
  */
-async function lerCandidatos(
+const PAGINA = 50;
+const MAX_PAGINAS = 10;
+
+interface Historico {
+  pedidosAvisados: Set<string>;
+  telefonesAvisados: Set<string>;
+  desde: string;
+}
+
+/**
+ * O que já foi avisado dentro da janela — por pedido e por PESSOA.
+ *
+ * Lido uma vez por rodada, antes de qualquer envio. Falha aqui aborta tudo:
+ * tratar consulta quebrada como "ninguém foi avisado" desligaria a dedupe
+ * justamente quando não dá para saber o que saiu, e a constraint
+ * `(order_id, kind)` protege o pedido, não a pessoa.
+ */
+async function lerHistorico(
   supabase: Supabase,
   agora: Date,
-  janelaHoras: number,
-  esperaMinutos: number,
-  quantosBastam: number
-): Promise<{ erro: true } | { erro: false; candidatos: PedidoCandidato[] }> {
-  const limite = new Date(agora.getTime() - janelaHoras * 3600_000).toISOString();
-  const maduroAte = new Date(agora.getTime() - esperaMinutos * 60_000).toISOString();
+  janelaHoras: number
+): Promise<{ erro: true } | ({ erro: false } & Historico)> {
+  const desde = new Date(agora.getTime() - janelaHoras * 3600_000).toISOString();
 
-  const { data: jaAvisados, error: erroAvisados } = await supabase
+  const { data: avisos, error: erroAvisos } = await supabase
     .from("order_notifications")
     .select("order_id")
     .eq("kind", KIND)
-    .gte("created_at", limite);
+    .gte("created_at", desde);
 
-  /**
-   * Histórico ilegível ABORTA a rodada.
-   *
-   * Achado do Codex em 05/09/2026: tratar a falha como "ninguém foi avisado"
-   * desliga a dedupe justamente quando não dá para saber o que já saiu — e
-   * a constraint `(order_id, kind)` não protege a PESSOA, só o pedido. O
-   * resultado seria mensagem paga repetida para quem já recebeu.
-   */
-  if (erroAvisados || !jaAvisados) {
-    console.error("[carrinho] histórico de avisos ilegível", erroAvisados?.message);
+  if (erroAvisos || !avisos) {
+    console.error("[carrinho] histórico de avisos ilegível", erroAvisos?.message);
     return { erro: true };
   }
 
-  const avisados = jaAvisados.map((l: { order_id: string }) => l.order_id);
-
+  const pedidosAvisados = new Set(avisos.map((l: { order_id: string }) => l.order_id));
   const telefonesAvisados = new Set<string>();
-  if (avisados.length > 0) {
-    const { data: pedidosAvisados, error: erroPedidos } = await supabase
+
+  if (pedidosAvisados.size > 0) {
+    const { data: pedidos, error: erroPedidos } = await supabase
       .from("orders")
       .select("customers ( phone )")
-      .in("id", avisados);
+      .in("id", [...pedidosAvisados]);
 
-    if (erroPedidos || !pedidosAvisados) {
+    if (erroPedidos || !pedidos) {
       console.error("[carrinho] telefones já avisados ilegíveis", erroPedidos?.message);
       return { erro: true };
     }
 
-    for (const linha of pedidosAvisados) {
+    for (const linha of pedidos) {
       const c = (linha as { customers: { phone: string | null } | { phone: string | null }[] | null })
         .customers;
       const cliente = Array.isArray(c) ? c[0] : c;
       const digitos = (cliente?.phone ?? "").replace(/\D/g, "");
       if (digitos) telefonesAvisados.add(digitos);
     }
+  }
+
+  return { erro: false, pedidosAvisados, telefonesAvisados, desde };
+}
+
+/**
+ * Uma página de candidatos, do mais novo para o mais velho.
+ *
+ * `fim` diz que a janela acabou — é o que faz a rodada parar de pedir mais.
+ */
+async function lerPagina(
+  supabase: Supabase,
+  agora: Date,
+  limites: Limites,
+  pagina: number,
+  historico: Historico
+): Promise<{ erro: true } | { erro: false; candidatos: PedidoCandidato[]; fim: boolean }> {
+  const maduroAte = new Date(agora.getTime() - limites.esperaMinutos * 60_000).toISOString();
+  const de = pagina * PAGINA;
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, created_at, currency, customers ( phone, email )")
+    .eq("payment_status", "pending")
+    // Cancelar NÃO mexe em payment_status: a action do painel grava só
+    // `canceled_at` (admin/pedidos/actions.ts). Sem este filtro, um pedido que
+    // a equipe cancelou de propósito receberia "você não finalizou".
+    .is("canceled_at", null)
+    .gte("created_at", historico.desde)
+    .lte("created_at", maduroAte)
+    .or("currency.eq.BRL,currency.is.null")
+    .order("created_at", { ascending: false })
+    .range(de, de + PAGINA - 1);
+
+  if (error) {
+    console.error("[carrinho] falha ao ler candidatos", error.message);
+    return { erro: true };
   }
 
   type Linha = {
@@ -437,66 +524,23 @@ async function lerCandidatos(
       | null;
   };
 
-  /**
-   * PAGINA em vez de olhar só os 50 mais recentes.
-   *
-   * Achado do Codex: se os 50 primeiros forem todos de gente já avisada por
-   * outro pedido, o filtro os remove DEPOIS do limite e ninguém sobra — e
-   * como esses pedidos nunca ganham reserva, toda rodada seguinte traz os
-   * mesmos 50 e os elegíveis mais antigos morrem de velhice dentro da janela.
-   *
-   * Para de paginar quando junta candidatos suficientes (com folga sobre o
-   * teto da rodada, porque exclusões caras — "já comprou por outro checkout" —
-   * só acontecem depois, no laço) ou quando a janela acaba. O teto de páginas
-   * existe para uma rodada não varrer o banco inteiro se algo der errado.
-   */
-  const PAGINA = 50;
-  const MAX_PAGINAS = 10;
-  const folga = Math.max(quantosBastam * 4, PAGINA);
+  const linhas = (data ?? []) as Linha[];
   const candidatos: PedidoCandidato[] = [];
-  const jaVistos = new Set(avisados);
 
-  for (let pagina = 0; pagina < MAX_PAGINAS; pagina += 1) {
-    const de = pagina * PAGINA;
-    const { data, error } = await supabase
-      .from("orders")
-      .select("id, created_at, currency, customers ( phone, email )")
-      .eq("payment_status", "pending")
-      // Cancelar NÃO mexe em payment_status: a action do painel grava só
-      // `canceled_at` (admin/pedidos/actions.ts). Sem este filtro, um pedido
-      // que a equipe cancelou de propósito receberia "você não finalizou".
-      .is("canceled_at", null)
-      .gte("created_at", limite)
-      .lte("created_at", maduroAte)
-      .or("currency.eq.BRL,currency.is.null")
-      .order("created_at", { ascending: false })
-      .range(de, de + PAGINA - 1);
-
-    if (error) {
-      console.error("[carrinho] falha ao ler candidatos", error.message);
-      return { erro: true };
-    }
-
-    const linhas = (data ?? []) as Linha[];
-
-    for (const linha of linhas) {
-      if (jaVistos.has(linha.id)) continue;
-      const c = linha.customers;
-      const cliente = Array.isArray(c) ? c[0] : c;
-      const digitos = (cliente?.phone ?? "").replace(/\D/g, "");
-      if (digitos && telefonesAvisados.has(digitos)) continue;
-      candidatos.push({
-        id: linha.id,
-        criadoEm: linha.created_at,
-        telefone: cliente?.phone ?? null,
-        email: cliente?.email ?? null,
-        moeda: linha.currency,
-      });
-    }
-
-    if (candidatos.length >= folga) break;
-    if (linhas.length < PAGINA) break; // acabou a janela
+  for (const linha of linhas) {
+    if (historico.pedidosAvisados.has(linha.id)) continue;
+    const c = linha.customers;
+    const cliente = Array.isArray(c) ? c[0] : c;
+    const digitos = (cliente?.phone ?? "").replace(/\D/g, "");
+    if (digitos && historico.telefonesAvisados.has(digitos)) continue;
+    candidatos.push({
+      id: linha.id,
+      criadoEm: linha.created_at,
+      telefone: cliente?.phone ?? null,
+      email: cliente?.email ?? null,
+      moeda: linha.currency,
+    });
   }
 
-  return { erro: false, candidatos };
+  return { erro: false, candidatos, fim: linhas.length < PAGINA };
 }
