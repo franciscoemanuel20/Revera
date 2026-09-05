@@ -49,7 +49,14 @@ export interface ResultadoRodada {
   vistos: number;
   enviados: number;
   pulados: Partial<
-    Record<MotivoPulo | "reserva_recusada" | "envio_recusado" | "mudou_de_estado", number>
+    Record<
+      | MotivoPulo
+      | "reserva_recusada"
+      | "envio_recusado"
+      | "mudou_de_estado"
+      | "comprou_em_outro_pedido",
+      number
+    >
   >;
 }
 
@@ -202,6 +209,27 @@ export async function rodadaDeCarrinhoAbandonado(
         continue;
       }
 
+      /**
+       * A MESMA PESSOA pode ter comprado por OUTRO checkout.
+       *
+       * Achado do Codex em 05/09/2026, e o cenário é comum: o pagamento falha,
+       * a pessoa refaz o checkout do zero e paga. `checkout/actions.ts` cria
+       * um `customers` NOVO a cada vez (linha 123), com id novo — então o
+       * pedido abandonado continua `pending`, ligado a outro customer_id, e
+       * comparar ids não resolveria. É por isso que a chave aqui é telefone e
+       * e-mail, que são estáveis entre checkouts.
+       *
+       * Sinal de que isso já acontece nesta loja: entre os 7 pendentes há
+       * valores repetidos (R$ 3.164,46 duas vezes em 29/08).
+       *
+       * Só compra POSTERIOR conta. Quem comprou antes e abandonou outro
+       * carrinho depois é um abandono de verdade.
+       */
+      if (await comprouPorOutroPedido(supabase, pedido)) {
+        conta("comprou_em_outro_pedido");
+        continue;
+      }
+
       // Reserva primeiro. Se duas rodadas se cruzarem (o cron pode atrasar e
       // sobrepor), quem perder o INSERT sabe disso antes de gastar mensagem.
       const { error: erroReserva } = await supabase
@@ -276,6 +304,42 @@ export async function rodadaDeCarrinhoAbandonado(
 type Supabase = ReturnType<typeof createAdminClient>;
 
 /**
+ * Existe pedido PAGO da mesma pessoa depois deste? Telefone e e-mail são as
+ * chaves porque o customer_id muda a cada checkout.
+ *
+ * Na dúvida (erro de consulta) devolve `true`: não mandar é o erro barato.
+ */
+async function comprouPorOutroPedido(
+  supabase: Supabase,
+  pedido: PedidoCandidato
+): Promise<boolean> {
+  const telefone = (pedido.telefone ?? "").replace(/\D/g, "");
+  const email = (pedido.email ?? "").trim().toLowerCase();
+  if (!telefone && !email) return false;
+
+  try {
+    for (const [coluna, valor] of [
+      ["phone", telefone],
+      ["email_normalizado", email],
+    ] as const) {
+      if (!valor) continue;
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, customers!inner ( id )")
+        .eq("payment_status", "paid")
+        .eq(`customers.${coluna}`, valor)
+        .gte("created_at", pedido.criadoEm)
+        .limit(1);
+      if (error) return true;
+      if ((data ?? []).length > 0) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Pendentes ainda dentro da janela, sem aviso reservado, do mais novo para o
  * mais velho — quem abandonou há pouco é quem ainda lembra do carrinho.
  */
@@ -334,7 +398,7 @@ async function lerCandidatos(
 
   let consulta = supabase
     .from("orders")
-    .select("id, created_at, currency, customers ( phone )")
+    .select("id, created_at, currency, customers ( phone, email_normalizado )")
     .eq("payment_status", "pending")
     // Cancelar NÃO mexe em payment_status: a action do painel grava só
     // `canceled_at` (admin/pedidos/actions.ts). Sem este filtro, um pedido
@@ -361,7 +425,10 @@ async function lerCandidatos(
     id: string;
     created_at: string;
     currency: string | null;
-    customers: { phone: string | null } | { phone: string | null }[] | null;
+    customers:
+      | { phone: string | null; email_normalizado: string | null }
+      | { phone: string | null; email_normalizado: string | null }[]
+      | null;
   };
 
   const jaVistos = new Set(avisados);
@@ -375,6 +442,7 @@ async function lerCandidatos(
         id: linha.id,
         criadoEm: linha.created_at,
         telefone: cliente?.phone ?? null,
+        email: cliente?.email_normalizado ?? null,
         moeda: linha.currency,
       };
     });

@@ -15,9 +15,16 @@ vi.mock("@/lib/config/ambiente", () => ({
   descricaoDoAmbiente: () => "teste",
 }));
 
-let pedidos: Array<{ id: string; created_at: string; currency: string; customers: { phone: string } }> = [];
+let pedidos: Array<{
+  id: string;
+  created_at: string;
+  currency: string;
+  customers: { phone: string; email_normalizado: string };
+}> = [];
 let reservas = 0;
 let contagemDoDia = 0;
+/** Simula "esta pessoa já pagou por outro checkout". */
+let jaComprouPorOutro = false;
 
 /**
  * Supabase falso: cada método encadeável devolve o próprio objeto, e o
@@ -26,7 +33,7 @@ let contagemDoDia = 0;
  */
 vi.mock("@/lib/supabase/server", () => {
   const construir = (tabela: string) => {
-    const estado = { tabela, op: "select", contando: false, single: false };
+    const estado = { tabela, op: "select", contando: false, single: false, buscaPagos: false };
     const alvo: Record<string, unknown> = {};
     const encadeia = new Proxy(alvo, {
       get(_t, prop: string) {
@@ -44,6 +51,10 @@ vi.mock("@/lib/supabase/server", () => {
             if (estado.single) {
               return resolver({ data: { payment_status: "pending", canceled_at: null }, error: null });
             }
+            // A consulta de "pagou por outro pedido" filtra por paid.
+            if (estado.buscaPagos) {
+              return resolver({ data: jaComprouPorOutro ? [{ id: "outro" }] : [], error: null });
+            }
             return resolver({ data: pedidos, error: null });
           };
         }
@@ -51,6 +62,9 @@ vi.mock("@/lib/supabase/server", () => {
           if (prop === "insert") estado.op = "insert";
           if (prop === "update") estado.op = "update";
           if (prop === "maybeSingle") estado.single = true;
+          if (prop === "eq" && args[0] === "payment_status" && args[1] === "paid") {
+            estado.buscaPagos = true;
+          }
           if (prop === "select" && typeof args[1] === "object" && args[1] !== null) {
             estado.contando = true;
           }
@@ -71,6 +85,7 @@ const AGORA = new Date("2026-09-05T18:00:00Z"); // 15h em São Paulo
 beforeEach(() => {
   reservas = 0;
   contagemDoDia = 0;
+  jaComprouPorOutro = false;
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   process.env.WHATSAPP_PROVIDER = "clint";
@@ -82,7 +97,7 @@ beforeEach(() => {
     id: `pedido-${i}`,
     created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
     currency: "BRL",
-    customers: { phone: "48999887766" },
+    customers: { phone: "48999887766", email_normalizado: "cliente@exemplo.com" },
   }));
 });
 
@@ -118,6 +133,24 @@ describe("rodada com a Clint recusando tudo", () => {
     // O que importa: 3 reservas (o teto), não 10 nem 20.
     expect(reservas).toBe(3);
     expect(r.pulados.envio_recusado).toBe(3);
+  });
+
+  /**
+   * Achado do Codex (6ª rodada): o pagamento falha, a pessoa refaz o checkout
+   * do zero e paga. `checkout/actions.ts` cria um customer NOVO a cada vez,
+   * então o pedido abandonado continua pending e ela receberia "você não
+   * finalizou" depois de ter comprado.
+   */
+  it("quem pagou por outro checkout não recebe o toque", async () => {
+    jaComprouPorOutro = true;
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.pulados.comprou_em_outro_pedido).toBe(10);
+    expect(reservas).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("teto diário já consumido não abre rodada nenhuma", async () => {

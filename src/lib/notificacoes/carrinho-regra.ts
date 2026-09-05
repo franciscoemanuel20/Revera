@@ -115,6 +115,8 @@ export interface PedidoCandidato {
   criadoEm: string;
   telefone: string | null;
   moeda: string | null;
+  /** Para achar compra feita por OUTRO checkout — o customer_id muda a cada um. */
+  email?: string | null;
 }
 
 export type MotivoPulo = "sem_telefone" | "fora_da_janela" | "moeda_sem_template";
