@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { baseUrl } from "@/lib/config/urls";
+import { textosDaPagina } from "@/lib/conteudo/textos";
 import { ProdutoInterativo } from "./ProdutoInterativo";
 
 // Página pública de produto — client de servidor com a chave anon
@@ -202,6 +203,15 @@ export default async function ProdutoPage({
     coresComVariante.has(c.id as string)
   );
 
+  // Grupo compartilhado com a home (06/09/2026) — ver o comentário em
+  // src/lib/conteudo/registro/trustbar.ts. Mesma garantia da marca nas duas
+  // páginas; edição pelo painel vale para as duas.
+  const tTrust = await textosDaPagina("trustbar");
+  const trustItems = [
+    { label: tTrust("trustbar.item1") },
+    { label: tTrust("trustbar.item2") },
+  ];
+
   const agora = new Date();
   const regrasVigentes = (regras ?? [])
     .filter((r) => {
@@ -281,6 +291,7 @@ export default async function ProdutoPage({
       }))}
       discountRules={regrasVigentes}
       outrasTexturas={outrasTexturas}
+      trustItems={trustItems}
     />
     </>
   );

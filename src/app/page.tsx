@@ -35,6 +35,10 @@ import {
 // redundante aqui, a RLS já resolve quem pode ver o quê.
 export default async function HomePage() {
   const t = await textosDaPagina("home");
+  // Grupo compartilhado com a página de produto (06/09/2026) — ver o
+  // comentário em src/lib/conteudo/registro/trustbar.ts. Consulta própria,
+  // pequena e com policy pública, porque a TrustBar não é conteúdo da home.
+  const tTrust = await textosDaPagina("trustbar");
   const supabase = await createClient();
 
   // P0-1 (27/08/2026): o destino dos CTAs sai do BANCO, não de um slug fixo.
@@ -197,7 +201,12 @@ export default async function HomePage() {
 
       <section className="w-full border-t border-sand bg-paper px-6 py-10">
         <Reveal>
-          <TrustBar />
+          <TrustBar
+            items={[
+              { label: tTrust("trustbar.item1") },
+              { label: tTrust("trustbar.item2") },
+            ]}
+          />
         </Reveal>
       </section>
 

@@ -11,7 +11,7 @@ import { Price } from "@/components/ui/Price";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { Reveal } from "@/components/ui/Reveal";
 import { Toast } from "@/components/ui/Toast";
-import { TrustBar } from "@/components/ui/TrustBar";
+import { TrustBar, type TrustBarItem } from "@/components/ui/TrustBar";
 import { medirAdicionarAoCarrinho, medirVerProduto } from "@/lib/tracking/browser";
 import { useCart } from "@/components/cart/CartProvider";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
@@ -70,6 +70,13 @@ export interface ProdutoInterativoProps {
     priceCents: number | null;
     imageUrl: string | null;
   }>;
+  /**
+   * Os selos da TrustBar, editáveis pelo grupo compartilhado "trustbar" no
+   * painel (06/09/2026) — ver src/lib/conteudo/registro/trustbar.ts. Opcional
+   * e com o próprio default de <TrustBar> como rede: um caller que esqueça de
+   * passar continua mostrando os dois selos, só que sem edição.
+   */
+  trustItems?: TrustBarItem[];
 }
 
 // Galeria do produto. Desde 27/08/2026 as fotos vêm de `product_media`, uma
@@ -108,6 +115,7 @@ export function ProdutoInterativo({
   colors,
   discountRules,
   outrasTexturas = [],
+  trustItems,
 }: ProdutoInterativoProps) {
   const router = useRouter();
   const { adicionarItem, abrirDrawer, pendente } = useCart();
@@ -560,7 +568,7 @@ export function ProdutoInterativo({
               </p>
             </div>
 
-            <TrustBar />
+            <TrustBar items={trustItems} />
           </Reveal>
         </div>
       </div>

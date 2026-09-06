@@ -2,7 +2,14 @@ export interface TrustBarItem {
   label: string;
 }
 
-const ITENS_PADRAO: TrustBarItem[] = [
+// EXPORTADO só para o teste comparar contra `REGISTRO["trustbar.item1"|2].padrao`
+// (src/lib/conteudo/registro/trustbar.ts) e pegar as duas listas divergindo.
+//
+// Desde 06/09/2026 o registro é a fonte de verdade — home e produto sempre
+// passam `items` vindo de lá. Isto continua existindo como a última rede: um
+// caller novo que esqueça de passar `items` ainda mostra os selos certos, em
+// vez de uma lista vazia.
+export const ITENS_PADRAO: TrustBarItem[] = [
   { label: "Teste de qualidade antes do envio" },
   { label: "7 dias úteis de garantia" },
 ];

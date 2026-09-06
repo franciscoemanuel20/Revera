@@ -47,6 +47,7 @@ import { SOBRE } from "./registro/sobre";
 import { PROFISSIONAIS } from "./registro/profissionais";
 import { GARANTIA } from "./registro/garantia";
 import { HOME } from "./registro/home";
+import { TRUSTBAR } from "./registro/trustbar";
 
 export interface TextoRegistrado {
   /** Em que página ele aparece. É como o painel agrupa. */
@@ -113,6 +114,13 @@ export interface PaginaRegistrada {
 
 export const PAGINAS: Record<string, PaginaRegistrada> = {
   home: { nome: "Página inicial", rota: "/" },
+  // A rota aqui é só a PRIMEIRA das duas que a TrustBar afeta — o tipo
+  // `PaginaRegistrada.rota` é uma string só, igual em toda página. A segunda
+  // rota (`/produtos/[slug]`, dinâmica, uma por produto) é revalidada à
+  // parte em `revalidarRotas()` (admin/textos/actions.ts), com o
+  // `type: "page"` que o Next exige para invalidar TODAS as instâncias de
+  // uma rota parametrizada de uma vez.
+  trustbar: { nome: "Barra de confiança (home e produto)", rota: "/" },
   cuidados: { nome: "Cuidados com a prótese", rota: "/cuidados" },
   porque: { nome: "Por que a Reverá", rota: "/por-que-revera" },
   naturalidade: { nome: "Naturalidade", rota: "/naturalidade" },
@@ -131,6 +139,7 @@ export const PAGINAS: Record<string, PaginaRegistrada> = {
  */
 export const REGISTRO = {
   ...HOME,
+  ...TRUSTBAR,
   ...CUIDADOS,
   ...PORQUE,
   ...NATURALIDADE,

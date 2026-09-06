@@ -40,6 +40,13 @@ function revalidarRotas(pagina: string) {
   // atualizar ao cadastrar página nova.
   const rota = rotaDaPagina(pagina);
   if (rota) revalidatePath(rota);
+  // A TrustBar é o único grupo que vive em DUAS rotas (06/09/2026):
+  // a home E toda página de produto. `rotaDaPagina` só devolve uma —
+  // sem isto, editar o selo pela home deixaria a página do produto (que é a
+  // que vende) com o texto velho até o cache expirar sozinho. `"page"` é o
+  // que o Next exige para invalidar TODAS as instâncias de uma rota
+  // parametrizada (um slug por produto) de uma vez, e não só uma.
+  if (pagina === "trustbar") revalidatePath("/produtos/[slug]", "page");
 }
 
 const chaveSchema = z
