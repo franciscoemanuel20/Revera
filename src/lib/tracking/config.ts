@@ -8,10 +8,10 @@
  * o use — basta abrir "ver fonte". Por isso os IDs vêm de variáveis
  * NEXT_PUBLIC_, que o Next expõe ao navegador de propósito.
  *
- * TOKEN de API é segredo, e mora em variável SEM o prefixo NEXT_PUBLIC_:
- * META_CAPI_TOKEN e GA4_API_SECRET nunca chegam ao navegador. Quem confere
- * isso automaticamente é scripts/verify-no-secrets-in-bundle.mjs, que roda
- * depois do build e falha se um nome desses aparecer no bundle.
+ * Tokens de API são segredo e ficam em variáveis sem o prefixo NEXT_PUBLIC_.
+ * Seus nomes também não aparecem aqui: este módulo é importado por componentes
+ * de navegador, e o verificador de bundle trata qualquer referência nominal
+ * a uma variável sensível como falha.
  *
  * Confundir os dois é o erro clássico: um token de CAPI no bundle deixa
  * qualquer pessoa forjar conversões na conta de anúncios.
