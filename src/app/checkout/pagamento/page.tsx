@@ -53,12 +53,37 @@ export default async function PagamentoPage({
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, total_cents, shipping_cents, discount_cents, currency, access_token, customer_id"
+      "id, order_number, status, payment_status, total_cents, shipping_cents, discount_cents, currency, access_token, customer_id"
     )
     .eq("access_token", accessToken)
     .maybeSingle();
 
   if (!pedido) notFound();
+
+  /**
+   * ESTORNADO NUNCA RECOBRA (achado do Codex, 08/09/2026).
+   *
+   * `orders.status` é coluna GERADA (migration 8) e a fórmula não tem ramo
+   * para `payment_status = 'refunded'` — ela existe para decidir ENVIO
+   * (cancelado/garantia/entregue/enviado/etiqueta/pago), não para decidir se
+   * o pedido pode ser cobrado de novo. Um pedido estornado sem envio
+   * derivava `status = 'new'` (o mesmo de um pedido que nunca foi pago) e
+   * passava direto pela guarda abaixo para uma cobrança nova.
+   *
+   * O pior não é só cobrar de novo: confirmarPagamento() (src/lib/payments/
+   * confirmar.ts) RECUSA reconfirmar qualquer pedido com
+   * `payment_status = 'refunded'`, de propósito — é a mesma trava que
+   * impede um webhook atrasado reaprovar um estorno. Então esse pagamento
+   * novo cobraria o cliente de verdade no gateway e o sistema NUNCA
+   * marcaria o pedido como pago — dinheiro entrando sem nenhum caminho de
+   * volta a não ser alguém perceber na mão.
+   *
+   * A checagem é por `payment_status`, o eixo real do dinheiro — não por
+   * `status`, que é derivado e não tem este caso.
+   */
+  if (pedido.payment_status === "refunded") {
+    redirect(`/pedido/${accessToken}`);
+  }
 
   // Já pago (ou já adiante): não recobra, manda direto para o comprovante.
   if (pedido.status !== "new") {
@@ -338,17 +363,38 @@ export default async function PagamentoPage({
     // GUARDADA: é o que permite reaproveitar o link a cada recarga. A
     // InfinitePay nem sempre devolve `slug`, então `provider_payment_id` pode
     // vir nulo, e a URL é a única referência confiável para este link.
+    //
+    // `.select("id").maybeSingle()` no UPDATE (achado do Codex, 08/09/2026):
+    // sem isso, um UPDATE que não bate em NENHUMA linha (a reserva sumiu —
+    // por exemplo, liberarReservaTravadaAction rodando ao mesmo tempo lá no
+    // admin) volta `error: null` do mesmo jeito que um sucesso de verdade.
+    // O código seguia direto para o redirect acreditando que a URL estava
+    // guardada, quando na verdade não sobrou registro nenhum — a próxima
+    // visita não acharia a reserva e criaria uma cobrança nova, duplicando o
+    // link. Com `.select()`, "zero linhas afetadas" vira um caso PRÓPRIO
+    // (`linhaSumiu`), distinto de erro de banco.
     let erroPersistir: unknown = null;
+    let linhaSumiu = false;
     for (let tentativa = 0; tentativa < 3; tentativa++) {
-      const { error } = await supabase
+      const { data: atualizada, error } = await supabase
         .from("payments")
         .update({
           provider_payment_id: resultado.providerPaymentId,
           raw_response: { checkout_url: resultado.checkoutUrl },
         })
-        .eq("id", reserva!.id);
+        .eq("id", reserva!.id)
+        .select("id")
+        .maybeSingle();
 
-      if (!error) {
+      if (!error && atualizada) {
+        erroPersistir = null;
+        linhaSumiu = false;
+        break;
+      }
+      if (!error && !atualizada) {
+        // Zero linhas, zero erro: a reserva não existe mais. Repetir o
+        // mesmo UPDATE não muda nada — sai já para a recriação abaixo.
+        linhaSumiu = true;
         erroPersistir = null;
         break;
       }
@@ -357,7 +403,33 @@ export default async function PagamentoPage({
       await new Promise((r) => setTimeout(r, 200));
     }
 
-    if (erroPersistir) {
+    if (linhaSumiu) {
+      /**
+       * A reserva sumiu no meio da criação da cobrança. `payment_events.
+       * payment_id` referencia `payments(id)` — não dá para gravar ali uma
+       * recuperação para uma reserva que não existe mais (violaria a chave
+       * estrangeira, e é por isso que este caso não pode cair no bloco de
+       * backup abaixo). A saída segura é RECRIAR o registro do zero, já com
+       * a URL que JÁ TEMOS em mãos: a próxima visita encontra exatamente
+       * este link pela guarda de `pagamentoExistente` no topo desta função,
+       * em vez de criar um segundo.
+       */
+      const { error: erroRecriar } = await supabase.from("payments").insert({
+        order_id: pedido.id,
+        provider: provider.name,
+        status: "pending",
+        amount_cents: pedido.total_cents,
+        provider_payment_id: resultado.providerPaymentId,
+        raw_response: { checkout_url: checkoutUrl },
+      });
+      if (erroRecriar) {
+        console.error(
+          "[pagamento] reserva sumiu no meio da criação e não foi possível recriar — link ficará sem registro",
+          erroRecriar,
+          { pedido: pedido.id, reservaAntiga: reserva!.id }
+        );
+      }
+    } else if (erroPersistir) {
       // Supabase devolve vários erros como valor de retorno, sem lançar. Se
       // todos os retries do UPDATE falharem, preservamos a URL numa tabela
       // separada — com o MESMO retry da linha acima (3 tentativas, mesmo

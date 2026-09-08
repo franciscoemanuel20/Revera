@@ -11,6 +11,15 @@ import {
 } from "@/lib/admin/venda-status";
 
 /**
+ * Idade mínima de uma reserva `pending` antes de `liberarReservaTravadaAction`
+ * aceitar apagá-la — ver o comentário no ponto de uso. Mesmo valor de
+ * IDADE_PARA_SUGERIR_CONTATO_MS em src/app/checkout/pagamento/page.tsx, de
+ * propósito: é a mesma pergunta ("será que ainda está em andamento?"), só
+ * que aqui a resposta bloqueia uma ação em vez de só mudar um texto.
+ */
+const IDADE_MINIMA_PARA_LIBERAR_MS = 90_000;
+
+/**
  * As ações manuais da responsável sobre um pedido.
  *
  * ===========================================================================
@@ -240,7 +249,7 @@ export async function liberarReservaTravadaAction(
 
   const { data: pagamento } = await supabase
     .from("payments")
-    .select("id, order_id, status, raw_response")
+    .select("id, order_id, status, raw_response, created_at")
     .eq("id", paymentId)
     .maybeSingle();
 
@@ -250,6 +259,24 @@ export async function liberarReservaTravadaAction(
   if (pagamento.status !== "pending") {
     return {
       error: "Esta reserva não está mais pendente — pode já ter sido resolvida. Recarregue a página.",
+    };
+  }
+  /**
+   * IDADE MÍNIMA antes de liberar (achado do Codex, 08/09/2026): a
+   * sequência inteira que cria a cobrança — chamar o gateway e até 3
+   * tentativas de gravar o resultado — acontece dentro de UMA requisição
+   * síncrona do CLIENTE em src/app/checkout/pagamento/page.tsx, e não passa
+   * perto disto. Sem esta idade mínima, um admin podia liberar (apagar) uma
+   * reserva que uma aba do cliente ainda estava preenchendo NAQUELE
+   * instante — o UPDATE dela então não acharia mais a linha, e mesmo com a
+   * recriação automática que o checkout agora faz nesse caso, é mais
+   * simples não abrir a janela do que fechá-la depois. Reserva mais nova
+   * que isto quase certamente ainda está em voo; não é travada, é rápida.
+   */
+  const idadeMs = Date.now() - new Date(pagamento.created_at as string).getTime();
+  if (idadeMs < IDADE_MINIMA_PARA_LIBERAR_MS) {
+    return {
+      error: "Esta reserva é recente demais para liberar — pode ainda estar em andamento. Espere um pouco e recarregue a página.",
     };
   }
   // Trava contra o uso errado do botão: reserva COM url guardada não é
