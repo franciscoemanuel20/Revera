@@ -14,6 +14,7 @@ import {
 import { PrintButton } from "../PrintButton";
 import { StatusActions } from "../StatusActions";
 import { BotaoEtiqueta } from "../BotaoEtiqueta";
+import { LiberarReservaButton } from "../LiberarReservaButton";
 import { ChecklistExportacao } from "../ChecklistExportacao";
 import {
   derivarExportStatus,
@@ -98,6 +99,7 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
     status: string;
     amount_cents: number;
     created_at: string;
+    raw_response: { checkout_url?: string } | null;
   }>;
 
   const envio = (pedido.shipments ?? [])[0] as
@@ -303,17 +305,37 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
             <p className="text-sm text-ink/60">Nenhuma tentativa de pagamento registrada ainda.</p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {pagamentos.map((p) => (
-                <li key={p.id} className="flex flex-col gap-0.5 border-b border-sand/60 pb-2 text-sm last:border-0">
-                  <span className="text-ink/80">
-                    {p.provider} · {METODO_LABEL[p.method ?? ""] ?? p.method ?? "método não informado"}
-                  </span>
-                  <span className="text-ink/60">
-                    {PAGAMENTO_STATUS_LABEL[p.status] ?? p.status} — {dinheiroDoPedido(p.amount_cents)} —{" "}
-                    {formatarDataHora(p.created_at)}
-                  </span>
-                </li>
-              ))}
+              {pagamentos.map((p) => {
+                // "Travada": pendente e sem URL de checkout guardada em
+                // lugar nenhum — o estado exato que
+                // liberarReservaTravadaAction existe para destravar. Uma
+                // reserva pendente COM url é um link válido em uso; não
+                // ganha botão nenhum.
+                const travada = p.status === "pending" && !p.raw_response?.checkout_url;
+                return (
+                  <li
+                    key={p.id}
+                    className="flex flex-col gap-0.5 border-b border-sand/60 pb-2 text-sm last:border-0"
+                  >
+                    <span className="text-ink/80">
+                      {p.provider} · {METODO_LABEL[p.method ?? ""] ?? p.method ?? "método não informado"}
+                    </span>
+                    <span className="text-ink/60">
+                      {PAGAMENTO_STATUS_LABEL[p.status] ?? p.status} — {dinheiroDoPedido(p.amount_cents)} —{" "}
+                      {formatarDataHora(p.created_at)}
+                    </span>
+                    {travada ? (
+                      <>
+                        <span className="text-xs text-amber-700">
+                          Reserva travada — sem link de checkout guardado. Confira no painel do
+                          gateway antes de liberar.
+                        </span>
+                        <LiberarReservaButton paymentId={p.id} orderId={pedido.id} />
+                      </>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

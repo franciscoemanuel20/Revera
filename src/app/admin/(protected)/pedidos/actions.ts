@@ -188,6 +188,101 @@ export async function cancelarPedidoAction(
   return { ok: true };
 }
 
+const liberarReservaSchema = z.object({
+  paymentId: z.string().uuid(),
+  orderId: z.string().uuid(),
+});
+
+export type LiberarReservaInput = z.infer<typeof liberarReservaSchema>;
+
+/**
+ * Libera uma reserva de pagamento TRAVADA — uma linha `pending` em
+ * `payments` sem URL de checkout guardada em lugar nenhum (nem
+ * `raw_response`, nem `payment_events`). Sem isso o cliente nunca mais
+ * consegue abrir o pagamento deste pedido (achado do Codex, 08/09/2026).
+ *
+ * ===========================================================================
+ * POR QUE ISTO É UM BOTÃO DE HUMANO, E NÃO UM TIMER
+ * ===========================================================================
+ * Uma versão anterior de src/app/checkout/pagamento/page.tsx liberava essa
+ * reserva sozinha depois de 90 s, se o gateway confirmasse "não pago". O
+ * Codex apontou o furo: "não pago" não é o mesmo que "não existe link em
+ * aberto". O gateway pode ter criado um link de pagamento válido que
+ * ninguém pagou ainda — e liberar essa reserva automaticamente para uma
+ * cobrança nova criaria um SEGUNDO link válido para o mesmo pedido, o
+ * duplo-link que a migration 13 existe para impedir. Nem a InfinitePay nem
+ * a Stripe, nesta integração, dão um jeito de perguntar "existe um link em
+ * aberto para este pedido" nem de cancelar o antigo por id de pedido — só
+ * por id de transação, que é exatamente o que se perde quando a reserva
+ * trava.
+ *
+ * Sem um jeito automático e seguro de saber se o link antigo está mesmo
+ * morto, a decisão vira humana: quem opera confere no painel do próprio
+ * gateway se existe outro link em aberto para este pedido, e só então
+ * libera. Mesmo desenho de `registrarReembolso()` em confirmar.ts — "o
+ * estorno em si é manual no painel da InfinitePay, nossa integração não tem
+ * chamada de estorno".
+ *
+ * Por isso esta ação SÓ apaga a reserva — nunca toca em `payment_status`
+ * nem marca nada como pago ou cancelado. O pedido volta a poder tentar um
+ * pagamento novo; o que aconteceu com o link antigo continua sendo
+ * responsabilidade de quem conferiu no gateway antes de clicar.
+ */
+export async function liberarReservaTravadaAction(
+  input: LiberarReservaInput
+): Promise<AcaoPedidoResultado> {
+  const parsed = liberarReservaSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dado inválido." };
+  }
+  const { paymentId, orderId } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: pagamento } = await supabase
+    .from("payments")
+    .select("id, order_id, status, raw_response")
+    .eq("id", paymentId)
+    .maybeSingle();
+
+  if (!pagamento || pagamento.order_id !== orderId) {
+    return { error: "Reserva não encontrada. Confira se você tem permissão de admin." };
+  }
+  if (pagamento.status !== "pending") {
+    return {
+      error: "Esta reserva não está mais pendente — pode já ter sido resolvida. Recarregue a página.",
+    };
+  }
+  // Trava contra o uso errado do botão: reserva COM url guardada não é
+  // "travada", é um link válido em uso — apagar aqui derrubaria um link que
+  // o cliente pode estar prestes a abrir.
+  const urlGuardada = (pagamento.raw_response as { checkout_url?: string } | null)?.checkout_url;
+  if (urlGuardada) {
+    return {
+      error: "Esta reserva tem um link de checkout guardado — não é uma reserva travada.",
+    };
+  }
+
+  const { error: erroDelete } = await supabase
+    .from("payments")
+    .delete()
+    .eq("id", paymentId)
+    .eq("status", "pending");
+  if (erroDelete) {
+    return { error: "Não foi possível liberar agora. Tente de novo em instantes." };
+  }
+
+  await registrarAuditoria(supabase, {
+    action: "pedido.liberar_reserva_travada",
+    entityType: "orders",
+    entityId: orderId,
+    diff: { pagamento: paymentId },
+  });
+
+  revalidatePath("/admin/pedidos");
+  revalidatePath(`/admin/pedidos/${orderId}`);
+  return { ok: true };
+}
+
 /**
  * Marca as vendas como VISTAS — só apaga o contador do menu.
  *

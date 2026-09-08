@@ -92,13 +92,31 @@ export class InfinitePayProvider implements PaymentProvider {
     }
 
     if (!res.ok) {
+      // `res.ok` false é uma resposta HTTP que CHEGOU — o gateway recebeu a
+      // requisição e respondeu que não criou nada. Erro CERTO, não ambíguo.
       // Não vaza corpo de erro do gateway para o cliente — só para o log.
       const detalhe = await res.text().catch(() => "");
       console.error("[infinitepay] falha ao criar link", res.status, detalhe);
       throw new Error("Não foi possível iniciar o pagamento.");
     }
 
-    const data = (await res.json()) as { url?: string; slug?: string };
+    // `res.ok` já nos diz que a InfinitePay respondeu 2xx — ou seja, JÁ
+    // CRIOU o link. Se a leitura do corpo falhar agora (conexão caiu no
+    // meio da resposta), a ambiguidade muda de figura mas não desaparece:
+    // sabemos que existe um link, só não sabemos qual é a URL dele. O
+    // tratamento correto em src/app/checkout/pagamento/page.tsx é o mesmo
+    // da falha de rede (não apagar a reserva) — por isso cai no mesmo
+    // AmbiguousChargeError.
+    let data: { url?: string; slug?: string };
+    try {
+      data = (await res.json()) as { url?: string; slug?: string };
+    } catch (erro) {
+      console.error("[infinitepay] falha ao ler corpo da resposta (link já pode existir)", erro);
+      throw new AmbiguousChargeError(
+        "A InfinitePay respondeu, mas a leitura da resposta falhou.",
+        { cause: erro }
+      );
+    }
     if (!data.url) {
       console.error("[infinitepay] resposta sem url", data);
       throw new Error("Não foi possível iniciar o pagamento.");

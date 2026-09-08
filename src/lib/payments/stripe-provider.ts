@@ -270,6 +270,8 @@ export class StripeProvider implements PaymentProvider {
       );
     }
     if (!res.ok) {
+      // `res.ok` false é uma resposta HTTP que CHEGOU — a Stripe recebeu a
+      // requisição e respondeu que não criou nada. Erro CERTO, não ambíguo.
       const detalhe = await res.text().catch(() => "");
       // Log sem corpo de requisição (não tem segredo, mas tem dado de
       // cliente) e sem chave — só status e resposta de erro da Stripe.
@@ -277,7 +279,21 @@ export class StripeProvider implements PaymentProvider {
       throw new Error("Não foi possível iniciar o pagamento.");
     }
 
-    const sessao = (await res.json()) as SessaoStripe;
+    // `res.ok` já diz que a Stripe respondeu 2xx — já criou a sessão. Se a
+    // leitura do corpo falhar agora, a ambiguidade muda de figura mas não
+    // desaparece: existe uma sessão, só não sabemos a URL dela. Mesmo
+    // tratamento da falha de rede acima — ver o comentário no import de
+    // AmbiguousChargeError.
+    let sessao: SessaoStripe;
+    try {
+      sessao = (await res.json()) as SessaoStripe;
+    } catch (erro) {
+      console.error("[stripe] falha ao ler corpo da resposta (sessão já pode existir)", erro);
+      throw new AmbiguousChargeError(
+        "A Stripe respondeu, mas a leitura da resposta falhou.",
+        { cause: erro }
+      );
+    }
     if (!sessao.id || !sessao.url) {
       console.error("[stripe] sessão sem id/url");
       throw new Error("Não foi possível iniciar o pagamento.");

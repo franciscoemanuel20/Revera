@@ -10,19 +10,18 @@ import { baseUrl } from "@/lib/config/urls";
 
 /**
  * Quanto tempo uma reserva `pending` sem URL em lugar nenhum (nem
- * `payments.raw_response`, nem `payment_events`) pode ficar parada antes de
- * ser considerada morta (achado do Codex, 08/09/2026: sem isto, a tela
- * "Estamos preparando" nunca sai do ar para aquele pedido).
+ * `payments.raw_response`, nem `payment_events`) fica parada antes de a
+ * TELA (só a tela — nunca o banco) parar de dizer "aguarde" e passar a
+ * sugerir contato com o suporte.
  *
- * A sequência inteira que preenche a URL — chamar o gateway, e até 3
- * tentativas de gravar o resultado — acontece dentro de UMA requisição
- * síncrona e não leva perto disto. Depois desta janela, o que sobrou não é
- * "ainda em andamento", é lixo de uma tentativa que morreu no meio (queda de
- * conexão, função encerrada, banco fora do ar nas duas escritas). Curto o
- * bastante para não deixar o cliente esperando muito; longo o bastante para
- * nunca cortar uma tentativa legítima ainda em voo.
+ * NÃO É UM PRAZO DE LIBERAÇÃO — uma versão anterior deste arquivo apagava a
+ * reserva depois desta janela e deixava o fluxo criar uma cobrança nova; o
+ * Codex apontou (08/09/2026) que isso podia recriar um segundo link válido
+ * para o mesmo pedido, porque "não pago" não é o mesmo que "não existe link
+ * em aberto". A liberação de verdade é sempre uma decisão humana — ver o
+ * comentário grande mais abaixo, onde este valor é usado.
  */
-const IDADE_MAXIMA_RESERVA_SEM_URL_MS = 90_000;
+const IDADE_PARA_SUGERIR_CONTATO_MS = 90_000;
 
 export const metadata: Metadata = {
   title: "Pagamento",
@@ -166,29 +165,31 @@ export default async function PagamentoPage({
     }
 
     /**
-     * Não pago (ou gateway indisponível agora). A reserva pode ainda estar
-     * em voo — a mesma requisição que a criou pode não ter terminado — ou
-     * pode ser exatamente o caso que este bloco existe para tratar. A
-     * janela de segurança evita as duas coisas ruins ao mesmo tempo:
-     * mostrar "aguarde" para sempre (o achado de cima) OU liberar uma
-     * reserva que uma OUTRA requisição, rodando agora, ainda está
-     * preenchendo (o que a migration 13 existe para impedir).
+     * Não pago (ou gateway indisponível agora) — NÃO LIBERAMOS A RESERVA
+     * AQUI, nem depois de qualquer prazo (achado do Codex, 08/09/2026,
+     * sobre uma versão anterior deste bloco que apagava a reserva depois de
+     * 90 s).
+     *
+     * "Não pago" não é o mesmo que "não existe link em aberto": o gateway
+     * pode ter criado um link válido que ninguém pagou ainda, e nenhum dos
+     * dois providers desta loja tem uma chamada de "existe link para este
+     * pedido?" nem "cancele o link antigo" por id de pedido — só por id de
+     * transação, que é exatamente o que se perde quando a reserva trava.
+     * Apagar e deixar o fluxo criar uma cobrança nova recriaria o duplo-link
+     * que este arquivo inteiro existe para evitar.
+     *
+     * Sem um jeito seguro de o PRÓPRIO SISTEMA confirmar que o link antigo
+     * está morto, a decisão de liberar essa reserva é humana — quem opera
+     * confere no painel do gateway (InfinitePay ou Stripe) se não existe
+     * outro link em aberto para este pedido, e libera pelo botão em
+     * /admin/pedidos/[id] (`liberarReservaTravadaAction`, o mesmo desenho
+     * do estorno manual em confirmar.ts: "o estorno em si é manual no
+     * painel do gateway"). A mensagem ao cliente já indica contato quando a
+     * espera passa de um tempo razoável — ver `estagnada` abaixo.
      */
     const idadeMs = Date.now() - new Date(pagamentoExistente.created_at as string).getTime();
-    if (idadeMs > IDADE_MAXIMA_RESERVA_SEM_URL_MS) {
-      const { error: erroLimpeza } = await supabase
-        .from("payments")
-        .delete()
-        .eq("id", pagamentoExistente.id);
-      if (erroLimpeza) {
-        console.error("[pagamento] falha ao limpar reserva morta", erroLimpeza);
-        return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
-      }
-      // Segue o fluxo normal abaixo: cai na reserva de uma cobrança nova,
-      // já confirmado pelo gateway que esta aqui não virou pagamento.
-    } else {
-      return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
-    }
+    const estagnada = idadeMs > IDADE_PARA_SUGERIR_CONTATO_MS;
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true, estagnada);
   }
 
   // A escolha do provider também pode falhar (por exemplo, se uma variável
@@ -447,7 +448,8 @@ export default async function PagamentoPage({
 function telaDePagamentoIndisponivel(
   numeroPedido: string,
   accessToken: string,
-  cobrancaEmAnalise = false
+  cobrancaEmAnalise = false,
+  estagnada = false
 ) {
   return (
     <main
@@ -459,9 +461,15 @@ function telaDePagamentoIndisponivel(
         {cobrancaEmAnalise ? "Estamos preparando seu pagamento" : "Não conseguimos abrir o pagamento"}
       </h1>
       <p className="text-ink/70">
-        {cobrancaEmAnalise
-          ? "Seu pedido está guardado. Aguarde um instante e tente novamente; para sua segurança, não criamos uma segunda cobrança."
-          : "Seu pedido está guardado com o número acima e nada foi cobrado. Tente novamente em instantes — se continuar, guarde este número."}
+        {estagnada
+          ? // Passou da janela em que "tentar de novo" tem chance real de
+            // resolver sozinho (ver IDADE_PARA_SUGERIR_CONTATO_MS) — dizer só
+            // "aguarde" aqui seria falsa esperança. A liberação de verdade
+            // depende de alguém da equipe conferir no painel do gateway.
+            "Seu pedido está guardado com o número acima. Isto está demorando mais que o esperado — fale com o suporte informando o número do pedido para liberarmos o pagamento."
+          : cobrancaEmAnalise
+            ? "Seu pedido está guardado. Aguarde um instante e tente novamente; para sua segurança, não criamos uma segunda cobrança."
+            : "Seu pedido está guardado com o número acima e nada foi cobrado. Tente novamente em instantes — se continuar, guarde este número."}
       </p>
       <a
         href={`/checkout/pagamento?pedido=${accessToken}`}
