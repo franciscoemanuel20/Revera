@@ -134,6 +134,30 @@ export interface ConfirmedPayment {
   raw: unknown;
 }
 
+/**
+ * Falha em que NÃO SABEMOS se o gateway recebeu e processou o pedido de
+ * criação da cobrança — a chamada de rede em si falhou (timeout, conexão
+ * recusada, DNS, requisição abortada), antes de qualquer resposta HTTP
+ * chegar. Diferente de um erro de validação nosso ou de uma resposta HTTP
+ * recebida do gateway (onde ele respondeu e disse "não" — aí sabemos com
+ * certeza que nenhuma cobrança nasceu), aqui a requisição pode ter chegado
+ * e criado um link real do outro lado mesmo sem nós termos visto a
+ * resposta.
+ *
+ * A distinção importa em src/app/checkout/pagamento/page.tsx (achado do
+ * Codex, 08/09/2026): apagar a reserva de `payments` depois de um erro
+ * AMBÍGUO e deixar tentar de novo permite que a próxima tentativa crie um
+ * SEGUNDO link válido no gateway para o mesmo pedido — nem a InfinitePay
+ * nem a Stripe recebem chave de idempotência nesta integração. Um erro
+ * CERTO não tem esse risco, e continua apagando a reserva normalmente.
+ */
+export class AmbiguousChargeError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "AmbiguousChargeError";
+  }
+}
+
 export interface PaymentProvider {
   /** nome curto do provider, gravado em payments.provider */
   readonly name: string;

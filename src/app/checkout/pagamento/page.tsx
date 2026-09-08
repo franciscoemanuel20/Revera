@@ -3,8 +3,26 @@ import { notFound, redirect } from "next/navigation";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
 import { providerParaMoeda } from "@/lib/payments";
+import { AmbiguousChargeError } from "@/lib/payments/provider";
+import { confirmarPagamento } from "@/lib/payments/confirmar";
 import { urlDoWebhook } from "@/lib/payments/webhook-url";
 import { baseUrl } from "@/lib/config/urls";
+
+/**
+ * Quanto tempo uma reserva `pending` sem URL em lugar nenhum (nem
+ * `payments.raw_response`, nem `payment_events`) pode ficar parada antes de
+ * ser considerada morta (achado do Codex, 08/09/2026: sem isto, a tela
+ * "Estamos preparando" nunca sai do ar para aquele pedido).
+ *
+ * A sequência inteira que preenche a URL — chamar o gateway, e até 3
+ * tentativas de gravar o resultado — acontece dentro de UMA requisição
+ * síncrona e não leva perto disto. Depois desta janela, o que sobrou não é
+ * "ainda em andamento", é lixo de uma tentativa que morreu no meio (queda de
+ * conexão, função encerrada, banco fora do ar nas duas escritas). Curto o
+ * bastante para não deixar o cliente esperando muito; longo o bastante para
+ * nunca cortar uma tentativa legítima ainda em voo.
+ */
+const IDADE_MAXIMA_RESERVA_SEM_URL_MS = 90_000;
 
 export const metadata: Metadata = {
   title: "Pagamento",
@@ -82,7 +100,7 @@ export default async function PagamentoPage({
    */
   const { data: pagamentoExistente } = await supabase
     .from("payments")
-    .select("id, provider, raw_response, amount_cents, status")
+    .select("id, provider, raw_response, amount_cents, status, created_at")
     .eq("order_id", pedido.id)
     .eq("status", "pending")
     .eq("amount_cents", pedido.total_cents)
@@ -125,6 +143,51 @@ export default async function PagamentoPage({
         console.error("[pagamento] falha ao restaurar link guardado", erroRestaurar);
       }
       redirect(urlRecuperada);
+    }
+
+    /**
+     * NEM `raw_response` NEM `payment_events` têm a URL — o pior caso do
+     * achado "payment link recovery can permanently strand a checkout"
+     * (Codex, 08/09/2026): as duas escritas que deveriam guardá-la
+     * falharam. Sem o que vem a seguir, toda visita futura cairia sempre
+     * aqui, para sempre.
+     *
+     * Antes de decidir o que fazer, perguntamos ao PRÓPRIO GATEWAY se o
+     * pedido já foi pago — reaproveitando confirmarPagamento(), a MESMA
+     * função que o webhook e a página de obrigado usam (porta 1 e porta 2).
+     * Não é uma terceira implementação da regra de confirmação; é a mesma,
+     * chamada de um terceiro lugar. Se o gateway disser que sim, o cliente
+     * vai direto para o comprovante — a reserva sem URL deixa de importar,
+     * porque o que interessava (o pagamento) já aconteceu.
+     */
+    const confirmacao = await confirmarPagamento(pedido.id);
+    if (confirmacao.estado === "pago") {
+      redirect(`/pedido/${accessToken}`);
+    }
+
+    /**
+     * Não pago (ou gateway indisponível agora). A reserva pode ainda estar
+     * em voo — a mesma requisição que a criou pode não ter terminado — ou
+     * pode ser exatamente o caso que este bloco existe para tratar. A
+     * janela de segurança evita as duas coisas ruins ao mesmo tempo:
+     * mostrar "aguarde" para sempre (o achado de cima) OU liberar uma
+     * reserva que uma OUTRA requisição, rodando agora, ainda está
+     * preenchendo (o que a migration 13 existe para impedir).
+     */
+    const idadeMs = Date.now() - new Date(pagamentoExistente.created_at as string).getTime();
+    if (idadeMs > IDADE_MAXIMA_RESERVA_SEM_URL_MS) {
+      const { error: erroLimpeza } = await supabase
+        .from("payments")
+        .delete()
+        .eq("id", pagamentoExistente.id);
+      if (erroLimpeza) {
+        console.error("[pagamento] falha ao limpar reserva morta", erroLimpeza);
+        return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
+      }
+      // Segue o fluxo normal abaixo: cai na reserva de uma cobrança nova,
+      // já confirmado pelo gateway que esta aqui não virou pagamento.
+    } else {
+      return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
     }
   }
 
@@ -295,41 +358,84 @@ export default async function PagamentoPage({
 
     if (erroPersistir) {
       // Supabase devolve vários erros como valor de retorno, sem lançar. Se
-      // todos os retries falharem, preservamos a URL em uma tabela separada.
-      // A próxima visita restaura `payments` a partir daqui, sem criar outra
-      // cobrança no gateway para o mesmo pedido.
-      const { error: erroBackup } = await supabase.from("payment_events").insert({
-        payment_id: reserva!.id,
-        provider: provider.name,
-        provider_event_id: `checkout-link:${reserva!.id}`,
-        event_type: "checkout_link_recovery",
-        payload: {
-          checkout_url: checkoutUrl,
-          provider_payment_id: resultado.providerPaymentId,
-        },
-      });
+      // todos os retries do UPDATE falharem, preservamos a URL numa tabela
+      // separada — com o MESMO retry da linha acima (3 tentativas, mesmo
+      // backoff): a falha que derrubou o update é, mais das vezes, a mesma
+      // instabilidade que derrubaria esta escrita também, e ela é a ÚLTIMA
+      // chance de recuperar o link (achado do Codex, 08/09/2026: se ela
+      // falhar também, a próxima visita não encontra a URL em lugar
+      // nenhum). A próxima visita restaura `payments` a partir daqui, sem
+      // criar outra cobrança no gateway para o mesmo pedido.
+      let erroBackup: unknown = null;
+      for (let tentativa = 0; tentativa < 3; tentativa++) {
+        const { error } = await supabase.from("payment_events").insert({
+          payment_id: reserva!.id,
+          provider: provider.name,
+          provider_event_id: `checkout-link:${reserva!.id}`,
+          event_type: "checkout_link_recovery",
+          payload: {
+            checkout_url: checkoutUrl,
+            provider_payment_id: resultado.providerPaymentId,
+          },
+        });
+        if (!error) {
+          erroBackup = null;
+          break;
+        }
+        erroBackup = error;
+        console.error("[pagamento] falha ao guardar recuperação do link", error);
+        await new Promise((r) => setTimeout(r, 200));
+      }
       if (erroBackup) {
-        console.error("[pagamento] falha ao guardar recuperação do link", erroBackup);
+        // As duas escritas falharam. Não é mais um problema desta visita —
+        // ela já vai receber `checkoutUrl` no redirect abaixo. É a PRÓXIMA
+        // visita que ficaria sem para onde ir; o reconhecimento e o
+        // autorreparo dessa situação vivem no bloco de `pagamentoExistente`
+        // no topo desta função (idade da reserva + confirmarPagamento).
+        console.error(
+          "[pagamento] link do gateway não guardado em lugar nenhum — próxima visita depende da reconciliação",
+          { pedido: pedido.id, reserva: reserva!.id }
+        );
       }
     }
   } catch (erro) {
     console.error("[pagamento] falha ao criar cobrança", erro);
     /**
-     * DESFAZ A RESERVA. Sem isto, uma falha do gateway deixaria uma linha
-     * `pending` sem URL — e o índice único da migration 13 faria TODA
-     * tentativa seguinte perder a corrida contra um vencedor que não existe.
-     * O cliente ficaria preso num pedido que nunca mais abre pagamento.
+     * DESFAZ A RESERVA — mas só quando é seguro. Sem isto (no caso geral),
+     * uma falha deixaria uma linha `pending` sem URL — e o índice único da
+     * migration 13 faria TODA tentativa seguinte perder a corrida contra um
+     * vencedor que não existe. O cliente ficaria preso num pedido que nunca
+     * mais abre pagamento.
+     *
+     * Mas apagar às cegas tem um risco oposto (achado do Codex, 08/09/2026):
+     * `createCharge()` pode ter lançado por uma falha de REDE (timeout,
+     * conexão perdida) DEPOIS de o gateway já ter aceitado a requisição e
+     * criado um link de verdade do outro lado — nós é que não vimos a
+     * resposta. Apagar a reserva nesse caso e deixar tentar de novo criaria
+     * um SEGUNDO link válido para o mesmo pedido, o duplo-link que esta
+     * função inteira existe para evitar.
+     *
+     * `AmbiguousChargeError` é como os adapters (InfinitePay, Stripe) MARCAM
+     * essa incerteza — ver o comentário na classe, em
+     * src/lib/payments/provider.ts. Só apagamos quando: (a) o gateway já
+     * criou o link e nós JÁ TEMOS a URL (`cobrancaCriada`, tratado antes,
+     * nunca cai aqui), ou (b) o erro é CERTO — validação nossa antes de
+     * qualquer chamada, ou uma resposta HTTP que o gateway de fato mandou
+     * dizendo "não". Erro ambíguo mantém a reserva — a mesma reconciliação
+     * por idade + confirmarPagamento() do bloco de `pagamentoExistente` no
+     * topo desta função é quem eventualmente libera essa reserva, depois de
+     * perguntar ao gateway se ela virou pagamento mesmo.
      */
-    // Depois que o gateway devolveu a URL, apagar a reserva produziria um
-    // link real sem rastreio e permitiria outra cobrança. Mantemos a linha
-    // pendente mesmo se a persistência da URL falhar; assim nunca criamos uma
-    // segunda cobrança para o mesmo pedido.
-    if (reserva?.id && !cobrancaCriada) {
+    const ambiguo = erro instanceof AmbiguousChargeError;
+    if (reserva?.id && !cobrancaCriada && !ambiguo) {
       await supabase.from("payments").delete().eq("id", reserva.id);
     }
     // Não deixa o cliente numa tela morta: mostra o que aconteceu e como
-    // retomar, sem expor detalhe técnico do gateway.
-    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, cobrancaCriada);
+    // retomar, sem expor detalhe técnico do gateway. Erro ambíguo usa o
+    // mesmo aviso de "estamos preparando" da reserva preservada — é
+    // exatamente o que aconteceu: preservamos por segurança, não por já
+    // termos o link.
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, cobrancaCriada || ambiguo);
   }
 
   // Fora do try: `redirect` funciona lançando uma exceção especial do Next,

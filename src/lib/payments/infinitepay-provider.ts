@@ -6,6 +6,7 @@ import type {
   PaymentResult,
   WebhookHint,
 } from "./provider";
+import { AmbiguousChargeError } from "./provider";
 
 /**
  * Adapter da InfinitePay — Checkout hospedado (link de pagamento).
@@ -71,12 +72,24 @@ export class InfinitePayProvider implements PaymentProvider {
       })),
     };
 
-    const res = await fetch(`${BASE}/links`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
+    // Fora do try de validação acima: só a CHAMADA DE REDE em si é ambígua.
+    // Ver AmbiguousChargeError — se o fetch falhar aqui, não sabemos se a
+    // InfinitePay chegou a criar o link do outro lado.
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/links`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      });
+    } catch (erro) {
+      console.error("[infinitepay] falha de rede ao criar link", erro);
+      throw new AmbiguousChargeError(
+        "Falha de rede ao criar o link de pagamento.",
+        { cause: erro }
+      );
+    }
 
     if (!res.ok) {
       // Não vaza corpo de erro do gateway para o cliente — só para o log.

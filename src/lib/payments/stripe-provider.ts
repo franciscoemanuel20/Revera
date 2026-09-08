@@ -9,6 +9,7 @@ import type {
   PaymentResult,
   WebhookHint,
 } from "./provider";
+import { AmbiguousChargeError } from "./provider";
 
 /**
  * Adapter da Stripe — Checkout Session hospedada, para pedidos
@@ -255,7 +256,19 @@ export class StripeProvider implements PaymentProvider {
       })),
     }).join("&");
 
-    const res = await this.chamar("/v1/checkout/sessions", { method: "POST", body });
+    // Só a CHAMADA DE REDE em si é ambígua (ver AmbiguousChargeError) — se
+    // ela falhar, não sabemos se a Stripe chegou a criar a sessão do outro
+    // lado.
+    let res: Response;
+    try {
+      res = await this.chamar("/v1/checkout/sessions", { method: "POST", body });
+    } catch (erro) {
+      console.error("[stripe] falha de rede ao criar sessão", erro);
+      throw new AmbiguousChargeError(
+        "Falha de rede ao criar a sessão de checkout.",
+        { cause: erro }
+      );
+    }
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
       // Log sem corpo de requisição (não tem segredo, mas tem dado de
