@@ -38,6 +38,7 @@ import { formatarBRL } from "@/lib/format/money";
 import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
 import { nomeDoPais } from "@/lib/internacional/paises";
 import { WHATSAPP_REVERA } from "@/lib/config/whatsapp";
+import { baseUrl } from "@/lib/config/urls";
 import { enviarWhatsApp, modoWhatsApp } from "./whatsapp";
 
 /**
@@ -226,7 +227,7 @@ export function montarAvisoVendaPaga(v: ResumoVenda): { texto: string; parametro
     v.moeda === "BRL" ? formatarBRL(v.totalCents) : formatarValorNaMoeda(v.totalCents, v.moeda);
   const lugar =
     v.pais === "BR" ? `${v.cidade}/${v.uf}` : `${v.cidade}, ${nomeDoPais(v.pais)}`;
-  const link = `${(process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "")}/admin/pedidos/${v.orderId}`;
+  const link = `${baseUrl()}/admin/pedidos/${v.orderId}`;
 
   const parametros = [
     v.numero,

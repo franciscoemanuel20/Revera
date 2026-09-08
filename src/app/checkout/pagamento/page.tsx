@@ -82,7 +82,7 @@ export default async function PagamentoPage({
    */
   const { data: pagamentoExistente } = await supabase
     .from("payments")
-    .select("id, raw_response, amount_cents, status")
+    .select("id, provider, raw_response, amount_cents, status")
     .eq("order_id", pedido.id)
     .eq("status", "pending")
     .eq("amount_cents", pedido.total_cents)
@@ -94,6 +94,51 @@ export default async function PagamentoPage({
     ?.checkout_url;
   if (urlGuardada) {
     redirect(urlGuardada);
+  }
+
+  // Se a criação no gateway respondeu, mas a atualização de `payments`
+  // falhou, a URL fica em um evento de recuperação. Reconstituímos a linha
+  // antes de tentar criar qualquer cobrança nova; o mesmo pedido nunca ganha
+  // um segundo link.
+  if (pagamentoExistente) {
+    const { data: recuperacao } = await supabase
+      .from("payment_events")
+      .select("payload")
+      .eq("provider", pagamentoExistente.provider)
+      .eq("provider_event_id", `checkout-link:${pagamentoExistente.id}`)
+      .maybeSingle();
+    const dadosRecuperados = recuperacao?.payload as {
+      checkout_url?: string;
+      provider_payment_id?: string | null;
+    } | null;
+    const urlRecuperada = dadosRecuperados?.checkout_url;
+
+    if (urlRecuperada) {
+      const { error: erroRestaurar } = await supabase
+        .from("payments")
+        .update({
+          provider_payment_id: dadosRecuperados?.provider_payment_id ?? null,
+          raw_response: { checkout_url: urlRecuperada },
+        })
+        .eq("id", pagamentoExistente.id);
+      if (erroRestaurar) {
+        console.error("[pagamento] falha ao restaurar link guardado", erroRestaurar);
+      }
+      redirect(urlRecuperada);
+    }
+  }
+
+  // A escolha do provider também pode falhar (por exemplo, se uma variável
+  // essencial foi removida). Fazemos isso antes de reservar qualquer coisa e
+  // tratamos a falha como erro de checkout, nunca como tela de erro do Next.
+  // Um link já criado acima ainda pode ser aberto mesmo numa falha temporária
+  // de configuração, pois não cria cobrança nova.
+  let provider;
+  try {
+    provider = providerParaMoeda(pedido.currency as string);
+  } catch (erro) {
+    console.error("[pagamento] pagamento não configurado", erro);
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
   }
 
   /**
@@ -127,7 +172,7 @@ export default async function PagamentoPage({
     .from("payments")
     .insert({
       order_id: pedido.id,
-      provider: providerParaMoeda(pedido.currency as string).name,
+      provider: provider.name,
       status: "pending",
       amount_cents: pedido.total_cents,
       // Sem `checkout_url` ainda: ele só existe depois do gateway responder.
@@ -158,9 +203,16 @@ export default async function PagamentoPage({
       // Fora de try/catch: `redirect` funciona lançando exceção do Next.
       if (url) redirect(url);
     }
+
+    // Não existe autorização para criar outra cobrança. A linha pendente sem
+    // URL pode ser uma criação ainda em curso ou uma resposta do gateway que
+    // chegou quando o banco estava indisponível. Nos dois casos criar outro
+    // link pode cobrar duas vezes; preservar a reserva é a opção segura.
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
   }
 
   let checkoutUrl: string;
+  let cobrancaCriada = false;
   try {
     /**
      * DENTRO do try de propósito (P0-2, 27/08/2026).
@@ -174,8 +226,6 @@ export default async function PagamentoPage({
      * Falhar fechado é sobre não aprovar pagamento indevido; não é desculpa
      * para tratar mal quem estava comprando.
      */
-    // Roteado pela MOEDA do pedido: BRL → nacional, resto → Stripe.
-    const provider = providerParaMoeda(pedido.currency as string);
     const resultado = await provider.createCharge({
       orderId: pedido.id,
       orderNumber: pedido.order_number,
@@ -217,19 +267,51 @@ export default async function PagamentoPage({
       ],
     });
     checkoutUrl = resultado.checkoutUrl;
+    cobrancaCriada = true;
 
     // ATUALIZA a reserva feita acima, em vez de inserir de novo — a linha já
     // existe desde antes de o gateway ser chamado. A URL do checkout fica
     // GUARDADA: é o que permite reaproveitar o link a cada recarga. A
     // InfinitePay nem sempre devolve `slug`, então `provider_payment_id` pode
     // vir nulo, e a URL é a única referência confiável para este link.
-    await supabase
-      .from("payments")
-      .update({
-        provider_payment_id: resultado.providerPaymentId,
-        raw_response: { checkout_url: resultado.checkoutUrl },
-      })
-      .eq("id", reserva!.id);
+    let erroPersistir: unknown = null;
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
+      const { error } = await supabase
+        .from("payments")
+        .update({
+          provider_payment_id: resultado.providerPaymentId,
+          raw_response: { checkout_url: resultado.checkoutUrl },
+        })
+        .eq("id", reserva!.id);
+
+      if (!error) {
+        erroPersistir = null;
+        break;
+      }
+      erroPersistir = error;
+      console.error("[pagamento] falha ao guardar link do gateway", error);
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    if (erroPersistir) {
+      // Supabase devolve vários erros como valor de retorno, sem lançar. Se
+      // todos os retries falharem, preservamos a URL em uma tabela separada.
+      // A próxima visita restaura `payments` a partir daqui, sem criar outra
+      // cobrança no gateway para o mesmo pedido.
+      const { error: erroBackup } = await supabase.from("payment_events").insert({
+        payment_id: reserva!.id,
+        provider: provider.name,
+        provider_event_id: `checkout-link:${reserva!.id}`,
+        event_type: "checkout_link_recovery",
+        payload: {
+          checkout_url: checkoutUrl,
+          provider_payment_id: resultado.providerPaymentId,
+        },
+      });
+      if (erroBackup) {
+        console.error("[pagamento] falha ao guardar recuperação do link", erroBackup);
+      }
+    }
   } catch (erro) {
     console.error("[pagamento] falha ao criar cobrança", erro);
     /**
@@ -238,36 +320,49 @@ export default async function PagamentoPage({
      * tentativa seguinte perder a corrida contra um vencedor que não existe.
      * O cliente ficaria preso num pedido que nunca mais abre pagamento.
      */
-    if (reserva?.id) {
+    // Depois que o gateway devolveu a URL, apagar a reserva produziria um
+    // link real sem rastreio e permitiria outra cobrança. Mantemos a linha
+    // pendente mesmo se a persistência da URL falhar; assim nunca criamos uma
+    // segunda cobrança para o mesmo pedido.
+    if (reserva?.id && !cobrancaCriada) {
       await supabase.from("payments").delete().eq("id", reserva.id);
     }
     // Não deixa o cliente numa tela morta: mostra o que aconteceu e como
     // retomar, sem expor detalhe técnico do gateway.
-    return (
-      <main
-        className="mx-auto flex w-full max-w-lg flex-col items-center gap-4 px-6 pb-16 text-center"
-        style={{ paddingTop: HEADER_HEIGHT_PX + 64 }}
-      >
-        <span className="eyebrow-ink">Pedido {pedido.order_number}</span>
-        <h1 className="font-display text-3xl text-ink">
-          Não conseguimos abrir o pagamento
-        </h1>
-        <p className="text-ink/70">
-          Seu pedido está guardado com o número acima e nada foi cobrado.
-          Tente novamente em instantes — se continuar, guarde este número.
-        </p>
-        <a
-          href={`/checkout/pagamento?pedido=${accessToken}`}
-          className="text-ink underline decoration-gold decoration-2 underline-offset-4"
-        >
-          Tentar novamente
-        </a>
-      </main>
-    );
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, cobrancaCriada);
   }
 
   // Fora do try: `redirect` funciona lançando uma exceção especial do Next,
   // que um catch por perto engoliria — e o cliente veria a tela de erro
   // depois de a cobrança ter sido criada com sucesso.
   redirect(checkoutUrl);
+}
+
+function telaDePagamentoIndisponivel(
+  numeroPedido: string,
+  accessToken: string,
+  cobrancaEmAnalise = false
+) {
+  return (
+    <main
+      className="mx-auto flex w-full max-w-lg flex-col items-center gap-4 px-6 pb-16 text-center"
+      style={{ paddingTop: HEADER_HEIGHT_PX + 64 }}
+    >
+      <span className="eyebrow-ink">Pedido {numeroPedido}</span>
+      <h1 className="font-display text-3xl text-ink">
+        {cobrancaEmAnalise ? "Estamos preparando seu pagamento" : "Não conseguimos abrir o pagamento"}
+      </h1>
+      <p className="text-ink/70">
+        {cobrancaEmAnalise
+          ? "Seu pedido está guardado. Aguarde um instante e tente novamente; para sua segurança, não criamos uma segunda cobrança."
+          : "Seu pedido está guardado com o número acima e nada foi cobrado. Tente novamente em instantes — se continuar, guarde este número."}
+      </p>
+      <a
+        href={`/checkout/pagamento?pedido=${accessToken}`}
+        className="text-ink underline decoration-gold decoration-2 underline-offset-4"
+      >
+        Tentar novamente
+      </a>
+    </main>
+  );
 }

@@ -113,4 +113,25 @@ describe("confirmarPagamento sem PAYMENT_PROVIDER", () => {
     expect(r.estado).toBe("indisponivel");
     expect(fake.tabela("orders")[0]?.status).toBe("new");
   });
+
+  it("webhook atrasado não reabre um pedido estornado", async () => {
+    fake = new FakeSupabase({
+      orders: [
+        {
+          id: PEDIDO,
+          status: "new",
+          payment_status: "refunded",
+          total_cents: 160000,
+          currency: "BRL",
+        },
+      ],
+    });
+    ambienteSemPagamento();
+    const { confirmarPagamento } = await import("@/lib/payments/confirmar");
+
+    const r = await confirmarPagamento(PEDIDO);
+
+    expect(r).toEqual({ estado: "nao_pago", motivo: "pedido estornado" });
+    expect(fake.tabela("payments")).toHaveLength(0);
+  });
 });

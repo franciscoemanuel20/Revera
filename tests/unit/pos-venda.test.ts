@@ -134,6 +134,18 @@ describe("aviso de venda no WhatsApp", () => {
     expect(texto).not.toContain("/pedido/");
   });
 
+  it("limpa espaço invisível na URL do painel enviada à equipe", () => {
+    const original = process.env.NEXT_PUBLIC_SITE_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = "\thttps://www.reveraprotesecapilar.com";
+
+    const { texto } = montarAvisoVendaPaga(venda);
+
+    expect(texto).toContain(`https://www.reveraprotesecapilar.com/admin/pedidos/${venda.orderId}`);
+    expect(texto).not.toContain("\thttps");
+    if (original === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+    else process.env.NEXT_PUBLIC_SITE_URL = original;
+  });
+
   it("mais de um produto vira resumo, não lista", () => {
     const { texto } = montarAvisoVendaPaga({ ...venda, produto: "Micropele 0,06mm +1" });
     expect(texto).toContain("+1");

@@ -71,7 +71,7 @@ export async function confirmarPagamento(
    */
   const { data: pedido, error: erroPedido } = await supabase
     .from("orders")
-    .select("id, status, total_cents, currency")
+    .select("id, status, payment_status, total_cents, currency")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -81,6 +81,12 @@ export async function confirmarPagamento(
   }
   if (!pedido) {
     return { estado: "nao_pago", motivo: "pedido inexistente" };
+  }
+
+  // `status` é uma projeção legada e volta a "new" depois de um estorno.
+  // Um aviso atrasado jamais pode registrar outra aprovação nesse caso.
+  if (pedido.payment_status === "refunded") {
+    return { estado: "nao_pago", motivo: "pedido estornado" };
   }
 
   /**
