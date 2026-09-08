@@ -317,13 +317,41 @@ export async function liberarReservaTravadaAction(
     };
   }
 
-  const { error: erroDelete } = await supabase
+  /**
+   * O DELETE PRECISA CONFERIR O MESMO ESTADO QUE ACABAMOS DE LER, NA MESMA
+   * INSTRUÇÃO (achado do Codex, 08/09/2026 — a mesma classe de corrida já
+   * fechada em pagamento/page.tsx com `.select().maybeSingle()`).
+   *
+   * As duas leituras acima (raw_response, payment_events) e o DELETE são
+   * chamadas SEPARADAS: nada impede o checkout do cliente terminar de
+   * gravar `checkout_url` no intervalo entre a leitura e o apagar. Um
+   * `.eq("status", "pending")` sozinho não pegaria isso — o status continua
+   * "pending" mesmo depois de a URL ser gravada.
+   *
+   * `.eq("raw_response", {})` faz o próprio DELETE reconferir a condição:
+   * a reserva "travada" nasce com `raw_response: {}` (pagamento/page.tsx) e
+   * SÓ deixa de ser `{}` quando alguém grava a URL nela — nunca noutro
+   * formato enquanto ainda não tem URL. Se o checkout gravou a URL entre a
+   * leitura e aqui, esta condição não bate mais, a linha não é encontrada,
+   * e o `.select().maybeSingle()` abaixo devolve null em vez de mentir que
+   * apagou algo.
+   */
+  const { data: apagado, error: erroDelete } = await supabase
     .from("payments")
     .delete()
     .eq("id", paymentId)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .eq("raw_response", {})
+    .select("id")
+    .maybeSingle();
   if (erroDelete) {
     return { error: "Não foi possível liberar agora. Tente de novo em instantes." };
+  }
+  if (!apagado) {
+    return {
+      error:
+        "Esta reserva mudou no instante da liberação — pode ter acabado de ganhar um link de checkout. Recarregue a página e confira antes de tentar de novo.",
+    };
   }
 
   await registrarAuditoria(supabase, {
