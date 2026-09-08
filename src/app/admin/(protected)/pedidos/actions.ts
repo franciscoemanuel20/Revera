@@ -262,6 +262,34 @@ export async function liberarReservaTravadaAction(
     };
   }
 
+  /**
+   * A MESMA trava, para o outro lugar onde a URL pode estar guardada
+   * (achado do Codex, 08/09/2026): quando o UPDATE em `payments` falha, o
+   * checkout guarda a URL em `payment_events` (evento
+   * `checkout_link_recovery`) — ver src/app/checkout/pagamento/page.tsx.
+   * Essa reserva NÃO está travada: a próxima visita do cliente restaura o
+   * link sozinha. Apagar aqui destruiria essa recuperação de verdade —
+   * `payment_events.payment_id` tem `on delete cascade`, então o evento
+   * some junto com a reserva.
+   *
+   * Reconferido no SERVIDOR, não só na tela: a lista que decide se mostra o
+   * botão (admin/pedidos/[id]/page.tsx) pode estar desatualizada no
+   * instante do clique — um evento pode ter chegado entre o carregamento da
+   * página e o clique no botão.
+   */
+  const { data: recuperacao } = await supabase
+    .from("payment_events")
+    .select("id")
+    .eq("payment_id", paymentId)
+    .eq("event_type", "checkout_link_recovery")
+    .maybeSingle();
+  if (recuperacao) {
+    return {
+      error:
+        "Esta reserva tem um link recuperável registrado — não é uma reserva travada. Recarregue a página.",
+    };
+  }
+
   const { error: erroDelete } = await supabase
     .from("payments")
     .delete()

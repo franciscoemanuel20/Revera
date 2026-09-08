@@ -102,6 +102,34 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
     raw_response: { checkout_url?: string } | null;
   }>;
 
+  /**
+   * "Travada" (candidata ao botão de liberar) só pode ser uma reserva sem
+   * URL em NENHUM dos dois lugares onde ela pode estar guardada — achado do
+   * Codex, 08/09/2026, sobre a versão anterior desta tela: ela só olhava
+   * `raw_response`, mas o caminho de recuperação de
+   * src/app/checkout/pagamento/page.tsx guarda a URL em `payment_events`
+   * (evento `checkout_link_recovery`) quando o UPDATE em `payments` falha.
+   * Rotular essa reserva como "travada" e deixar liberar apagaria (a coluna
+   * `payment_events.payment_id` tem `on delete cascade`) o único registro do
+   * link que ainda é válido e recuperável pelo caminho normal — a próxima
+   * visita do cliente restauraria sozinha.
+   */
+  const idsPendentesSemUrl = pagamentos
+    .filter((p) => p.status === "pending" && !p.raw_response?.checkout_url)
+    .map((p) => p.id);
+
+  const idsComRecuperacao = new Set<string>();
+  if (idsPendentesSemUrl.length > 0) {
+    const { data: eventosRecuperacao } = await supabase
+      .from("payment_events")
+      .select("payment_id")
+      .in("payment_id", idsPendentesSemUrl)
+      .eq("event_type", "checkout_link_recovery");
+    for (const evento of eventosRecuperacao ?? []) {
+      if (evento.payment_id) idsComRecuperacao.add(evento.payment_id as string);
+    }
+  }
+
   const envio = (pedido.shipments ?? [])[0] as
     | {
         provider: string;
@@ -306,12 +334,15 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
           ) : (
             <ul className="flex flex-col gap-2">
               {pagamentos.map((p) => {
-                // "Travada": pendente e sem URL de checkout guardada em
-                // lugar nenhum — o estado exato que
-                // liberarReservaTravadaAction existe para destravar. Uma
-                // reserva pendente COM url é um link válido em uso; não
-                // ganha botão nenhum.
-                const travada = p.status === "pending" && !p.raw_response?.checkout_url;
+                // "Travada": pendente, sem URL em `raw_response` E sem
+                // evento de recuperação em `payment_events` — o estado
+                // exato que liberarReservaTravadaAction existe para
+                // destravar. Uma reserva com qualquer um dos dois é um link
+                // ainda recuperável pelo caminho normal; não ganha botão.
+                const travada =
+                  p.status === "pending" &&
+                  !p.raw_response?.checkout_url &&
+                  !idsComRecuperacao.has(p.id);
                 return (
                   <li
                     key={p.id}
