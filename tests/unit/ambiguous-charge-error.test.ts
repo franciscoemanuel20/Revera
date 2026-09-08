@@ -119,6 +119,22 @@ describe("StripeProvider.createCharge — ambiguidade de rede", () => {
     );
   });
 
+  it("STRIPE_SECRET_KEY ausente é erro de CONFIG, não ambíguo — nenhuma chamada chegou a sair", async () => {
+    // Achado do Codex, 08/09/2026: apiBase()/requireSecretKey() validam
+    // env, nunca tocam rede — um erro aqui precisa ser Error comum, não
+    // AmbiguousChargeError, senão a reserva fica presa mesmo sem nenhuma
+    // tentativa real de cobrança. Stub vazio (não unstub) para não depender
+    // de a variável real estar ausente no ambiente de teste.
+    vi.stubEnv("STRIPE_SECRET_KEY", "");
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const p = new StripeProvider();
+    const erro = await p.createCharge({ ...CHARGE_BASE, currency: "USD" }).catch((e: unknown) => e);
+    expect(erro).not.toBeInstanceOf(AmbiguousChargeError);
+    expect(erro).toBeInstanceOf(Error);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("resposta 2xx cujo corpo falha ao ser lido também lança AmbiguousChargeError", async () => {
     vi.stubGlobal(
       "fetch",

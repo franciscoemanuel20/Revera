@@ -256,6 +256,24 @@ export class StripeProvider implements PaymentProvider {
       })),
     }).join("&");
 
+    /**
+     * VALIDA A CONFIG ANTES DO TRY DE REDE (achado do Codex, 08/09/2026).
+     *
+     * `apiBase()` e `requireSecretKey()` só leem e validam variável de
+     * ambiente — nenhuma das duas faz chamada de rede. Elas também são
+     * chamadas DENTRO de `this.chamar()`, mais abaixo; chamá-las aqui de
+     * novo primeiro é redundante de propósito: se `STRIPE_SECRET_KEY`
+     * estiver ausente/errada ou `STRIPE_API_BASE` for inválida em produção,
+     * o erro precisa estourar AQUI, fora do catch de ambiguidade — nunca
+     * foi feita nenhuma tentativa de falar com a Stripe, então é um erro
+     * CERTO. Sem isto, esse erro de configuração caía no mesmo catch da
+     * falha de rede logo abaixo e virava `AmbiguousChargeError` — a reserva
+     * ficava presa (exigindo liberação manual) mesmo sem nenhuma cobrança
+     * real ter sido tentada.
+     */
+    apiBase();
+    requireSecretKey();
+
     // Só a CHAMADA DE REDE em si é ambígua (ver AmbiguousChargeError) — se
     // ela falhar, não sabemos se a Stripe chegou a criar a sessão do outro
     // lado.
