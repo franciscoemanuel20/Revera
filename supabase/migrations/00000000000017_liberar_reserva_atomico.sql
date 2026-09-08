@@ -33,7 +33,16 @@ as $$
   where payments.id = p_payment_id
     and payments.order_id = p_order_id
     and payments.status = 'pending'
-    and payments.raw_response = '{}'::jsonb
+    -- "Sem URL" é o MESMO teste que o código usa em toda parte
+    -- (`raw_response?.checkout_url` falsy) — não "é exatamente `{}`". Um
+    -- `raw_response` NULL (linha antiga, ou criada por fora do fluxo normal
+    -- de checkout) é tão "sem URL" quanto `{}`, e a versão anterior desta
+    -- função só aceitava `{}` — uma reserva com NULL aparecia na tela como
+    -- liberável e nunca conseguia ser liberada de verdade (achado do Codex,
+    -- 08/09/2026). `->>'checkout_url' is null` cobre os dois formatos (e
+    -- qualquer outro que também careça da chave) sem depender da forma
+    -- exata do objeto inteiro.
+    and (payments.raw_response is null or payments.raw_response ->> 'checkout_url' is null)
     and not exists (
       select 1 from payment_events
       where payment_events.payment_id = payments.id
@@ -43,7 +52,7 @@ as $$
 $$;
 
 comment on function liberar_reserva_travada(uuid, uuid) is
-  'Apaga uma reserva de payments SÓ SE, no mesmo instante, ela continuar pendente, sem URL guardada e sem evento de recuperação — check e delete atômicos, sem intervalo de corrida. Ver liberarReservaTravadaAction.';
+  'Apaga uma reserva de payments SÓ SE, no mesmo instante, ela continuar pendente, sem checkout_url (NULL ou ausente da chave) e sem evento de recuperação — check e delete atômicos, sem intervalo de corrida. Ver liberarReservaTravadaAction.';
 
 -- Redundante com o default de privilégios do projeto Supabase (que já libera
 -- execução de função nova para authenticated/anon/service_role), mas
