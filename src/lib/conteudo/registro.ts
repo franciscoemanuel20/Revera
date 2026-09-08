@@ -60,6 +60,8 @@ export interface TextoRegistrado {
    * "texto"     — caixa de uma linha.
    * "paragrafo" — área grande.
    * "imagem"    — miniatura da foto + botão de trocar (02/09/2026).
+   * "video"     — prévia do vídeo + botão de trocar (08/09/2026, mesmo
+   *               desenho da imagem; ver ARQUIVO em VideosManager.tsx).
    *
    * A IMAGEM ENTROU AQUI, E NÃO NUMA TABELA PRÓPRIA, DE PROPÓSITO
    * ------------------------------------------------------------------
@@ -77,7 +79,7 @@ export interface TextoRegistrado {
    * código ("/media/base/base-com-fios.jpg") e o valor editado é a URL da
    * foto enviada pelo painel. A página não precisa saber a diferença.
    */
-  tipo: "texto" | "paragrafo" | "imagem";
+  tipo: "texto" | "paragrafo" | "imagem" | "video";
   /**
    * O que está no site hoje, e que volta quando a edição é apagada.
    *
@@ -155,6 +157,16 @@ export function chavesDaPagina(pagina: string): ChaveDeTexto[] {
   return (Object.keys(REGISTRO) as ChaveDeTexto[]).filter(
     (c) => REGISTRO[c].pagina === pagina
   );
+}
+
+/**
+ * Todas as chaves do tipo "video", em QUALQUER página — para a aba
+ * /admin/videos (08/09/2026), que mostra vídeo separado de foto e de texto
+ * independente de onde cada um mora, em vez de agrupar por página como
+ * /admin/textos faz.
+ */
+export function chavesDeVideo(): ChaveDeTexto[] {
+  return (Object.keys(REGISTRO) as ChaveDeTexto[]).filter((c) => REGISTRO[c].tipo === "video");
 }
 
 /** As páginas que têm algum texto editável, na ordem de declaração. */

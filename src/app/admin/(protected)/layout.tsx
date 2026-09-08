@@ -143,6 +143,10 @@ const NAV_ITEMS = [
   // trocar a foto de uma página: ela lista arquivos, não lugares do site.
   // Nome de menu que leva ao lugar errado custa mais caro que nome feio.
   { href: "/admin/textos", label: "Textos e fotos" },
+  // 08/09/2026 — pedido do Francisco de ter os vídeos separados das fotos,
+  // "para facilitar a organização". Por baixo usa a mesma site_texts de
+  // "Textos e fotos" (ver videos/page.tsx), só a tela é própria.
+  { href: "/admin/videos", label: "Vídeos" },
   { href: "/admin/midia", label: "Biblioteca" },
   { href: "/admin/configuracoes", label: "Configurações" },
 ] as const;

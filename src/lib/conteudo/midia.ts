@@ -48,6 +48,17 @@ export const BUCKET_MIDIA = "site-media";
  */
 export const TAMANHO_MAXIMO_BYTES = 5 * 1024 * 1024; // 5 MB
 
+/**
+ * O teto do VÍDEO enviado pelo painel (08/09/2026, /admin/videos).
+ *
+ * Mesma conta de `TAMANHO_MAXIMO_BYTES`, escalada para o novo limite de
+ * Server Action (next.config.js: 30mb, era 6mb) e do bucket `site-media`
+ * (migration 00000000000016_video_editavel.sql: 30 MB, era 10 MB) — a
+ * mesma proporção de ~83% que já protegia o upload de foto do cabeçalho de
+ * multipart, para o vídeo não ser recusado pelo Next antes de chegar aqui.
+ */
+export const TAMANHO_MAXIMO_BYTES_VIDEO = 25 * 1024 * 1024; // 25 MB
+
 // Mesma lista de allowed_mime_types da migration 12.
 export const EXTENSAO_POR_TIPO: Record<string, string> = {
   "image/jpeg": "jpg",

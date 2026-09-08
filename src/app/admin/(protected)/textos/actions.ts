@@ -80,11 +80,14 @@ export async function salvarTexto(chave: string, valor: string): Promise<Resulta
     return restaurarOriginal(chave);
   }
 
-  // Chave de foto nunca aceita um endereço qualquer. Ver o comentário de
-  // motivoDeImagemInvalida: um `src` ruim não deixa a foto quebrada, deixa
-  // a PÁGINA quebrada — e a promessa da migration 12 é justamente que
-  // nenhuma edição feita no painel consiga derrubar uma página.
-  if (REGISTRO[parsedChave.data].tipo === "imagem") {
+  // Chave de foto ou de vídeo nunca aceita um endereço qualquer. Ver o
+  // comentário de motivoDeImagemInvalida: um `src` ruim não deixa a mídia
+  // quebrada, deixa a PÁGINA quebrada — e a promessa da migration 12 é
+  // justamente que nenhuma edição feita no painel consiga derrubar uma
+  // página. A função valida só a FORMA do endereço (bucket certo, host
+  // certo), não o tipo de arquivo, então serve para os dois sem duplicar.
+  const tipoRegistro = REGISTRO[parsedChave.data].tipo;
+  if (tipoRegistro === "imagem" || tipoRegistro === "video") {
     const motivo = motivoDeImagemInvalida(valorLimpo);
     if (motivo) return { error: motivo };
   }

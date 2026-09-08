@@ -52,9 +52,15 @@ const nextConfig = {
   // ferramenta "Ajude-me a descobrir minha cor" recebe em /cores#ajuda
   // (até 5MB, ver src/app/cores/actions.ts). 6mb dá folga para o overhead
   // do multipart/form-data em cima do arquivo em si, 26/08/2026.
+  //
+  // Subiu para 30mb em 08/09/2026 (migration 00000000000016_video_editavel.sql)
+  // para caber vídeo de verdade no painel de /admin/videos — o teto de 6mb
+  // existia só para a foto de /cores#ajuda e nunca tinha vídeo em mente.
+  // Ver src/lib/conteudo/midia.ts (TAMANHO_MAXIMO_BYTES_VIDEO) para a conta
+  // de quanto sobra de margem para o cabeçalho do multipart.
   experimental: {
     serverActions: {
-      bodySizeLimit: "6mb",
+      bodySizeLimit: "30mb",
     },
   },
 };

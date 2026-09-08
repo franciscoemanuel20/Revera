@@ -83,13 +83,28 @@ export const HOME = {
     pagina: "home",
     rotulo: "Capa do vídeo (a imagem parada, antes de dar play)",
     tipo: "imagem",
-    // O VÍDEO EM SI NÃO ENTROU NO REGISTRO, só a capa dele — e a diferença
-    // não é preguiça. Uma capa trocada por engano é uma imagem estranha
-    // por alguns segundos; um .mp4 trocado por engano é a peça central da
-    // home no ar errada, num arquivo de dezenas de MB que nem passa pelo
-    // limite de 6 MB das Server Actions (next.config.js). Trocar o vídeo
-    // continua sendo deploy, de propósito.
     padrao: "/media/hero/produto-close-1.jpeg",
+  },
+
+  "home.naturalidade.videoArquivo": {
+    pagina: "home",
+    rotulo: "Vídeo da seção Naturalidade",
+    tipo: "video",
+    // Até 08/09/2026 o vídeo não entrava aqui, só a capa acima — o
+    // comentário antigo (ver git blame) recusava por um motivo real: um
+    // .mp4 de dezenas de MB nem passava pelo limite de 6 MB das Server
+    // Actions, e um vídeo trocado errado é a peça central da home no ar
+    // quebrada, não uma foto estranha por alguns segundos.
+    //
+    // A migration 00000000000016_video_editavel.sql ataca a causa em vez
+    // de continuar contornando o sintoma: o limite de Server Action subiu
+    // para 30 MB (next.config.js) e o bucket site-media junto (era 10 MB).
+    // O vídeo passa a caber, mas com a MESMA validação de endereço
+    // (motivoDeImagemInvalida) que já protege a foto — e com tela própria
+    // em /admin/videos, separada de Textos e fotos de propósito (pedido do
+    // Francisco de ter vídeo num lugar só dele). Por baixo é a MESMA
+    // site_texts e a MESMA regra "sem linha = volta ao vídeo do código".
+    padrao: "/media/hero/implantacao.mp4",
   },
 
   "home.micropele.eyebrow": {

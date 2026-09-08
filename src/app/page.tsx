@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { BotaoWhatsAppHome } from "@/components/BotaoWhatsAppHome";
 import { Reveal } from "@/components/ui/Reveal";
 import { SocialProof } from "@/components/ui/SocialProof";
 import { TrustBar } from "@/components/ui/TrustBar";
@@ -162,7 +163,7 @@ export default async function HomePage() {
               poster={t("home.naturalidade.videoCapa")}
               className="w-full rounded-md bg-ink"
             >
-              <source src="/media/hero/implantacao.mp4" type="video/mp4" />
+              <source src={t("home.naturalidade.videoArquivo")} type="video/mp4" />
             </video>
           </div>
           <p className="max-w-2xl text-balance text-paper/75">
@@ -229,6 +230,8 @@ export default async function HomePage() {
           </div>
         </section>
       ) : null}
+
+      <BotaoWhatsAppHome />
     </main>
   );
 }

@@ -54,19 +54,28 @@ export default async function TextosPage() {
   const grupos: GrupoTextos[] = paginasComTexto().map((pagina) => ({
     pagina,
     titulo: nomeDaPagina(pagina),
-    itens: chavesDaPagina(pagina).map((chave) => {
-      const registro = REGISTRO[chave];
-      const edicao = edicoes.get(chave);
-      return {
-        chave,
-        rotulo: registro.rotulo,
-        tipo: registro.tipo,
-        padrao: registro.padrao,
-        valorAtual: edicao?.valor ?? registro.padrao,
-        editado: Boolean(edicao),
-        updatedBy: edicao?.updatedBy ?? null,
-      };
-    }),
+    // tipo "video" fica de fora daqui de propósito (08/09/2026): tem tela
+    // própria em /admin/videos (pedido do Francisco de separar vídeo de
+    // foto/texto). Sem este filtro, TextosManager precisaria saber desenhar
+    // um tipo que não é dele.
+    itens: chavesDaPagina(pagina)
+      .filter((chave) => REGISTRO[chave].tipo !== "video")
+      .map((chave) => {
+        const registro = REGISTRO[chave];
+        const edicao = edicoes.get(chave);
+        return {
+          chave,
+          rotulo: registro.rotulo,
+          // O filtro acima já tirou "video" da lista; o cast só existe
+          // porque o TypeScript não enxerga esse filtro de uma chamada
+          // para a outra.
+          tipo: registro.tipo as "texto" | "paragrafo" | "imagem",
+          padrao: registro.padrao,
+          valorAtual: edicao?.valor ?? registro.padrao,
+          editado: Boolean(edicao),
+          updatedBy: edicao?.updatedBy ?? null,
+        };
+      }),
   }));
 
   return (
