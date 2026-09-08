@@ -405,112 +405,70 @@ export default async function PagamentoPage({
 
     if (linhaSumiu) {
       /**
-       * A reserva sumiu no meio da criação da cobrança. `payment_events.
-       * payment_id` referencia `payments(id)` — não dá para gravar ali uma
-       * recuperação para uma reserva que não existe mais (violaria a chave
-       * estrangeira, e é por isso que este caso não pode cair no bloco de
-       * backup abaixo). A saída segura é RECRIAR o registro do zero, já com
-       * a URL que JÁ TEMOS em mãos: a próxima visita encontra exatamente
-       * este link pela guarda de `pagamentoExistente` no topo desta função,
-       * em vez de criar um segundo.
+       * A reserva sumiu no meio da criação da cobrança (liberação manual
+       * concorrente, ou outra requisição que já limpou isto). RECRIA o
+       * registro do zero, já com a URL que JÁ TEMOS em mãos — ou, se essa
+       * recriação também perder a corrida, usa a URL de quem venceu. Ver
+       * `recriarReservaOuUsarVencedor` para o raciocínio completo.
        */
-      const { error: erroRecriar } = await supabase.from("payments").insert({
-        order_id: pedido.id,
-        provider: provider.name,
-        status: "pending",
-        amount_cents: pedido.total_cents,
-        provider_payment_id: resultado.providerPaymentId,
-        raw_response: { checkout_url: checkoutUrl },
-      });
-      if (erroRecriar) {
-        /**
-         * A recriação também falhou — o caso mais provável (achado do
-         * Codex, 08/09/2026) é OUTRA requisição concorrente (um "tentar
-         * novamente" que o cliente disparou sem saber que este pedido
-         * ainda estava em voo) já ter inserido uma reserva nova para este
-         * pedido enquanto esta tentava se recriar; o índice único da
-         * migration 13 recusa a segunda.
-         *
-         * `redirect(checkoutUrl)` NESTE ponto seria devolver um link que
-         * não existe em NENHUM registro nosso — órfão, mas ainda válido e
-         * pagável no gateway, ao lado do link da reserva que venceu: dois
-         * links vivos para o mesmo pedido, o duplo-link que este arquivo
-         * inteiro existe para evitar.
-         *
-         * Em vez disso, o MESMO desenho de "perdemos a corrida" (mais
-         * acima nesta função, quando a reserva original é criada): olhamos
-         * para a reserva que existe agora e usamos a URL DELA — nunca a
-         * nossa, que ficou órfã.
-         */
-        console.error(
-          "[pagamento] reserva sumiu e a recriação perdeu para outra reserva — buscando o link do vencedor",
-          erroRecriar,
-          { pedido: pedido.id, reservaAntiga: reserva!.id }
-        );
-
-        let urlDoVencedor: string | undefined;
-        for (let tentativa = 0; tentativa < 5; tentativa++) {
-          const { data: atual } = await supabase
-            .from("payments")
-            .select("raw_response")
-            .eq("order_id", pedido.id)
-            .eq("status", "pending")
-            .maybeSingle();
-          urlDoVencedor = (atual?.raw_response as { checkout_url?: string } | null)?.checkout_url;
-          if (urlDoVencedor) break;
-          await new Promise((r) => setTimeout(r, 300));
-        }
-
-        if (urlDoVencedor) {
-          checkoutUrl = urlDoVencedor;
-        } else {
-          // Nem o vencedor guardou a URL dentro do prazo de espera. Não
-          // redireciona para NENHUM link nosso (órfão) nem inventa um —
-          // mostra a tela segura, a mesma de quando perdemos a corrida
-          // original.
-          return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
-        }
-      }
+      const resultadoRecriacao = await recriarReservaOuUsarVencedor(
+        supabase,
+        pedido,
+        provider.name,
+        resultado,
+        reserva!.id,
+        accessToken
+      );
+      if (!resultadoRecriacao.ok) return resultadoRecriacao.tela;
+      checkoutUrl = resultadoRecriacao.checkoutUrl;
     } else if (erroPersistir) {
-      // Supabase devolve vários erros como valor de retorno, sem lançar. Se
-      // todos os retries do UPDATE falharem, preservamos a URL numa tabela
-      // separada — com o MESMO retry da linha acima (3 tentativas, mesmo
-      // backoff): a falha que derrubou o update é, mais das vezes, a mesma
-      // instabilidade que derrubaria esta escrita também, e ela é a ÚLTIMA
-      // chance de recuperar o link (achado do Codex, 08/09/2026: se ela
-      // falhar também, a próxima visita não encontra a URL em lugar
-      // nenhum). A próxima visita restaura `payments` a partir daqui, sem
-      // criar outra cobrança no gateway para o mesmo pedido.
-      let erroBackup: unknown = null;
-      for (let tentativa = 0; tentativa < 3; tentativa++) {
-        const { error } = await supabase.from("payment_events").insert({
-          payment_id: reserva!.id,
-          provider: provider.name,
-          provider_event_id: `checkout-link:${reserva!.id}`,
-          event_type: "checkout_link_recovery",
-          payload: {
-            checkout_url: checkoutUrl,
-            provider_payment_id: resultado.providerPaymentId,
-          },
-        });
-        if (!error) {
-          erroBackup = null;
-          break;
+      /**
+       * Todos os retries do UPDATE direto falharam. `gravar_recuperacao_link`
+       * (migration 17) é a ÚLTIMA chance de recuperar o link — e faz isso sob
+       * o MESMO advisory lock de `liberar_reserva_travada` (achado do Codex,
+       * 08/09/2026: um INSERT simples em `payment_events` não disputa lock
+       * nenhum com o DELETE do admin, então "checar antes de apagar" nunca
+       * fecha essa corrida de verdade — só um lock consultivo comum às duas
+       * pontas fecha). Se o admin já apagou a reserva, a função enxerga isso
+       * (sob o MESMO lock) e devolve `gravado: false` em vez de tentar um
+       * INSERT que violaria a chave estrangeira.
+       */
+      const { data: recuperacaoResultado, error: erroRpcRecuperacao } = await supabase.rpc(
+        "gravar_recuperacao_link",
+        {
+          p_payment_id: reserva!.id,
+          p_provider: provider.name,
+          p_checkout_url: checkoutUrl,
+          p_provider_payment_id: resultado.providerPaymentId,
         }
-        erroBackup = error;
-        console.error("[pagamento] falha ao guardar recuperação do link", error);
-        await new Promise((r) => setTimeout(r, 200));
-      }
-      if (erroBackup) {
-        // As duas escritas falharam. Não é mais um problema desta visita —
-        // ela já vai receber `checkoutUrl` no redirect abaixo. É a PRÓXIMA
-        // visita que ficaria sem para onde ir; o reconhecimento e o
-        // autorreparo dessa situação vivem no bloco de `pagamentoExistente`
-        // no topo desta função (idade da reserva + confirmarPagamento).
+      );
+
+      if (erroRpcRecuperacao) {
+        // Não é mais um problema desta visita — ela já vai receber
+        // `checkoutUrl` no redirect abaixo. É a PRÓXIMA visita que ficaria
+        // sem para onde ir; o reconhecimento e o autorreparo dessa situação
+        // vivem no bloco de `pagamentoExistente` no topo desta função.
+        const funcaoAusente = erroRpcRecuperacao.message?.toLowerCase().includes("function");
         console.error(
-          "[pagamento] link do gateway não guardado em lugar nenhum — próxima visita depende da reconciliação",
+          funcaoAusente
+            ? "[pagamento] gravar_recuperacao_link ainda não existe no banco (falta aplicar supabase/aplicar/LIBERAR-RESERVA-ATOMICO.sql) — link não guardado em lugar nenhum"
+            : "[pagamento] falha ao chamar gravar_recuperacao_link — link não guardado em lugar nenhum",
+          erroRpcRecuperacao,
           { pedido: pedido.id, reserva: reserva!.id }
         );
+      } else if (recuperacaoResultado?.[0]?.gravado !== true) {
+        // A reserva sumiu no instante em que o lock foi concedido — mesma
+        // saída segura do caso `linhaSumiu` acima.
+        const resultadoRecriacao = await recriarReservaOuUsarVencedor(
+          supabase,
+          pedido,
+          provider.name,
+          resultado,
+          reserva!.id,
+          accessToken
+        );
+        if (!resultadoRecriacao.ok) return resultadoRecriacao.tela;
+        checkoutUrl = resultadoRecriacao.checkoutUrl;
       }
     }
   } catch (erro) {
@@ -557,6 +515,70 @@ export default async function PagamentoPage({
   // que um catch por perto engoliria — e o cliente veria a tela de erro
   // depois de a cobrança ter sido criada com sucesso.
   redirect(checkoutUrl);
+}
+
+/**
+ * A reserva original sumiu no meio da criação da cobrança — row deletada por
+ * outra requisição (um "tentar novamente" concorrente, ou uma liberação
+ * manual no admin). RECRIA o registro do zero, já com a URL que temos em
+ * mãos. Se essa recriação TAMBÉM perder a corrida contra uma reserva
+ * concorrente (índice único da migration 13), busca a URL de quem está
+ * valendo agora e usa ELA — nunca a nossa, que ficaria órfã: um link real,
+ * pagável, sem registro em lugar nenhum, ao lado do link do vencedor (o
+ * duplo-link que este arquivo inteiro existe para evitar).
+ *
+ * Devolve `{ ok: true, checkoutUrl }` quando há uma URL segura para usar
+ * (nossa recriação, ou a do vencedor), ou `{ ok: false, tela }` quando nem
+ * isso — a tela segura, nunca um link que não está em nenhum registro.
+ */
+async function recriarReservaOuUsarVencedor(
+  supabase: ReturnType<typeof createAdminClient>,
+  pedido: { id: string; order_number: string; total_cents: number },
+  providerName: string,
+  resultado: { providerPaymentId: string | null; checkoutUrl: string },
+  reservaAntigaId: string,
+  accessToken: string
+): Promise<
+  { ok: true; checkoutUrl: string } | { ok: false; tela: ReturnType<typeof telaDePagamentoIndisponivel> }
+> {
+  const { error: erroRecriar } = await supabase.from("payments").insert({
+    order_id: pedido.id,
+    provider: providerName,
+    status: "pending",
+    amount_cents: pedido.total_cents,
+    provider_payment_id: resultado.providerPaymentId,
+    raw_response: { checkout_url: resultado.checkoutUrl },
+  });
+  if (!erroRecriar) {
+    return { ok: true, checkoutUrl: resultado.checkoutUrl };
+  }
+
+  console.error(
+    "[pagamento] reserva sumiu e a recriação perdeu para outra reserva — buscando o link do vencedor",
+    erroRecriar,
+    { pedido: pedido.id, reservaAntiga: reservaAntigaId }
+  );
+
+  let urlDoVencedor: string | undefined;
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    const { data: atual } = await supabase
+      .from("payments")
+      .select("raw_response")
+      .eq("order_id", pedido.id)
+      .eq("status", "pending")
+      .maybeSingle();
+    urlDoVencedor = (atual?.raw_response as { checkout_url?: string } | null)?.checkout_url;
+    if (urlDoVencedor) break;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  if (urlDoVencedor) {
+    return { ok: true, checkoutUrl: urlDoVencedor };
+  }
+  // Nem o vencedor guardou a URL dentro do prazo de espera. Não redireciona
+  // para NENHUM link nosso (órfão) nem inventa um — mostra a tela segura, a
+  // mesma de quando perdemos a corrida original.
+  return { ok: false, tela: telaDePagamentoIndisponivel(pedido.order_number, accessToken, true) };
 }
 
 function telaDePagamentoIndisponivel(
