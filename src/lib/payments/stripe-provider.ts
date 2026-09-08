@@ -303,12 +303,30 @@ export class StripeProvider implements PaymentProvider {
       );
     }
     if (!res.ok) {
-      // `res.ok` false é uma resposta HTTP que CHEGOU — a Stripe recebeu a
-      // requisição e respondeu que não criou nada. Erro CERTO, não ambíguo.
       const detalhe = await res.text().catch(() => "");
       // Log sem corpo de requisição (não tem segredo, mas tem dado de
       // cliente) e sem chave — só status e resposta de erro da Stripe.
       console.error("[stripe] falha ao criar sessão", res.status, detalhe.slice(0, 500));
+
+      /**
+       * 4xx x 5xx NÃO SÃO O MESMO TIPO DE CERTEZA (achado do Codex,
+       * 08/09/2026). Um 4xx é a Stripe dizendo "recusei a SUA requisição" —
+       * parâmetro inválido, chave errada, moeda não suportada — nada disso
+       * cria uma sessão, e o erro é CERTO.
+       *
+       * Um 5xx é ela dizendo "algo quebrou NO MEU lado processando isto". Um
+       * erro interno pode muito bem acontecer DEPOIS de a sessão já ter
+       * sido criada no banco deles (a resposta de sucesso é que não saiu) —
+       * a mesma ambiguidade de uma falha de rede, só que com um número de
+       * status em vez de uma exceção. Tratar 5xx como certo e apagar a
+       * reserva reabriria o duplo-link que AmbiguousChargeError existe
+       * para evitar.
+       */
+      if (res.status >= 500) {
+        throw new AmbiguousChargeError(
+          `A Stripe respondeu ${res.status} ao criar a sessão — pode ter criado mesmo assim.`
+        );
+      }
       throw new Error("Não foi possível iniciar o pagamento.");
     }
 

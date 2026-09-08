@@ -100,11 +100,29 @@ export class InfinitePayProvider implements PaymentProvider {
     }
 
     if (!res.ok) {
-      // `res.ok` false é uma resposta HTTP que CHEGOU — o gateway recebeu a
-      // requisição e respondeu que não criou nada. Erro CERTO, não ambíguo.
       // Não vaza corpo de erro do gateway para o cliente — só para o log.
       const detalhe = await res.text().catch(() => "");
       console.error("[infinitepay] falha ao criar link", res.status, detalhe);
+
+      /**
+       * 4xx x 5xx NÃO SÃO O MESMO TIPO DE CERTEZA (achado do Codex,
+       * 08/09/2026). Um 4xx é a InfinitePay dizendo "recusei a SUA
+       * requisição" — validação, autenticação, corpo mal formado — nada
+       * disso cria um link, e o erro é CERTO.
+       *
+       * Um 5xx é ela dizendo "algo quebrou NO MEU lado processando isto".
+       * Um erro interno pode muito bem acontecer DEPOIS de o link já ter
+       * sido criado no banco deles (a resposta de sucesso é que não saiu) —
+       * a mesma ambiguidade de uma falha de rede, só que com um número de
+       * status em vez de uma exceção. Tratar 5xx como certo e apagar a
+       * reserva reabriria o duplo-link que AmbiguousChargeError existe
+       * para evitar.
+       */
+      if (res.status >= 500) {
+        throw new AmbiguousChargeError(
+          `A InfinitePay respondeu ${res.status} ao criar o link — pode ter criado mesmo assim.`
+        );
+      }
       throw new Error("Não foi possível iniciar o pagamento.");
     }
 

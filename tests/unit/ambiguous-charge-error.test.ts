@@ -91,12 +91,20 @@ describe("InfinitePayProvider.createCharge — ambiguidade de rede", () => {
     );
   });
 
-  it("resposta HTTP de rejeição (gateway respondeu) NÃO é ambígua — Error comum", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("erro", { status: 500 })));
+  it("4xx (gateway recusou a NOSSA requisição) NÃO é ambíguo — Error comum", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("erro", { status: 400 })));
     const p = new InfinitePayProvider();
     const erro = await p.createCharge({ ...CHARGE_BASE, currency: "BRL" }).catch((e: unknown) => e);
     expect(erro).not.toBeInstanceOf(AmbiguousChargeError);
     expect(erro).toBeInstanceOf(Error);
+  });
+
+  it("5xx (erro NO LADO do gateway) É ambíguo — pode ter criado mesmo assim", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("erro", { status: 500 })));
+    const p = new InfinitePayProvider();
+    await expect(p.createCharge({ ...CHARGE_BASE, currency: "BRL" })).rejects.toBeInstanceOf(
+      AmbiguousChargeError
+    );
   });
 });
 
@@ -163,11 +171,19 @@ describe("StripeProvider.createCharge — ambiguidade de rede", () => {
     );
   });
 
-  it("resposta HTTP de rejeição (gateway respondeu) NÃO é ambígua — Error comum", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("erro", { status: 500 })));
+  it("4xx (gateway recusou a NOSSA requisição) NÃO é ambíguo — Error comum", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("erro", { status: 400 })));
     const p = new StripeProvider();
     const erro = await p.createCharge({ ...CHARGE_BASE, currency: "USD" }).catch((e: unknown) => e);
     expect(erro).not.toBeInstanceOf(AmbiguousChargeError);
     expect(erro).toBeInstanceOf(Error);
+  });
+
+  it("5xx (erro NO LADO do gateway) É ambíguo — pode ter criado mesmo assim", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("erro", { status: 500 })));
+    const p = new StripeProvider();
+    await expect(p.createCharge({ ...CHARGE_BASE, currency: "USD" })).rejects.toBeInstanceOf(
+      AmbiguousChargeError
+    );
   });
 });
