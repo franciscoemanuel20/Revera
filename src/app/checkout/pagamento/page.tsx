@@ -423,11 +423,53 @@ export default async function PagamentoPage({
         raw_response: { checkout_url: checkoutUrl },
       });
       if (erroRecriar) {
+        /**
+         * A recriação também falhou — o caso mais provável (achado do
+         * Codex, 08/09/2026) é OUTRA requisição concorrente (um "tentar
+         * novamente" que o cliente disparou sem saber que este pedido
+         * ainda estava em voo) já ter inserido uma reserva nova para este
+         * pedido enquanto esta tentava se recriar; o índice único da
+         * migration 13 recusa a segunda.
+         *
+         * `redirect(checkoutUrl)` NESTE ponto seria devolver um link que
+         * não existe em NENHUM registro nosso — órfão, mas ainda válido e
+         * pagável no gateway, ao lado do link da reserva que venceu: dois
+         * links vivos para o mesmo pedido, o duplo-link que este arquivo
+         * inteiro existe para evitar.
+         *
+         * Em vez disso, o MESMO desenho de "perdemos a corrida" (mais
+         * acima nesta função, quando a reserva original é criada): olhamos
+         * para a reserva que existe agora e usamos a URL DELA — nunca a
+         * nossa, que ficou órfã.
+         */
         console.error(
-          "[pagamento] reserva sumiu no meio da criação e não foi possível recriar — link ficará sem registro",
+          "[pagamento] reserva sumiu e a recriação perdeu para outra reserva — buscando o link do vencedor",
           erroRecriar,
           { pedido: pedido.id, reservaAntiga: reserva!.id }
         );
+
+        let urlDoVencedor: string | undefined;
+        for (let tentativa = 0; tentativa < 5; tentativa++) {
+          const { data: atual } = await supabase
+            .from("payments")
+            .select("raw_response")
+            .eq("order_id", pedido.id)
+            .eq("status", "pending")
+            .maybeSingle();
+          urlDoVencedor = (atual?.raw_response as { checkout_url?: string } | null)?.checkout_url;
+          if (urlDoVencedor) break;
+          await new Promise((r) => setTimeout(r, 300));
+        }
+
+        if (urlDoVencedor) {
+          checkoutUrl = urlDoVencedor;
+        } else {
+          // Nem o vencedor guardou a URL dentro do prazo de espera. Não
+          // redireciona para NENHUM link nosso (órfão) nem inventa um —
+          // mostra a tela segura, a mesma de quando perdemos a corrida
+          // original.
+          return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
+        }
       }
     } else if (erroPersistir) {
       // Supabase devolve vários erros como valor de retorno, sem lançar. Se
