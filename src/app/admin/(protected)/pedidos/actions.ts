@@ -318,39 +318,40 @@ export async function liberarReservaTravadaAction(
   }
 
   /**
-   * O DELETE PRECISA CONFERIR O MESMO ESTADO QUE ACABAMOS DE LER, NA MESMA
-   * INSTRUÇÃO (achado do Codex, 08/09/2026 — a mesma classe de corrida já
-   * fechada em pagamento/page.tsx com `.select().maybeSingle()`).
+   * A LIBERAÇÃO DE VERDADE ACONTECE AQUI, numa função SQL atômica (migration
+   * 17 — `liberar_reserva_travada`), não nas leituras acima.
    *
-   * As duas leituras acima (raw_response, payment_events) e o DELETE são
-   * chamadas SEPARADAS: nada impede o checkout do cliente terminar de
-   * gravar `checkout_url` no intervalo entre a leitura e o apagar. Um
-   * `.eq("status", "pending")` sozinho não pegaria isso — o status continua
-   * "pending" mesmo depois de a URL ser gravada.
+   * As checagens de cima (raw_response, payment_events) só existem para dar
+   * um erro específico e cedo. Elas podem estar desatualizadas no instante
+   * do clique — o checkout do cliente pode gravar a URL, OU o evento de
+   * recuperação, exatamente entre essas leituras e agora (achados do Codex,
+   * 08/09/2026, em rodadas sucessivas: primeiro a corrida contra
+   * `raw_response` sozinha, depois a mesma corrida contra `payment_events`,
+   * que um `DELETE ... WHERE` da API simples do PostgREST não consegue
+   * fechar — "não existe linha na OUTRA tabela" não é algo que dê para
+   * condicionar num filtro de coluna).
    *
-   * `.eq("raw_response", {})` faz o próprio DELETE reconferir a condição:
-   * a reserva "travada" nasce com `raw_response: {}` (pagamento/page.tsx) e
-   * SÓ deixa de ser `{}` quando alguém grava a URL nela — nunca noutro
-   * formato enquanto ainda não tem URL. Se o checkout gravou a URL entre a
-   * leitura e aqui, esta condição não bate mais, a linha não é encontrada,
-   * e o `.select().maybeSingle()` abaixo devolve null em vez de mentir que
-   * apagou algo.
+   * A função reconfere as MESMAS três condições (pendente, raw_response
+   * ainda vazio, sem evento de recuperação) e apaga — tudo dentro de UM SÓ
+   * statement no Postgres. Não existe intervalo entre checar e apagar
+   * porque não existem dois passos.
    */
-  const { data: apagado, error: erroDelete } = await supabase
-    .from("payments")
-    .delete()
-    .eq("id", paymentId)
-    .eq("status", "pending")
-    .eq("raw_response", {})
-    .select("id")
-    .maybeSingle();
-  if (erroDelete) {
-    return { error: "Não foi possível liberar agora. Tente de novo em instantes." };
+  const { data: liberados, error: erroLiberar } = await supabase.rpc("liberar_reserva_travada", {
+    p_payment_id: paymentId,
+    p_order_id: orderId,
+  });
+  if (erroLiberar) {
+    const funcaoAusente = erroLiberar.message?.toLowerCase().includes("function");
+    return {
+      error: funcaoAusente
+        ? "A liberação de reservas ainda não foi configurada no banco (falta aplicar supabase/aplicar/LIBERAR-RESERVA-ATOMICO.sql). Avise quem cuida do site."
+        : "Não foi possível liberar agora. Tente de novo em instantes.",
+    };
   }
-  if (!apagado) {
+  if (!liberados || liberados.length === 0) {
     return {
       error:
-        "Esta reserva mudou no instante da liberação — pode ter acabado de ganhar um link de checkout. Recarregue a página e confira antes de tentar de novo.",
+        "Esta reserva mudou no instante da liberação — pode ter acabado de ganhar um link ou uma recuperação registrada. Recarregue a página e confira antes de tentar de novo.",
     };
   }
 
