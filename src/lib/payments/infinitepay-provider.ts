@@ -6,7 +6,7 @@ import type {
   PaymentResult,
   WebhookHint,
 } from "./provider";
-import { AmbiguousChargeError } from "./provider";
+import { AmbiguousChargeError, TIMEOUT_CRIACAO_MS } from "./provider";
 
 /**
  * Adapter da InfinitePay — Checkout hospedado (link de pagamento).
@@ -75,6 +75,13 @@ export class InfinitePayProvider implements PaymentProvider {
     // Fora do try de validação acima: só a CHAMADA DE REDE em si é ambígua.
     // Ver AmbiguousChargeError — se o fetch falhar aqui, não sabemos se a
     // InfinitePay chegou a criar o link do outro lado.
+    //
+    // `signal` com teto (achado do Codex, 08/09/2026): sem ele, uma resposta
+    // realmente lenta deixava esta chamada pendurada por tempo indefinido —
+    // e a idade mínima antes de liberar uma reserva travada
+    // (liberarReservaTravadaAction) virava suposição, não garantia. Abortar
+    // aqui é só mais um jeito de "não sabemos se criou" — cai no mesmo
+    // AmbiguousChargeError de qualquer outra falha de rede.
     let res: Response;
     try {
       res = await fetch(`${BASE}/links`, {
@@ -82,6 +89,7 @@ export class InfinitePayProvider implements PaymentProvider {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         cache: "no-store",
+        signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
       });
     } catch (erro) {
       console.error("[infinitepay] falha de rede ao criar link", erro);

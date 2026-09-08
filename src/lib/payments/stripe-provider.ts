@@ -9,7 +9,7 @@ import type {
   PaymentResult,
   WebhookHint,
 } from "./provider";
-import { AmbiguousChargeError } from "./provider";
+import { AmbiguousChargeError, TIMEOUT_CRIACAO_MS } from "./provider";
 
 /**
  * Adapter da Stripe — Checkout Session hospedada, para pedidos
@@ -192,7 +192,10 @@ export function localeDaStripe(locale: string | undefined): string {
 export class StripeProvider implements PaymentProvider {
   readonly name = "stripe";
 
-  private async chamar(caminho: string, init?: { method?: string; body?: string }) {
+  private async chamar(
+    caminho: string,
+    init?: { method?: string; body?: string; signal?: AbortSignal }
+  ) {
     const res = await fetch(`${apiBase()}${caminho}`, {
       method: init?.method ?? "GET",
       headers: {
@@ -201,6 +204,7 @@ export class StripeProvider implements PaymentProvider {
       },
       body: init?.body,
       cache: "no-store",
+      signal: init?.signal,
     });
     return res;
   }
@@ -277,9 +281,20 @@ export class StripeProvider implements PaymentProvider {
     // Só a CHAMADA DE REDE em si é ambígua (ver AmbiguousChargeError) — se
     // ela falhar, não sabemos se a Stripe chegou a criar a sessão do outro
     // lado.
+    //
+    // `signal` com teto (achado do Codex, 08/09/2026): sem ele, uma resposta
+    // realmente lenta deixava esta chamada pendurada por tempo indefinido —
+    // e a idade mínima antes de liberar uma reserva travada
+    // (liberarReservaTravadaAction) virava suposição, não garantia. Abortar
+    // aqui é só mais um jeito de "não sabemos se criou" — cai no mesmo
+    // AmbiguousChargeError de qualquer outra falha de rede.
     let res: Response;
     try {
-      res = await this.chamar("/v1/checkout/sessions", { method: "POST", body });
+      res = await this.chamar("/v1/checkout/sessions", {
+        method: "POST",
+        body,
+        signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
+      });
     } catch (erro) {
       console.error("[stripe] falha de rede ao criar sessão", erro);
       throw new AmbiguousChargeError(

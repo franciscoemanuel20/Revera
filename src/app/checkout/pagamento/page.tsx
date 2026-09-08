@@ -20,6 +20,15 @@ import { baseUrl } from "@/lib/config/urls";
  * para o mesmo pedido, porque "não pago" não é o mesmo que "não existe link
  * em aberto". A liberação de verdade é sempre uma decisão humana — ver o
  * comentário grande mais abaixo, onde este valor é usado.
+ *
+ * POR QUE ESTA JANELA VIROU GARANTIA, E NÃO SÓ SUPOSIÇÃO (achado seguinte do
+ * Codex, mesmo dia): antes de existir `TIMEOUT_CRIACAO_MS`
+ * (src/lib/payments/provider.ts), uma chamada ao gateway sem teto de tempo
+ * podia, em teoria, continuar em andamento além de qualquer prazo — "90 s
+ * se passaram" não provava que a tentativa original tinha morrido. Com o
+ * teto (20 s) mais a margem dos retries de persistência (poucos segundos),
+ * a sequência inteira de criação SEMPRE termina bem antes desta janela — o
+ * que era suposição virou garantia.
  */
 const IDADE_PARA_SUGERIR_CONTATO_MS = 90_000;
 

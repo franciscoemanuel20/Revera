@@ -158,6 +158,25 @@ export class AmbiguousChargeError extends Error {
   }
 }
 
+/**
+ * Teto de tempo para a chamada de rede de `createCharge()` nos dois
+ * adapters (achado do Codex, 08/09/2026, sobre `liberarReservaTravadaAction`
+ * e o mecanismo de idade mínima antes de liberar uma reserva travada).
+ *
+ * Sem um teto, "esta reserva tem mais de 90 s" era só uma SUPOSIÇÃO de que
+ * a tentativa original tinha morrido — nada IMPEDIA uma chamada realmente
+ * lenta de ainda estar em andamento além disso, e terminar depois de o
+ * admin já ter liberado (e uma segunda tentativa já ter criado outro link).
+ *
+ * Com este teto, `fetch` é abortado depois de `TIMEOUT_CRIACAO_MS` — a
+ * chamada de rede NUNCA fica pendurada além disso, o que faz da idade
+ * mínima em pagamento/page.tsx e em liberarReservaTravadaAction uma
+ * garantia de verdade (com folga), não mais uma suposição: depois deste
+ * teto mais a margem dos retries de persistência (bem menor), a tentativa
+ * original SEMPRE já terminou, de um jeito ou de outro.
+ */
+export const TIMEOUT_CRIACAO_MS = 20_000;
+
 export interface PaymentProvider {
   /** nome curto do provider, gravado em payments.provider */
   readonly name: string;

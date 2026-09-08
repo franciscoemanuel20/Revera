@@ -272,6 +272,14 @@ export async function liberarReservaTravadaAction(
    * recriação automática que o checkout agora faz nesse caso, é mais
    * simples não abrir a janela do que fechá-la depois. Reserva mais nova
    * que isto quase certamente ainda está em voo; não é travada, é rápida.
+   *
+   * Esta janela deixou de ser só uma suposição (achado seguinte do Codex,
+   * mesmo dia): `TIMEOUT_CRIACAO_MS` (src/lib/payments/provider.ts, 20 s)
+   * garante que a chamada ao gateway nunca fica pendurada além de um teto —
+   * sem ele, uma resposta realmente lenta podia, em teoria, continuar em
+   * andamento além de qualquer idade mínima que este arquivo escolhesse.
+   * Com o teto, a sequência inteira de criação SEMPRE termina bem antes
+   * desta janela de 90 s.
    */
   const idadeMs = Date.now() - new Date(pagamento.created_at as string).getTime();
   if (idadeMs < IDADE_MINIMA_PARA_LIBERAR_MS) {
