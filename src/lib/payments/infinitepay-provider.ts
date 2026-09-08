@@ -118,8 +118,13 @@ export class InfinitePayProvider implements PaymentProvider {
       );
     }
     if (!data.url) {
-      console.error("[infinitepay] resposta sem url", data);
-      throw new Error("Não foi possível iniciar o pagamento.");
+      // 2xx SEM a URL não é o mesmo tipo de certeza que um 4xx/5xx (achado
+      // do Codex, 08/09/2026): o gateway disse "OK" — ele pode muito bem ter
+      // criado o link e só devolvido um corpo incompleto (bug do lado dele,
+      // resposta truncada). Não temos como afirmar que nada foi criado, e
+      // apagar a reserva aqui tem o mesmo risco da falha de rede.
+      console.error("[infinitepay] resposta 2xx sem url — gateway pode ter criado o link mesmo assim", data);
+      throw new AmbiguousChargeError("A InfinitePay respondeu OK, mas sem o endereço do link de pagamento.");
     }
 
     return {

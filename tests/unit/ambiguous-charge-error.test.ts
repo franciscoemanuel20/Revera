@@ -78,6 +78,19 @@ describe("InfinitePayProvider.createCharge — ambiguidade de rede", () => {
     );
   });
 
+  it("resposta 2xx sem `url` no corpo também lança AmbiguousChargeError", async () => {
+    // "OK" com corpo incompleto: o gateway pode ter criado o link do
+    // mesmo jeito e só devolvido uma resposta truncada.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ slug: "abc" }), { status: 200 }))
+    );
+    const p = new InfinitePayProvider();
+    await expect(p.createCharge({ ...CHARGE_BASE, currency: "BRL" })).rejects.toBeInstanceOf(
+      AmbiguousChargeError
+    );
+  });
+
   it("resposta HTTP de rejeição (gateway respondeu) NÃO é ambígua — Error comum", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("erro", { status: 500 })));
     const p = new InfinitePayProvider();
@@ -114,6 +127,19 @@ describe("StripeProvider.createCharge — ambiguidade de rede", () => {
         json: () => Promise.reject(new Error("conexão caiu no meio do corpo")),
         text: () => Promise.reject(new Error("idem")),
       }))
+    );
+    const p = new StripeProvider();
+    await expect(p.createCharge({ ...CHARGE_BASE, currency: "USD" })).rejects.toBeInstanceOf(
+      AmbiguousChargeError
+    );
+  });
+
+  it("resposta 2xx sem `id`/`url` no corpo também lança AmbiguousChargeError", async () => {
+    // "OK" com corpo incompleto: a Stripe pode ter criado a sessão do
+    // mesmo jeito e só devolvido uma resposta truncada.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ object: "checkout.session" }), { status: 200 }))
     );
     const p = new StripeProvider();
     await expect(p.createCharge({ ...CHARGE_BASE, currency: "USD" })).rejects.toBeInstanceOf(

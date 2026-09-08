@@ -295,8 +295,13 @@ export class StripeProvider implements PaymentProvider {
       );
     }
     if (!sessao.id || !sessao.url) {
-      console.error("[stripe] sessão sem id/url");
-      throw new Error("Não foi possível iniciar o pagamento.");
+      // 2xx SEM id/url não é a mesma certeza de um 4xx/5xx (achado do
+      // Codex, 08/09/2026): a Stripe disse "OK" — ela pode ter criado a
+      // sessão e devolvido um corpo incompleto. Não dá para afirmar que
+      // nada foi criado, e apagar a reserva aqui tem o mesmo risco da falha
+      // de rede.
+      console.error("[stripe] resposta 2xx sem id/url — gateway pode ter criado a sessão mesmo assim");
+      throw new AmbiguousChargeError("A Stripe respondeu OK, mas sem os dados da sessão de checkout.");
     }
 
     return { providerPaymentId: sessao.id, checkoutUrl: sessao.url };
