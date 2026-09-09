@@ -8,9 +8,8 @@ export interface BeneficioCardProps {
 
 /**
  * Cartão da grade "Por que a Reverá" (08/09/2026) — ícone + título + texto
- * curto, sobre fundo claro. Sem biblioteca de ícones: o projeto não tinha
- * nenhuma antes desta entrega (só o SVG inline de BotaoWhatsAppHome.tsx), e
- * três ícones de traço simples não justificam a dependência nova. `icone`
+ * curto, sobre fundo claro. Sem biblioteca de ícones: três ícones de traço
+ * simples não justificam a dependência nova. `icone`
  * recebe o `<svg>` pronto de quem monta a grade, então este componente não
  * precisa saber nada sobre o desenho de cada um.
  */

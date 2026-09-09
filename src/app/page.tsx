@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { BeneficioCard } from "@/components/ui/BeneficioCard";
-import { BotaoWhatsAppHome } from "@/components/BotaoWhatsAppHome";
 import { FAQ } from "@/components/ui/FAQ";
 import { PassosNumerados } from "@/components/ui/PassosNumerados";
 import { Reveal } from "@/components/ui/Reveal";
@@ -211,8 +210,7 @@ export default async function HomePage() {
       {/* Grade "Por que a Reverá" (08/09/2026) — fecha o buraco estrutural
           que a home tinha depois do bloco Micropele: nenhuma seção listava
           os benefícios em conjunto, só espalhados (selo aqui, frase ali).
-          Ícones em SVG inline, sem lib nova — mesmo espírito do ícone de
-          BotaoWhatsAppHome.tsx. */}
+          Ícones em SVG inline, sem lib nova. */}
       <section className="w-full bg-paper px-6 py-16">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
           <Reveal className="flex flex-col items-center gap-2 text-center">
@@ -359,8 +357,6 @@ export default async function HomePage() {
           </Link>
         </Reveal>
       </section>
-
-      <BotaoWhatsAppHome />
     </main>
   );
 }

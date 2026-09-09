@@ -25,6 +25,13 @@
  * cliente que vai para o WhatsApp sai do carrinho), e essa o Francisco não
  * tomou.
  *
+ * TENTADO E REVERTIDO EM 08/09/2026 — um botão flutuante chegou a existir
+ * na home (`BotaoWhatsAppHome.tsx`, já apagado) e foi removido no mesmo
+ * dia: WhatsApp só pode aparecer para quem JÁ COMPROU, nunca em página
+ * pré-compra, porque atrapalha o registro do Purchase do pixel no
+ * fechamento da venda. Não recriar um botão de WhatsApp em página pública
+ * (home, produto, checkout) sem confirmar de novo com o Francisco.
+ *
  * ===========================================================================
  * POR QUE UMA CONSTANTE, E NÃO `process.env`
  * ===========================================================================
