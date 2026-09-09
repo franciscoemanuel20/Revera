@@ -85,7 +85,7 @@ export function ColorHelpForm() {
         )}
       </FormField>
 
-      <FormField label="E-mail" hint="Para receber a resposta da nossa equipe." error={null}>
+      <FormField label="E-mail" hint="Para nossa equipe responder." error={null}>
         {(props) => (
           <input
             {...props}
