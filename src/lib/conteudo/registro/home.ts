@@ -182,4 +182,149 @@ export const HOME = {
     tipo: "texto",
     padrao: "O que dizem sobre a Reverá",
   },
+
+  /* ==========================================================================
+   * SEÇÕES NOVAS DE 08/09/2026 — fechar os buracos estruturais da home
+   * ==========================================================================
+   * A home parava depois do bloco Micropele e ia direto para os selos e o
+   * rodapé. Estas quatro seções (benefícios, jornada, FAQ e CTA final) são
+   * as que faltavam para a página "fechar" — nenhuma inventa processo ou
+   * dado novo: benefícios repete fatos que já estão publicados em outro
+   * lugar do site (acabamento, espessura, envio), a jornada narra passos
+   * que o site já executa de verdade (cor/espessura em /cores, frete no
+   * checkout, garantia de 7 dias), e a FAQ reaproveita faq_items que já
+   * alimenta /faq.
+   */
+  "home.beneficios.eyebrow": {
+    pagina: "home",
+    rotulo: "Etiqueta da seção de benefícios",
+    tipo: "texto",
+    padrao: "Por que a Reverá",
+  },
+  "home.beneficios.titulo": {
+    pagina: "home",
+    rotulo: "Título da seção de benefícios",
+    tipo: "texto",
+    padrao: "Feita para parecer o seu próprio cabelo",
+  },
+  "home.beneficios.item1.titulo": {
+    pagina: "home",
+    rotulo: "Benefício 1 — título",
+    tipo: "texto",
+    padrao: "Acabamento natural",
+  },
+  "home.beneficios.item1.texto": {
+    pagina: "home",
+    rotulo: "Benefício 1 — texto",
+    tipo: "paragrafo",
+    padrao: "Linha frontal com acabamento natural, sem aparência de peça.",
+  },
+  "home.beneficios.item2.titulo": {
+    pagina: "home",
+    rotulo: "Benefício 2 — título",
+    tipo: "texto",
+    padrao: "Base sob medida",
+    // 0,08mm e 0,06mm — mesma dupla de espessuras já publicada em
+    // home.micropele.texto. Não trocar por um número só: as duas estão
+    // ativas no catálogo (ver comentário de home.micropele.titulo acima).
+  },
+  "home.beneficios.item2.texto": {
+    pagina: "home",
+    rotulo: "Benefício 2 — texto",
+    tipo: "paragrafo",
+    padrao: "Base ultrafina em 0,08mm ou 0,06mm, conforme a sua escolha.",
+  },
+  "home.beneficios.item3.titulo": {
+    pagina: "home",
+    rotulo: "Benefício 3 — título",
+    tipo: "texto",
+    padrao: "Chega em casa",
+  },
+  "home.beneficios.item3.texto": {
+    pagina: "home",
+    rotulo: "Benefício 3 — texto",
+    tipo: "paragrafo",
+    padrao: "Envio para todo o Brasil, com teste de qualidade antes de sair.",
+  },
+
+  "home.jornada.eyebrow": {
+    pagina: "home",
+    rotulo: "Etiqueta da seção de jornada",
+    tipo: "texto",
+    padrao: "Como funciona",
+  },
+  "home.jornada.titulo": {
+    pagina: "home",
+    rotulo: "Título da seção de jornada",
+    tipo: "texto",
+    padrao: "Da escolha à entrega",
+  },
+  "home.jornada.passo1.titulo": {
+    pagina: "home",
+    rotulo: "Jornada — passo 1, título",
+    tipo: "texto",
+    padrao: "Escolha a cor e a espessura",
+  },
+  "home.jornada.passo1.texto": {
+    pagina: "home",
+    rotulo: "Jornada — passo 1, texto",
+    tipo: "paragrafo",
+    padrao: "Veja a cartela real em /cores e escolha a base que combina com você.",
+  },
+  "home.jornada.passo2.titulo": {
+    pagina: "home",
+    rotulo: "Jornada — passo 2, título",
+    tipo: "texto",
+    padrao: "Finalize com o frete calculado",
+  },
+  "home.jornada.passo2.texto": {
+    pagina: "home",
+    rotulo: "Jornada — passo 2, texto",
+    tipo: "paragrafo",
+    padrao: "O checkout calcula o frete para o seu CEP antes de você pagar.",
+  },
+  "home.jornada.passo3.titulo": {
+    pagina: "home",
+    rotulo: "Jornada — passo 3, título",
+    tipo: "texto",
+    padrao: "Receba em casa, com garantia",
+  },
+  "home.jornada.passo3.texto": {
+    pagina: "home",
+    rotulo: "Jornada — passo 3, texto",
+    tipo: "paragrafo",
+    padrao: "Sua peça chega com 7 dias úteis de garantia contra defeito de fabricação.",
+  },
+
+  "home.faq.eyebrow": {
+    pagina: "home",
+    rotulo: "Etiqueta da seção de perguntas frequentes",
+    tipo: "texto",
+    padrao: "Dúvidas",
+  },
+  "home.faq.titulo": {
+    pagina: "home",
+    rotulo: "Título da seção de perguntas frequentes",
+    tipo: "texto",
+    padrao: "Perguntas frequentes",
+  },
+
+  "home.ctaFinal.titulo": {
+    pagina: "home",
+    rotulo: "CTA final — título",
+    tipo: "texto",
+    padrao: "Pronta para conhecer a linha Micropele?",
+  },
+  "home.ctaFinal.texto": {
+    pagina: "home",
+    rotulo: "CTA final — texto",
+    tipo: "texto",
+    padrao: "Escolha sua cor e finalize o pedido em poucos minutos.",
+  },
+  "home.ctaFinal.botao": {
+    pagina: "home",
+    rotulo: "CTA final — texto do botão",
+    tipo: "texto",
+    padrao: "Ver cores disponíveis",
+  },
 } as const satisfies Record<string, TextoRegistrado>;

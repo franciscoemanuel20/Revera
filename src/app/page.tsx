@@ -1,7 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { BeneficioCard } from "@/components/ui/BeneficioCard";
 import { BotaoWhatsAppHome } from "@/components/BotaoWhatsAppHome";
+import { FAQ } from "@/components/ui/FAQ";
+import { PassosNumerados } from "@/components/ui/PassosNumerados";
 import { Reveal } from "@/components/ui/Reveal";
 import { SocialProof } from "@/components/ui/SocialProof";
 import { TrustBar } from "@/components/ui/TrustBar";
@@ -46,7 +49,7 @@ export default async function HomePage() {
   // A policy "public read active products" já filtra status='active', então
   // um produto em draft simplesmente não volta desta consulta — e a home
   // deixa de oferecer um botão que leva a 404. Ver src/lib/catalog/vitrine.ts.
-  const [{ data: avaliacoes }, { data: produtos }] = await Promise.all([
+  const [{ data: avaliacoes }, { data: produtos }, { data: perguntas }] = await Promise.all([
     supabase
       .from("reviews")
       .select("customer_name, city, professional_name, rating, comment, photo_url, video_url")
@@ -57,6 +60,11 @@ export default async function HomePage() {
       .select(
         "slug, name, is_featured, sort_order, product_variants(is_active, price_cents, stock_qty)"
       ),
+    // Excerto da FAQ (08/09/2026) — mesma policy pública "public read faq"
+    // que /faq já usa (is_visible=true via RLS, sem filtro redundante
+    // aqui). Só os 5 primeiros: a home é vitrine, não a página de dúvidas
+    // inteira — "Ver todas as perguntas" leva para /faq.
+    supabase.from("faq_items").select("id, question, answer").order("sort_order").limit(5),
   ]);
 
   const produtoVitrine = escolherProdutoVitrine(
@@ -200,6 +208,80 @@ export default async function HomePage() {
         </Reveal>
       </section>
 
+      {/* Grade "Por que a Reverá" (08/09/2026) — fecha o buraco estrutural
+          que a home tinha depois do bloco Micropele: nenhuma seção listava
+          os benefícios em conjunto, só espalhados (selo aqui, frase ali).
+          Ícones em SVG inline, sem lib nova — mesmo espírito do ícone de
+          BotaoWhatsAppHome.tsx. */}
+      <section className="w-full bg-paper px-6 py-16">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
+          <Reveal className="flex flex-col items-center gap-2 text-center">
+            <span className="eyebrow-ink">{t("home.beneficios.eyebrow")}</span>
+            <h2 className="font-display text-2xl text-ink sm:text-3xl">
+              {t("home.beneficios.titulo")}
+            </h2>
+          </Reveal>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <Reveal>
+              <BeneficioCard
+                icone={<IconeAcabamento />}
+                titulo={t("home.beneficios.item1.titulo")}
+                texto={t("home.beneficios.item1.texto")}
+              />
+            </Reveal>
+            <Reveal delayMs={120}>
+              <BeneficioCard
+                icone={<IconeEspessura />}
+                titulo={t("home.beneficios.item2.titulo")}
+                texto={t("home.beneficios.item2.texto")}
+              />
+            </Reveal>
+            <Reveal delayMs={240}>
+              <BeneficioCard
+                icone={<IconeEnvio />}
+                titulo={t("home.beneficios.item3.titulo")}
+                texto={t("home.beneficios.item3.texto")}
+              />
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* Jornada numerada (08/09/2026) — narra passos que o site já executa
+          de verdade (cor/espessura em /cores, frete no checkout, garantia
+          de 7 dias); não inventa processo novo. */}
+      <section className="w-full bg-ink px-6 py-16 sm:py-20">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-10">
+          <Reveal className="flex flex-col items-center gap-2 text-center">
+            <span className="eyebrow">{t("home.jornada.eyebrow")}</span>
+            <h2 className="font-display text-2xl text-paper sm:text-3xl">
+              {t("home.jornada.titulo")}
+            </h2>
+          </Reveal>
+          <Reveal delayMs={120}>
+            <PassosNumerados
+              passos={[
+                {
+                  numero: "1",
+                  titulo: t("home.jornada.passo1.titulo"),
+                  texto: t("home.jornada.passo1.texto"),
+                },
+                {
+                  numero: "2",
+                  titulo: t("home.jornada.passo2.titulo"),
+                  texto: t("home.jornada.passo2.texto"),
+                },
+                {
+                  numero: "3",
+                  titulo: t("home.jornada.passo3.titulo"),
+                  texto: t("home.jornada.passo3.texto"),
+                },
+              ]}
+            />
+          </Reveal>
+        </div>
+      </section>
+
       <section className="w-full border-t border-sand bg-paper px-6 py-10">
         <Reveal>
           <TrustBar
@@ -231,7 +313,100 @@ export default async function HomePage() {
         </section>
       ) : null}
 
+      {/* FAQ da home (08/09/2026) — excerto, reaproveitando o mesmo
+          componente e a mesma tabela de /faq (sem duplicar dado nem
+          lógica). Só aparece se houver pergunta visível cadastrada — mesmo
+          padrão defensivo do SocialProof acima. */}
+      {(perguntas ?? []).length > 0 ? (
+        <section className="w-full bg-paper px-6 py-16">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
+            <Reveal className="flex flex-col items-center gap-2 text-center">
+              <span className="eyebrow-ink">{t("home.faq.eyebrow")}</span>
+              <h2 className="font-display text-2xl text-ink sm:text-3xl">
+                {t("home.faq.titulo")}
+              </h2>
+            </Reveal>
+            <Reveal delayMs={120}>
+              <FAQ
+                items={(perguntas ?? []).map((p) => ({
+                  id: p.id as string,
+                  question: p.question as string,
+                  answer: p.answer as string,
+                }))}
+              />
+            </Reveal>
+            <Link
+              href="/faq"
+              className="self-center text-ink underline decoration-gold decoration-2 underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+            >
+              Ver todas as perguntas
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
+      {/* CTA final (08/09/2026) — fecha a home no escuro, mesmo tom do
+          hero, antes do rodapé. Mesma lógica temProduto/linkProduto que a
+          seção Micropele já usa: nunca aponta para 404. */}
+      <section className="w-full bg-ink px-6 py-16 text-center sm:py-20">
+        <Reveal className="mx-auto flex w-full max-w-2xl flex-col items-center gap-5">
+          <h2 className="text-balance font-display text-2xl text-paper sm:text-3xl">
+            {t("home.ctaFinal.titulo")}
+          </h2>
+          <p className="text-paper/70">{t("home.ctaFinal.texto")}</p>
+          <Link href={linkProduto}>
+            <Button size="lg">{t("home.ctaFinal.botao")}</Button>
+          </Link>
+        </Reveal>
+      </section>
+
       <BotaoWhatsAppHome />
     </main>
+  );
+}
+
+// Ícones de traço simples para a grade "Por que a Reverá" — sem lib nova
+// (ver o comentário na seção acima). stroke="currentColor" herda a cor do
+// wrapper (text-gold-deep, em BeneficioCard.tsx).
+
+function IconeAcabamento() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 16c2-6 6-10 8-10s2 6 0 10-6 4-8 0Zm4-2c3 1 6-1 8-4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconeEspessura() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 8h16M4 8v3M8 8v2M12 8v3M16 8v2M20 8v3M4 16h16"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconeEnvio() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path d="M4 8.5 12 13l8-4.5M12 13v7" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
   );
 }

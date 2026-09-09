@@ -19,17 +19,33 @@ import { usePathname } from "next/navigation";
 // (src/components/ui/Header.tsx tem o mesmo grupo). Sem agrupar em
 // dropdown aqui — a <nav> do rodapé já nasceu com flex-wrap, então ganhar
 // mais uma linha no mobile não quebra nada, ao contrário do header fixo.
-const LINKS = [
-  { href: "/", label: "Início" },
-  { href: "/produtos", label: "Próteses" },
-  { href: "/cores", label: "Cores" },
-  { href: "/cuidados", label: "Cuidados" },
-  { href: "/garantia", label: "Garantia" },
-  { href: "/faq", label: "Perguntas frequentes" },
-  { href: "/sobre-as-proteses", label: "Sobre as próteses" },
-  { href: "/naturalidade", label: "Naturalidade" },
-  { href: "/por-que-revera", label: "Por que Reverá" },
-  { href: "/para-profissionais", label: "Para profissionais" },
+//
+// 08/09/2026 — reorganizados em duas colunas temáticas (eram uma <nav> só,
+// em flex-wrap). MESMOS 10 links de antes, nenhum novo, nenhum removido —
+// só agrupados por assunto, mais fácil de escanear que uma lista corrida.
+// Não entram Termos/Privacidade/Reembolso/CNPJ: essas páginas não existem
+// ainda e não há texto legal pronto (decisão do Francisco, 08/09/2026).
+const GRUPOS_DE_LINKS = [
+  {
+    titulo: "Loja",
+    links: [
+      { href: "/", label: "Início" },
+      { href: "/produtos", label: "Próteses" },
+      { href: "/cores", label: "Cores" },
+    ],
+  },
+  {
+    titulo: "Saiba mais",
+    links: [
+      { href: "/cuidados", label: "Cuidados" },
+      { href: "/garantia", label: "Garantia" },
+      { href: "/faq", label: "Perguntas frequentes" },
+      { href: "/sobre-as-proteses", label: "Sobre as próteses" },
+      { href: "/naturalidade", label: "Naturalidade" },
+      { href: "/por-que-revera", label: "Por que Reverá" },
+      { href: "/para-profissionais", label: "Para profissionais" },
+    ],
+  },
 ];
 
 export function Footer() {
@@ -44,7 +60,7 @@ export function Footer() {
       {/* filete dourado, não border-sand: --sand (areia) some sobre --ink
           (ver globals.css, .divider-gold) — camada visual, 25/08/2026. */}
       <div className="divider-gold mx-auto mb-10 w-full max-w-5xl" />
-      <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-10">
         {/* PNG com alfa reconstruído — ver comentário em src/app/page.tsx */}
         <Image
           src="/media/marca/logo-revera.png"
@@ -53,17 +69,29 @@ export function Footer() {
           height={920}
           className="h-auto w-[170px]"
         />
-        <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-          {LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded text-sm text-paper/70 hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+        <div className="flex w-full flex-col flex-wrap justify-center gap-x-16 gap-y-8 sm:flex-row">
+          {GRUPOS_DE_LINKS.map((grupo) => (
+            <nav
+              key={grupo.titulo}
+              aria-label={grupo.titulo}
+              className="flex flex-col items-center gap-2 sm:items-start"
             >
-              {link.label}
-            </Link>
+              <span className="text-xs font-semibold uppercase tracking-wide text-paper/50">
+                {grupo.titulo}
+              </span>
+              {grupo.links.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="rounded text-sm text-paper/70 hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
           ))}
-        </nav>
+        </div>
+        <p className="text-xs text-paper/40">© {new Date().getFullYear()} Reverá</p>
       </div>
     </footer>
   );
