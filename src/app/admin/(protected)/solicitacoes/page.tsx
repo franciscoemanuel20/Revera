@@ -31,7 +31,7 @@ export default async function SolicitacoesPage({
     await Promise.all([
       supabase
         .from("color_help_requests")
-        .select("id, customer_name, contact, photo_url, status, suggested_color_id, admin_notes, created_at")
+        .select("id, customer_name, contact, email, phone, photo_url, status, suggested_color_id, admin_notes, created_at")
         .order("created_at", { ascending: false }),
       supabase.from("colors").select("id, code, name").order("sort_order"),
       supabase
@@ -84,6 +84,8 @@ export default async function SolicitacoesPage({
         id: r.id,
         customerName: r.customer_name,
         contact: r.contact,
+        email: r.email,
+        phone: r.phone,
         status: r.status,
         suggestedColorId: r.suggested_color_id,
         adminNotes: r.admin_notes,

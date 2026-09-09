@@ -66,6 +66,7 @@ export interface VendaResumo {
   canceladoEm: string | null;
   motivoCancelamento: string | null;
   rastreio: string | null;
+  temEtiquetaEmitida?: boolean;
   etiquetaUrl: string | null;
   transportadora: string | null;
   vistoEm: string | null;
@@ -94,7 +95,7 @@ export function selectVenda(filtraPorEndereco: boolean): string {
     ` addresses${filtraPorEndereco ? "!inner" : ""}(city, state, country),` +
     " order_items(product_name_snapshot, quantity)," +
     " payments(method, status)," +
-    " shipments(tracking_code, label_url, service_name)"
+    " shipments(provider_shipment_id, tracking_code, label_url, service_name)"
   );
 }
 
@@ -267,6 +268,7 @@ interface LinhaBanco {
   order_items: Array<{ product_name_snapshot: string; quantity: number }> | null;
   payments: Array<{ method: string | null; status: string }> | null;
   shipments: Array<{
+    provider_shipment_id: string | null;
     tracking_code: string | null;
     label_url: string | null;
     service_name: string | null;
@@ -307,6 +309,7 @@ function mapear(linha: unknown): VendaResumo {
     canceladoEm: l.canceled_at,
     motivoCancelamento: l.cancel_reason,
     rastreio: envio?.tracking_code ?? null,
+    temEtiquetaEmitida: Boolean(envio?.provider_shipment_id) && ["label_created", "shipped", "delivered"].includes(l.shipping_status),
     etiquetaUrl: envio?.label_url ?? null,
     transportadora: envio?.service_name ?? null,
     vistoEm: l.seen_at,

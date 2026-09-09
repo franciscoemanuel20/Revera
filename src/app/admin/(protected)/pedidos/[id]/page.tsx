@@ -14,6 +14,7 @@ import {
 import { PrintButton } from "../PrintButton";
 import { StatusActions } from "../StatusActions";
 import { BotaoEtiqueta } from "../BotaoEtiqueta";
+import { BotaoImprimirEtiqueta } from "../BotaoImprimirEtiqueta";
 import { LiberarReservaButton } from "../LiberarReservaButton";
 import { ChecklistExportacao } from "../ChecklistExportacao";
 import {
@@ -135,6 +136,7 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         provider: string;
         service_name: string | null;
         tracking_code: string | null;
+        provider_shipment_id: string | null;
         label_url: string | null;
         status: string | null;
       }
@@ -380,15 +382,8 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
               </p>
               <p className="text-sm text-ink/60">Status: {envio.status ?? "—"}</p>
               <p className="text-sm text-ink/60">Rastreio: {envio.tracking_code ?? "—"}</p>
-              {envio.label_url ? (
-                <a
-                  href={envio.label_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm text-ink underline decoration-gold decoration-2 underline-offset-4"
-                >
-                  Ver etiqueta
-                </a>
+              {envio.provider_shipment_id && ["label_created", "shipped", "delivered"].includes(shippingStatus) ? (
+                <BotaoImprimirEtiqueta orderId={pedido.id} rotulo="Ver etiqueta" />
               ) : null}
             </>
           ) : (

@@ -11,6 +11,8 @@ export interface ColorHelpItem {
   id: string;
   customerName: string;
   contact: string;
+  email: string | null;
+  phone: string | null;
   status: string;
   suggestedColorId: string | null;
   adminNotes: string | null;
@@ -27,6 +29,13 @@ const STATUS_LABEL: Record<string, string> = {
   answered: "Respondido",
   closed: "Encerrado",
 };
+
+function linkWhatsApp(phone: string): string | null {
+  const digitos = phone.replace(/\D/g, "");
+  if (digitos.length < 10) return null;
+  const numero = digitos.startsWith("55") && digitos.length >= 12 ? digitos : `55${digitos}`;
+  return `https://wa.me/${numero}`;
+}
 
 export function ColorHelpTab({
   items,
@@ -54,6 +63,7 @@ function Linha({ item, colors }: { item: ColorHelpItem; colors: Array<{ id: stri
   const [notes, setNotes] = useState(item.adminNotes ?? "");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const whatsapp = item.phone ? linkWhatsApp(item.phone) : null;
 
   async function salvar() {
     setErro(null);
@@ -95,9 +105,15 @@ function Linha({ item, colors }: { item: ColorHelpItem; colors: Array<{ id: stri
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="font-medium text-ink">{item.customerName}</p>
-            <p className="text-sm text-ink/60">
-              {item.contact} · {formatarDataHora(item.createdAt)}
-            </p>
+            <p className="text-sm text-ink/60">{formatarDataHora(item.createdAt)}</p>
+            {item.email ? <a className="text-sm text-ink underline" href={`mailto:${item.email}`}>{item.email}</a> : null}
+            {item.phone ? (
+              <p className="text-sm text-ink/60">
+                {item.phone}{" "}
+                {whatsapp ? <a className="underline" href={whatsapp} target="_blank" rel="noreferrer">Chamar no WhatsApp</a> : null}
+              </p>
+            ) : null}
+            {!item.email && !item.phone ? <p className="text-sm text-ink/60">{item.contact}</p> : null}
           </div>
           <span className="rounded-full bg-sand px-2 py-1 text-xs font-semibold text-ink">
             {STATUS_LABEL[item.status] ?? item.status}

@@ -14,7 +14,8 @@ const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2
 
 export function ColorHelpForm() {
   const [customerName, setCustomerName] = useState("");
-  const [contact, setContact] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [nomeArquivo, setNomeArquivo] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -33,7 +34,8 @@ export function ColorHelpForm() {
 
     const formData = new FormData();
     formData.set("customerName", customerName);
-    formData.set("contact", contact);
+    formData.set("email", email);
+    formData.set("phone", phone);
     formData.set("photo", arquivo);
 
     setEnviando(true);
@@ -47,7 +49,8 @@ export function ColorHelpForm() {
 
     setEnviado(true);
     setCustomerName("");
-    setContact("");
+    setEmail("");
+    setPhone("");
     setNomeArquivo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
@@ -82,13 +85,28 @@ export function ColorHelpForm() {
         )}
       </FormField>
 
-      <FormField label="Telefone ou e-mail" hint="Para nossa equipe te responder." error={null}>
+      <FormField label="E-mail" hint="Para receber a resposta da nossa equipe." error={null}>
         {(props) => (
           <input
             {...props}
-            required
-            value={contact}
-            onChange={(e) => setContact(e.target.value)}
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+          />
+        )}
+      </FormField>
+
+      <FormField label="WhatsApp" hint="Opcional — se preferir, nossa equipe pode falar com você por lá." error={null}>
+        {(props) => (
+          <input
+            {...props}
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
             className={inputClass}
           />
         )}

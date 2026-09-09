@@ -69,6 +69,63 @@ export type GerarEtiquetaResultado =
   | { ok: true; rastreio: string | null; etiquetaUrl: string | null };
 
 
+/**
+ * Busca um PDF NOVO de uma etiqueta que já existe.
+ *
+ * A URL retornada pela SuperFrete é temporária. Expirar esse link não
+ * autoriza criar ou pagar outro envio: esta action chama apenas `/tag/print`
+ * para o shipment existente, nunca `/cart` ou `/checkout`.
+ */
+const imprimirSchema = z.object({ orderId: z.string().uuid() });
+
+export type ImprimirEtiquetaResultado = { error: string } | { ok: true; etiquetaUrl: string };
+
+export async function imprimirEtiquetaAction(input: unknown): Promise<ImprimirEtiquetaResultado> {
+  const parsed = imprimirSchema.safeParse(input);
+  if (!parsed.success) return { error: "Pedido inválido." };
+
+  const supabase = await createClient();
+  const { data: pedido, error: erroPedido } = await supabase
+    .from("orders")
+    .select("shipping_status")
+    .eq("id", parsed.data.orderId)
+    .maybeSingle();
+  if (
+    erroPedido ||
+    !pedido ||
+    !["label_created", "shipped", "delivered"].includes(pedido.shipping_status)
+  ) {
+    return { error: "Não encontramos uma etiqueta paga para este pedido." };
+  }
+  const { data: envio, error } = await supabase
+    .from("shipments")
+    .select("provider, provider_shipment_id")
+    .eq("order_id", parsed.data.orderId)
+    .maybeSingle();
+
+  if (error || !envio?.provider_shipment_id) {
+    return { error: "Não encontramos uma etiqueta emitida para este pedido." };
+  }
+  if (envio.provider !== "superfrete") {
+    return { error: "A impressão deste envio ainda não é suportada pelo painel." };
+  }
+
+  try {
+    const etiquetaUrl = await getShippingProvider().getLabelUrl(envio.provider_shipment_id);
+    if (!etiquetaUrl) {
+      return { error: "A transportadora não disponibilizou o PDF agora. Tente novamente em instantes." };
+    }
+    return { ok: true, etiquetaUrl };
+  } catch (e) {
+    return {
+      error:
+        e instanceof ShippingUnavailable
+          ? `A transportadora recusou a impressão: ${e.message}`
+          : "Não foi possível buscar o PDF agora. Tente novamente em instantes.",
+    };
+  }
+}
+
 export async function gerarEtiquetaAction(
   input: unknown
 ): Promise<GerarEtiquetaResultado> {

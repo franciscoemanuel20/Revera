@@ -24,7 +24,14 @@ const TAMANHO_MAXIMO_BYTES = 5 * 1024 * 1024; // 5MB — limite pedido na missã
 
 const dadosSchema = z.object({
   customerName: z.string().trim().min(1, "Informe seu nome."),
-  contact: z.string().trim().min(3, "Informe um telefone ou e-mail para contato."),
+  email: z.string().trim().email("Informe um e-mail válido.").or(z.literal("")),
+  phone: z
+    .string()
+    .trim()
+    .refine((value) => !value || value.replace(/\D/g, "").length >= 10, "Informe um WhatsApp válido."),
+}).refine((dados) => Boolean(dados.email || dados.phone), {
+  message: "Informe seu e-mail ou WhatsApp para contato.",
+  path: ["email"],
 });
 
 export type ColorHelpResult = { error: string } | { ok: true };
@@ -32,7 +39,8 @@ export type ColorHelpResult = { error: string } | { ok: true };
 export async function enviarPedidoAjudaCorAction(formData: FormData): Promise<ColorHelpResult> {
   const parsed = dadosSchema.safeParse({
     customerName: formData.get("customerName"),
-    contact: formData.get("contact"),
+    email: formData.get("email"),
+    phone: formData.get("phone"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Confira os dados do formulário." };
@@ -74,7 +82,11 @@ export async function enviarPedidoAjudaCorAction(formData: FormData): Promise<Co
   // client de service role.
   const { error: erroInsert } = await supabase.from("color_help_requests").insert({
     customer_name: parsed.data.customerName,
-    contact: parsed.data.contact,
+    // Mantém a coluna histórica até todos os pedidos antigos terem sido
+    // migrados; as duas novas colunas deixam o tipo do contato explícito.
+    contact: parsed.data.email || parsed.data.phone,
+    email: parsed.data.email || null,
+    phone: parsed.data.phone || null,
     photo_url: caminho,
     status: "new",
   });

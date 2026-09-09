@@ -273,6 +273,7 @@ export default async function VendasPage({
               canceladoEm={v.canceladoEm}
               motivoCancelamento={v.motivoCancelamento}
               rastreio={v.rastreio}
+              temEtiquetaEmitida={Boolean(v.temEtiquetaEmitida)}
               etiquetaUrl={v.etiquetaUrl}
               transportadora={v.transportadora}
               naoVista={v.paymentStatus === "paid" && !v.vistoEm}

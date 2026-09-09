@@ -14,6 +14,7 @@ import { bandeira, nomeDoPais } from "@/lib/internacional/paises";
 import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
 import { EXPORT_STATUS_BADGE, EXPORT_STATUS_LABEL, type ExportStatus } from "@/lib/internacional/exportacao";
 import { formatarDataHora } from "@/lib/format/date";
+import { BotaoImprimirEtiqueta } from "./BotaoImprimirEtiqueta";
 
 export interface VendaCardProps {
   id: string;
@@ -30,6 +31,7 @@ export interface VendaCardProps {
   canceladoEm: string | null;
   motivoCancelamento: string | null;
   rastreio: string | null;
+  temEtiquetaEmitida: boolean;
   etiquetaUrl: string | null;
   transportadora: string | null;
   naoVista: boolean;
@@ -155,15 +157,8 @@ export function VendaCard(props: VendaCardProps) {
           Ver pedido
         </Link>
 
-        {!cancelado && props.etiquetaUrl ? (
-          <a
-            href={props.etiquetaUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-12 flex-1 items-center justify-center rounded-md border border-ink/20 px-4 text-sm font-medium text-ink sm:flex-none"
-          >
-            Imprimir etiqueta
-          </a>
+        {!cancelado && props.temEtiquetaEmitida ? (
+          <BotaoImprimirEtiqueta orderId={props.id} />
         ) : null}
 
         {!cancelado && props.rastreio ? (
