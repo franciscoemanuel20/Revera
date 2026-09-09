@@ -54,6 +54,8 @@ export interface ProdutoInterativoProps {
    * genérico de `/media/hero`, ver `fotosDoProduto()`.
    */
   fotos: FotoProduto[];
+  /** Piso de fotos resolvido no servidor quando o produto não tem mídia própria. */
+  fotosFallback?: FotoProduto[];
   variants: VariantData[];
   colors: ColorOption[];
   // `label` não faz parte de QuantityDiscountRule (a função de cálculo não
@@ -88,8 +90,9 @@ export interface ProdutoInterativoProps {
 // tem foto cadastrada (hoje as duas Micropele): mostrar o close genérico da
 // marca é melhor que uma área vazia, e some sozinho quando alguém cadastrar
 // a foto de verdade pelo admin.
-function fotosDoProduto(name: string, doBanco: FotoProduto[]): FotoProduto[] {
+function fotosDoProduto(name: string, doBanco: FotoProduto[], fallback?: FotoProduto[]): FotoProduto[] {
   if (doBanco.length > 0) return doBanco;
+  if (fallback) return fallback.filter((foto) => foto.src.length > 0);
   return [
     { src: "/media/hero/produto-close-1.jpeg", alt: `Close da base ${name}` },
     { src: "/media/hero/produto-close-2.jpeg", alt: `Detalhe da linha frontal — ${name}` },
@@ -111,6 +114,7 @@ export function ProdutoInterativo({
   description,
   baseThicknessMm,
   fotos: fotosDoBanco,
+  fotosFallback,
   variants,
   colors,
   discountRules,
@@ -122,8 +126,8 @@ export function ProdutoInterativo({
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
 
   const fotos = useMemo(
-    () => fotosDoProduto(name, fotosDoBanco),
-    [name, fotosDoBanco]
+    () => fotosDoProduto(name, fotosDoBanco, fotosFallback),
+    [name, fotosDoBanco, fotosFallback]
   );
   /**
    * A FOTO GRANDE É GUARDADA PELO `src`, NÃO PELO ÍNDICE (03/09/2026).

@@ -3,6 +3,7 @@ import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { createClient } from "@/lib/supabase/server";
 import { produtoEstaVendavel, type ProdutoVitrine } from "@/lib/catalog/vitrine";
+import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
 
 export const metadata: Metadata = {
   title: "Próteses",
@@ -34,6 +35,7 @@ export const metadata: Metadata = {
  */
 export default async function ProdutosPage() {
   const supabase = await createClient();
+  const fallbackProduto = await urlDaFotoDoSite("/media/hero/produto-close-1.jpeg");
 
   const { data: produtos } = await supabase
     .from("products")
@@ -90,7 +92,7 @@ export default async function ProdutosPage() {
          * `product_media`, e sem isto os dois cards do catálogo saíam como
          * retângulo cinza — no celular, metade da tela vazia logo na entrada.
          */
-        imageUrl: (foto?.url as string | undefined) ?? "/media/hero/produto-close-1.jpeg",
+        imageUrl: (foto?.url as string | undefined) ?? fallbackProduto,
         imageAlt: (foto?.alt_text as string | undefined) ?? null,
       };
     })

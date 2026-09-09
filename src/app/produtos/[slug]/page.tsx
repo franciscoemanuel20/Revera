@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { baseUrl } from "@/lib/config/urls";
 import { textosDaPagina } from "@/lib/conteudo/textos";
+import { urlsDasFotosDoSite } from "@/lib/conteudo/fotos-do-site";
 import { ProdutoInterativo } from "./ProdutoInterativo";
 
 // Página pública de produto — client de servidor com a chave anon
@@ -85,6 +86,11 @@ export default async function ProdutoPage({
   if (!produto) {
     notFound();
   }
+
+  const fotosFallback = await urlsDasFotosDoSite([
+    "/media/hero/produto-close-1.jpeg",
+    "/media/hero/produto-close-2.jpeg",
+  ]);
 
   const [{ data: colors }, { data: regras }] = await Promise.all([
     supabase
@@ -281,6 +287,10 @@ export default async function ProdutoPage({
       description={produto.description}
       baseThicknessMm={produto.base_thickness_mm}
       fotos={fotos}
+      fotosFallback={[
+        { src: fotosFallback.get("/media/hero/produto-close-1.jpeg") ?? "/media/hero/produto-close-1.jpeg", alt: `Close da base ${produto.name}` },
+        { src: fotosFallback.get("/media/hero/produto-close-2.jpeg") ?? "/media/hero/produto-close-2.jpeg", alt: `Detalhe da linha frontal — ${produto.name}` },
+      ]}
       variants={variantes}
       colors={coresDesteProduto.map((c) => ({
         id: c.id as string,

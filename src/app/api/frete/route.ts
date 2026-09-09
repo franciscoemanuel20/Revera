@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { lerCarrinhoCompleto } from "@/lib/cart/store";
 import { cotarFrete } from "@/lib/shipping/cotar";
+import { consumirLimitePublico, identificarCliente } from "@/lib/http/limite-publico";
 
 /**
  * Cotação de frete para a tela de checkout — para o cliente VER o valor
@@ -24,6 +25,19 @@ import { cotarFrete } from "@/lib/shipping/cotar";
  * informa; ela não decide preço nenhum.
  */
 export async function POST(request: Request) {
+  const limite = consumirLimitePublico({
+    escopo: "cotacao-frete",
+    cliente: identificarCliente(request.headers),
+    maximo: 20,
+    janelaMs: 60_000,
+  });
+  if (!limite.permitido) {
+    return NextResponse.json(
+      { erro: "Muitas cotações em sequência. Aguarde um minuto e tente novamente." },
+      { status: 429, headers: { "Retry-After": String(limite.retryAfterSeconds) } }
+    );
+  }
+
   let corpo: { cep?: unknown };
   try {
     corpo = await request.json();

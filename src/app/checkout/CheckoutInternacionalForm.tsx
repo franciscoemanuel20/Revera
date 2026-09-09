@@ -114,6 +114,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
       codigoPostal: campos.codigoPostal,
       aceite: true,
       atribuicao: lerAtribuicao(),
+      trackingConsent: window.localStorage.getItem("revera-cookies-opcionais-v1") === "aceito",
     };
 
     setEnviando(true);

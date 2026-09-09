@@ -117,30 +117,24 @@ async function despachar(
    * linha em conversion_logs com o motivo, porque "a venda não apareceu na
    * Meta" precisa ser uma consulta, não uma investigação.
    */
-  const permissao = podeEnviarConversao({ providerPagamento });
-  if (!permissao.pode) {
-    console.warn("[purchase] envio recusado:", orderId, permissao.motivo);
-    const recusa: ResultadoEnvio = {
-      sucesso: false,
-      motivoPulado: permissao.motivo ?? "envio não permitido",
-    };
-    await Promise.all([
-      registrar(supabase, orderId, orderId, "meta", recusa),
-      registrar(supabase, orderId, orderId, "ga4", recusa),
-    ]);
-    return;
-  }
-
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, total_cents, shipping_cents, customer_id, address_id, fbp, fbc, ga_client_id, client_ip, user_agent"
+      "id, order_number, status, total_cents, shipping_cents, customer_id, address_id, fbp, fbc, ga_client_id, client_ip, user_agent, tracking_consent"
     )
     .eq("id", orderId)
     .maybeSingle();
 
   if (!pedido) {
     console.error("[purchase] pedido não encontrado", orderId);
+    return;
+  }
+  const permissao = pedido.tracking_consent
+    ? podeEnviarConversao({ providerPagamento })
+    : { pode: false, motivo: "consentimento para rastreamento opcional ausente", comoTeste: false };
+  if (!permissao.pode) {
+    const recusa: ResultadoEnvio = { sucesso: false, motivoPulado: permissao.motivo ?? "envio não permitido" };
+    await Promise.all([registrar(supabase, orderId, orderId, "meta", recusa), registrar(supabase, orderId, orderId, "ga4", recusa)]);
     return;
   }
   // Defesa em profundidade: quem chama já garantiu isto, mas um Purchase de

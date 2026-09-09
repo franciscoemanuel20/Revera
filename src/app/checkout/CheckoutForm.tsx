@@ -262,6 +262,7 @@ export function CheckoutForm() {
       // podem só existir depois que os scripts carregaram, e no submit já
       // carregaram com folga.
       atribuicao: lerAtribuicao(),
+      trackingConsent: window.localStorage.getItem("revera-cookies-opcionais-v1") === "aceito",
     };
 
     setEnviando(true);

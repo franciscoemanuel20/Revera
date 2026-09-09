@@ -44,6 +44,9 @@ const GRUPOS_DE_LINKS = [
       { href: "/naturalidade", label: "Naturalidade" },
       { href: "/por-que-revera", label: "Por que Reverá" },
       { href: "/para-profissionais", label: "Para profissionais" },
+      { href: "/privacidade", label: "Privacidade" },
+      { href: "/termos", label: "Termos de uso" },
+      { href: "/cookies", label: "Cookies" },
     ],
   },
 ];

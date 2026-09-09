@@ -48,6 +48,23 @@ const nextConfig = {
         ]
       : [],
   },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: blob: https://*.supabase.co https://www.facebook.com; media-src 'self' https://*.supabase.co; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self' 'unsafe-inline' https://connect.facebook.net https://www.googletagmanager.com; connect-src 'self' https://*.supabase.co https://viacep.com.br https://www.facebook.com https://www.google-analytics.com https://region1.google-analytics.com;",
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=()" },
+        ],
+      },
+    ];
+  },
   // Limite padrão de Server Action é 1MB — baixo demais para a foto que a
   // ferramenta "Ajude-me a descobrir minha cor" recebe em /cores#ajuda
   // (até 5MB, ver src/app/cores/actions.ts). 6mb dá folga para o overhead

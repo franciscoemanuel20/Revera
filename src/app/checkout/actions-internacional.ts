@@ -49,6 +49,7 @@ const textoCurto = z.string().max(500).nullable().optional().catch(null);
 function construirSchema(idioma: Idioma) {
   const t = textos(idioma);
   return z.object({
+  trackingConsent: z.boolean().optional().default(false),
   pais: z.string().trim().min(2).max(2).transform((v) => v.toUpperCase()),
   name: z.string().trim().min(3, t.erroNome),
   email: z
@@ -283,6 +284,7 @@ export async function criarPedidoInternacionalAction(
       shipping_cents: shippingCents,
       tax_cents: taxCents,
       total_cents: totalCents,
+      tracking_consent: dados.trackingConsent,
       export_status: "pending_data",
       // O aceite: versão + instante do SERVIDOR. O navegador só disse
       // "true"; quem data é a gente.

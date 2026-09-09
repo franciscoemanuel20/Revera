@@ -1,14 +1,14 @@
 "use client";
 
 // Formulário da ferramenta "Ajude-me a descobrir minha cor" — usado dentro
-// da seção #ajuda de /cores (ver page.tsx). Chama a Server Action com
-// FormData (não com objeto JSON, ver comentário em actions.ts) porque o
-// arquivo da foto só viaja assim.
+// da seção #ajuda de /cores (ver page.tsx). O envio passa por Route Handler,
+// que recusa pelo Content-Length antes de processar multipart grande. O
+// painel ainda pode aceitar vídeos grandes via Server Action sem abrir essa
+// porta pública para arquivos de até 30 MB.
 import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Toast } from "@/components/ui/Toast";
-import { enviarPedidoAjudaCorAction } from "./actions";
 
 const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink";
 
@@ -32,6 +32,11 @@ export function ColorHelpForm() {
       return;
     }
 
+    if (arquivo.size > 5 * 1024 * 1024) {
+      setErro("A imagem precisa ter até 5MB.");
+      return;
+    }
+
     const formData = new FormData();
     formData.set("customerName", customerName);
     formData.set("email", email);
@@ -39,11 +44,17 @@ export function ColorHelpForm() {
     formData.set("photo", arquivo);
 
     setEnviando(true);
-    const resultado = await enviarPedidoAjudaCorAction(formData);
+    let resultado: { error?: string; ok?: true };
+    try {
+      const resposta = await fetch("/api/ajuda-cor", { method: "POST", body: formData });
+      resultado = (await resposta.json()) as { error?: string; ok?: true };
+    } catch {
+      resultado = { error: "Não foi possível enviar a foto agora. Tente novamente." };
+    }
     setEnviando(false);
 
-    if ("error" in resultado) {
-      setErro(resultado.error);
+    if (!resultado.ok) {
+      setErro(resultado.error ?? "Não foi possível enviar a foto agora. Tente novamente.");
       return;
     }
 

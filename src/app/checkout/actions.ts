@@ -272,6 +272,7 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
       discount_cents: discountCents,
       shipping_cents: shippingCents,
       total_cents: totalCents,
+      tracking_consent: dados.trackingConsent,
       ...atribuicao,
     });
 

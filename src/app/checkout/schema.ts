@@ -22,6 +22,7 @@ const textoCurto = z.string().max(500).nullable().optional().catch(null);
 // (não que isso mude o resultado aqui, mas a ordem importa se algum dia a
 // regra de formato ficar mais específica).
 export const checkoutSchema = z.object({
+  trackingConsent: z.boolean().optional().default(false),
   /**
    * País de entrega. Default 'BR' — e hoje esse é o único valor que o
    * checkout público oferece, porque não há como cobrar cliente
