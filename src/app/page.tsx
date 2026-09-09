@@ -99,10 +99,22 @@ export default async function HomePage() {
           padding é o que garante que logo/headline não nasçam escondidos
           atrás dele. */}
       <section
-        className="w-full bg-ink px-6 pb-16 sm:pb-20"
+        className="relative isolate w-full overflow-hidden bg-ink px-6 pb-16 sm:pb-20"
         style={{ paddingTop: HEADER_HEIGHT_PX + 24 }}
       >
-        <Reveal className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 text-center">
+        {/* Profundidade discreta no hero: a marca continua sendo a heroína,
+            mas deixa de repousar sobre um preto completamente plano. São
+            gradientes CSS, não uma imagem nova nem uma promessa visual que
+            concorra com a peça real mostrada logo abaixo. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_70%_55%_at_84%_14%,rgba(201,180,95,.18),transparent_60%),radial-gradient(ellipse_50%_45%_at_12%_88%,rgba(255,255,255,.055),transparent_68%)]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-px bg-[linear-gradient(90deg,transparent,rgba(201,180,95,.72),transparent)]"
+        />
+        <Reveal className="relative mx-auto flex w-full max-w-5xl flex-col items-center gap-6 text-center">
           <Image
             src="/media/marca/logo-revera.png"
             alt="Reverá — Prótese Capilar"
