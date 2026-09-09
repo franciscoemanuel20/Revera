@@ -2,13 +2,25 @@
  * O WhatsApp da Reverá — um número, um lugar.
  *
  * ===========================================================================
- * DECISÃO DO FRANCISCO EM 03/09/2026 — o número mudou, e a regra antiga caiu
+ * CORRIGIDO EM 09/09/2026 — a constante volta a ser o número original
  * ===========================================================================
- * O número passa a ser **(12) 98149-9901**. O anterior era o
- * (12) 98140-9901 — numero-antigo-de-proposito, a única citação viva dele em
- * todo o projeto, e é por isso que a linha carrega esse marcador. Ele está
- * na conta OFICIAL da Meta — quem escrevia para lá caía na API, não numa
- * pessoa. Palavras dele: "esse novo... ele não é oficial da meta". É um
+ * O registro de 03/09/2026 (histórico, logo abaixo) trocou o número da
+ * constante achando que a citação antiga — a que este comentário chamava
+ * de "número antigo, da conta oficial da Meta" — estava presa numa conta
+ * de API sem pessoa do outro lado. O Francisco corrigiu isso em
+ * 09/09/2026, direto: **"esse é o correto, troca!"** — perguntado uma vez
+ * de propósito, porque contradizia o que estava escrito aqui, e confirmado
+ * duas vezes antes da troca. Não reverter de novo achando que é
+ * "consertar": o texto de 03/09 é que estava errado sobre qual dos dois
+ * números caía na API.
+ *
+ * ===========================================================================
+ * REGISTRO DE 03/09/2026 (histórico — a troca de número que ele descreve
+ * abaixo foi desfeita pela correção acima; a Meta/API citada não é mais o
+ * número antigo-de-proposito, é o valor que a constante tinha ANTES de
+ * 09/09/2026)
+ * ===========================================================================
+ * Palavras dele em 03/09: "esse novo... ele não é oficial da meta". É um
  * WhatsApp comum, com alguém do outro lado, e é para ele que todo cliente
  * deve ser mandado.
  *
@@ -51,9 +63,9 @@
  */
 
 /** Só dígitos, COM DDI. O `wa.me` exige número internacional completo. */
-export const WHATSAPP_REVERA = "5512981499901";
+export const WHATSAPP_REVERA = "5512981409901";
 
-/** "(12) 98149-9901" em pt, "+55 12 98149-9901" fora — para ler na tela. */
+/** "(12) 98140-9901" em pt, "+55 12 98140-9901" fora — para ler na tela. */
 export function whatsappLegivel(internacional = false): string {
   const nacional = WHATSAPP_REVERA.replace(/^55/, "");
   const ddd = nacional.slice(0, 2);

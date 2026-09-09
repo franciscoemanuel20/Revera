@@ -1,5 +1,5 @@
 /**
- * O número da Reverá — 03/09/2026.
+ * O número da Reverá — 03/09/2026, corrigido em 09/09/2026.
  *
  * Existe porque a troca de número é o tipo de mudança que falha CALADA: o
  * link continua clicável, o WhatsApp abre, e só não tem ninguém do outro
@@ -19,11 +19,14 @@ import {
 import { destinoDoAviso } from "../../src/lib/notificacoes/venda-paga";
 import { textos } from "../../src/lib/internacional/idioma";
 
-const NUMERO_ANTIGO = "12981409901"; // numero-antigo-de-proposito
+// 09/09/2026 — correção do Francisco: o número certo voltou a ser o
+// 981409901, e o 981499901 (vigente entre 03/09 e 09/09) é que passou a
+// ser o antigo. Ver o comentário de src/lib/config/whatsapp.ts.
+const NUMERO_ANTIGO = "12981499901"; // numero-antigo-de-proposito
 
 describe("WhatsApp da Reverá", () => {
   it("é o número novo, com DDI e só dígitos", () => {
-    expect(WHATSAPP_REVERA).toBe("5512981499901");
+    expect(WHATSAPP_REVERA).toBe("5512981409901");
     expect(WHATSAPP_REVERA).toMatch(/^\d+$/);
     // Sem o 55 o wa.me abre um contato inexistente — falha silenciosa.
     expect(WHATSAPP_REVERA.startsWith("55")).toBe(true);
@@ -31,13 +34,13 @@ describe("WhatsApp da Reverá", () => {
 
   it("monta o link com a mensagem já digitada", () => {
     expect(linkWhatsApp("Olá, tudo bem?")).toBe(
-      "https://wa.me/5512981499901?text=Ol%C3%A1%2C%20tudo%20bem%3F"
+      "https://wa.me/5512981409901?text=Ol%C3%A1%2C%20tudo%20bem%3F"
     );
   });
 
   it("escreve o número do jeito que se lê aqui e lá fora", () => {
-    expect(whatsappLegivel()).toBe("(12) 98149-9901");
-    expect(whatsappLegivel(true)).toBe("+55 12 98149-9901");
+    expect(whatsappLegivel()).toBe("(12) 98140-9901");
+    expect(whatsappLegivel(true)).toBe("+55 12 98140-9901");
   });
 
   // Destino do aviso de venda: o caso que derruba é o branco invisível.

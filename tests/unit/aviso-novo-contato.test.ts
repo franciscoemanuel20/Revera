@@ -240,6 +240,6 @@ describe("aviso de contato novo", () => {
 
     await expect(avisarNovoContato("profissional")).resolves.toEqual({ estado: "enviado" });
     const busca = chamadas.find((c) => c.url.includes("/v1/contacts"));
-    expect(busca?.url).toContain("5512981499901");
+    expect(busca?.url).toContain("5512981409901");
   });
 });

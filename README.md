@@ -167,13 +167,14 @@ debita a carteira de verdade. A **cotação** é real e foi exercitada
   houve aprovação formal de peça de marca (logo, wordmark) ainda.
 - **Preços reais**: nenhum preço foi inventado. É a decisão que destrava
   metade da lista.
-- **Número de WhatsApp da loja**: é **(12) 98149-9901**, e mora em
+- **Número de WhatsApp da loja**: é **(12) 98140-9901**, e mora em
   `src/lib/config/whatsapp.ts` — constante, não variável de ambiente (o
-  porquê está escrito lá). Trocado em 03/09/2026: o número anterior está na
-  conta oficial da Meta, e quem escrevia para lá caía na API em vez de numa
-  pessoa. Os dígitos antigos aparecem em UM lugar só, o comentário de
-  `whatsapp.ts` que conta essa história — de propósito, para que nenhum
-  documento os ofereça de volta como valor a configurar. `WHATSAPP_POST_PURCHASE_NUMBER` foi
+  porquê está escrito lá). Trocado em 03/09/2026 e corrigido de volta em
+  09/09/2026 (o Francisco confirmou que o registro de 03/09 estava errado
+  sobre qual dos dois números caía na conta oficial da Meta). Os dígitos do
+  número aposentado aparecem em UM lugar só, o comentário de `whatsapp.ts`
+  que conta essa história — de propósito, para que nenhum documento os
+  ofereça de volta como valor a configurar. `WHATSAPP_POST_PURCHASE_NUMBER` foi
   aposentada e **pode ser apagada da Vercel**; ninguém mais a lê.
   Aparece em dois lugares: a página do pedido (`SuportePosCompra.tsx`, nos
   dois estados — pago e *Aguardando pagamento*, revisão de 31/08/2026) e o
