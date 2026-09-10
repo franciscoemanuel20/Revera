@@ -51,7 +51,7 @@ const GRUPOS_DE_LINKS = [
   },
 ];
 
-export function Footer() {
+export function Footer({ logo }: { logo: string }) {
   const pathname = usePathname();
 
   if (pathname?.startsWith("/admin")) {
@@ -65,13 +65,13 @@ export function Footer() {
       <div className="divider-gold mx-auto mb-10 w-full max-w-5xl" />
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-10">
         {/* PNG com alfa reconstruído — ver comentário em src/app/page.tsx */}
-        <Image
-          src="/media/marca/logo-revera.png"
+        {logo ? <Image
+          src={logo}
           alt="Reverá — Prótese Capilar"
           width={1500}
           height={920}
           className="h-auto w-[170px]"
-        />
+        /> : null}
         <div className="flex w-full flex-col flex-wrap justify-center gap-x-16 gap-y-8 sm:flex-row">
           {GRUPOS_DE_LINKS.map((grupo) => (
             <nav

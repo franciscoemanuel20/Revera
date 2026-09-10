@@ -59,7 +59,7 @@ const LINKS_MOBILE = [...LINKS, ...LINKS_CONHECA, LINK_PROFISSIONAIS];
  * --paper por trás dá ≈3,13:1; o mesmo texto sobre --ink puro (home, hero)
  * dá ≈18,68:1. A diferença é só ISSO — de onde vem a regra acima.
  */
-export function Header() {
+export function Header({ logo }: { logo: string }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
 
@@ -132,14 +132,14 @@ export function Header() {
               comentário em src/app/page.tsx) — o header nunca fica sobre
               fundo claro sem o degradê escuro acima, então é sempre seguro
               usar esta versão aqui. */}
-          <Image
-            src="/media/marca/logo-revera.png"
+          {logo ? <Image
+            src={logo}
             alt="Reverá"
             width={1500}
             height={920}
             priority
             className="h-8 w-auto sm:h-9"
-          />
+          /> : null}
         </Link>
 
         {/* Agrupa nav desktop + sacola + menu mobile num único item flex à

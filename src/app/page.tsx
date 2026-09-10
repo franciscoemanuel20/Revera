@@ -10,6 +10,7 @@ import { TrustBar } from "@/components/ui/TrustBar";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createClient } from "@/lib/supabase/server";
 import { textosDaPagina } from "@/lib/conteudo/textos";
+import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
 import {
   escolherProdutoVitrine,
   linkDoProdutoVitrine,
@@ -38,6 +39,7 @@ import {
 // redundante aqui, a RLS já resolve quem pode ver o quê.
 export default async function HomePage() {
   const t = await textosDaPagina("home");
+  const logo = await urlDaFotoDoSite("/media/marca/logo-revera.png");
   // Grupo compartilhado com a página de produto (06/09/2026) — ver o
   // comentário em src/lib/conteudo/registro/trustbar.ts. Consulta própria,
   // pequena e com policy pública, porque a TrustBar não é conteúdo da home.
@@ -115,14 +117,14 @@ export default async function HomePage() {
           className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-px bg-[linear-gradient(90deg,transparent,rgba(201,180,95,.72),transparent)]"
         />
         <Reveal className="relative mx-auto flex w-full max-w-5xl flex-col items-center gap-6 text-center">
-          <Image
-            src="/media/marca/logo-revera.png"
+          {logo ? <Image
+            src={logo}
             alt="Reverá — Prótese Capilar"
             width={1500}
             height={920}
             priority
             className="h-auto w-[250px] sm:w-[330px]"
-          />
+          /> : null}
 
           <span className="eyebrow">{t("home.hero.eyebrow")}</span>
           <h1 className="max-w-2xl text-balance font-display text-4xl leading-[1.05] text-paper sm:text-[clamp(2.75rem,5vw,4rem)]">
@@ -175,16 +177,15 @@ export default async function HomePage() {
           <h2 className="text-balance font-display text-2xl text-paper sm:text-3xl">
             {t("home.naturalidade.titulo")}
           </h2>
-          <div className="surface-elevada w-full overflow-hidden rounded-lg p-1.5 sm:p-2">
+          {t("home.naturalidade.videoArquivo") ? <div className="surface-elevada w-full overflow-hidden rounded-lg p-1.5 sm:p-2">
             <video
               controls
               preload="metadata"
-              poster={t("home.naturalidade.videoCapa")}
               className="w-full rounded-md bg-ink"
             >
               <source src={t("home.naturalidade.videoArquivo")} type="video/mp4" />
             </video>
-          </div>
+          </div> : null}
           <p className="max-w-2xl text-balance text-paper/75">
             {t("home.naturalidade.texto")}
           </p>
@@ -192,7 +193,7 @@ export default async function HomePage() {
       </section>
 
       <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-16 sm:flex-row sm:items-center">
-        <Reveal className="group relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand sm:w-1/2">
+        {t("home.micropele.foto") ? <Reveal className="group relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand sm:w-1/2">
           <Image
             src={t("home.micropele.foto")}
             alt={t("home.micropele.fotoAlt")}
@@ -200,7 +201,7 @@ export default async function HomePage() {
             sizes="(min-width: 640px) 50vw, 100vw"
             className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
           />
-        </Reveal>
+        </Reveal> : null}
         <Reveal delayMs={120} className="flex flex-col gap-3 sm:w-1/2">
           <span className="eyebrow-ink">{t("home.micropele.eyebrow")}</span>
           <h2 className="font-display text-2xl text-ink">{t("home.micropele.titulo")}</h2>

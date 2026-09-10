@@ -29,6 +29,7 @@ interface VariantData {
 export interface FotoProduto {
   src: string;
   alt: string;
+  tipo?: "image" | "video";
   /**
    * Variante que esta foto retrata, quando ela retrata uma. Nulo para foto
    * genérica do produto (é o caso de todas hoje). Ver page.tsx.
@@ -203,7 +204,7 @@ export function ProdutoInterativo({
 
       const variante = variantePorCor.get(corId);
       const doProduto = variante
-        ? fotos.find((f) => f.variantId === variante.id)
+        ? fotos.find((f) => f.variantId === variante.id && f.tipo !== "video")
         : undefined;
       if (doProduto) return doProduto;
 
@@ -241,10 +242,20 @@ export function ProdutoInterativo({
    * a cada clique na cartela custaria mais do que o detalhe vale.
    */
   const galeria = useMemo(() => {
-    if (!fotoDaCorEscolhida) return fotos;
-    if (fotos.some((f) => f.src === fotoDaCorEscolhida.src)) return fotos;
-    return [...fotos, fotoDaCorEscolhida];
-  }, [fotos, fotoDaCorEscolhida]);
+    /**
+     * Isolamento de variante: mídia sem variante é compartilhada; mídia de
+     * Cor 2 só entra quando Cor 2 está selecionada. Nunca reunimos mídias de
+     * cores diferentes na mesma galeria.
+     */
+    const gerais = fotos.filter((foto) => !foto.variantId);
+    const variante = corSelecionadaId ? variantePorCor.get(corSelecionadaId) : null;
+    const especificas = variante ? fotos.filter((foto) => foto.variantId === variante.id) : [];
+    const destaVariante = [...gerais, ...especificas];
+    if (fotoDaCorEscolhida && !destaVariante.some((f) => f.src === fotoDaCorEscolhida.src)) {
+      return [...destaVariante, fotoDaCorEscolhida];
+    }
+    return destaVariante.length > 0 ? destaVariante : fotosDoProduto(name, [], fotosFallback);
+  }, [corSelecionadaId, fotoDaCorEscolhida, fotos, fotosFallback, name, variantePorCor]);
 
   // noUncheckedIndexedAccess (tsconfig) trata galeria[i] como possivelmente
   // undefined — daí o `!`, que aqui é verdade: `fotosDoProduto()` nunca
@@ -372,16 +383,20 @@ export function ProdutoInterativo({
               fotoAtiva.ehFotoDeCor ? "sm:aspect-[4/3]" : ""
             }`}
           >
-            <Image
-              src={fotoAtiva.src}
-              alt={fotoAtiva.alt}
-              fill
-              sizes="(min-width: 640px) 50vw, 100vw"
-              className={`transition-transform duration-500 ease-out group-hover:scale-[1.03] ${
-                fotoAtiva.ehFotoDeCor ? "object-contain sm:object-cover" : "object-cover"
-              }`}
-              priority
-            />
+            {fotoAtiva.tipo === "video" ? (
+              <video src={fotoAtiva.src} controls playsInline className="h-full w-full object-cover" aria-label={fotoAtiva.alt} />
+            ) : (
+              <Image
+                src={fotoAtiva.src}
+                alt={fotoAtiva.alt}
+                fill
+                sizes="(min-width: 640px) 50vw, 100vw"
+                className={`transition-transform duration-500 ease-out group-hover:scale-[1.03] ${
+                  fotoAtiva.ehFotoDeCor ? "object-contain sm:object-cover" : "object-cover"
+                }`}
+                priority
+              />
+            )}
           </div>
           {/* A legenda só aparece na foto da cartela, e diz o que ela é: a
               peça fotografada mostra a COR, não necessariamente este modelo.
@@ -406,7 +421,9 @@ export function ProdutoInterativo({
                   key={foto.src}
                   type="button"
                   aria-label={
-                    foto.ehFotoDeCor && corSelecionada
+                    foto.tipo === "video"
+                      ? `Ver vídeo ${i + 1} de ${galeria.length}`
+                      : foto.ehFotoDeCor && corSelecionada
                       ? `Ver a cor ${corSelecionada.name}`
                       : `Ver foto ${i + 1} de ${galeria.length}`
                   }
@@ -433,7 +450,11 @@ export function ProdutoInterativo({
                   {/* `sizes` explícito: sem ele o Next pede a foto em 3840px
                       para uma miniatura de 64px — o mesmo defeito que a
                       cartela de cores tinha. 128px cobre telas 2x. */}
-                  <Image src={foto.src} alt="" fill sizes="128px" className="object-cover" />
+                  {foto.tipo === "video" ? (
+                    <video src={foto.src} className="h-full w-full object-cover" muted preload="metadata" />
+                  ) : (
+                    <Image src={foto.src} alt="" fill sizes="128px" className="object-cover" />
+                  )}
                 </button>
               ))}
             </div>

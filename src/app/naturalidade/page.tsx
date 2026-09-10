@@ -16,6 +16,7 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { textosDaPagina } from "@/lib/conteudo/textos";
+import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
 
 /**
  * O texto destes fatores mudou de lugar em 30/08/2026: agora mora em
@@ -56,6 +57,7 @@ export const metadata: Metadata = {
 
 export default async function NaturalidadePage() {
   const t = await textosDaPagina("naturalidade");
+  const video = await urlDaFotoDoSite("/media/hero/implantacao.mp4");
 
   return (
     <main
@@ -77,14 +79,14 @@ export default async function NaturalidadePage() {
 
       <Reveal>
         <section className="flex flex-col gap-3">
-          <video
-            src="/media/hero/implantacao.mp4"
+          {video ? <video
+            src={video}
             controls
             preload="metadata"
             className="w-full rounded-lg bg-ink"
           >
             {t("naturalidade.video.fallback")}
-          </video>
+          </video> : null}
           <p className="text-sm text-ink/60">
             {t("naturalidade.video.legenda")}
           </p>

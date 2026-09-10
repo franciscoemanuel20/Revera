@@ -3,6 +3,7 @@ import {
   comDDI,
   decidir,
   dentroDoHorario,
+  etapaDaRecuperacao,
   horaEmSaoPaulo,
   limitesDoAmbiente,
   type Limites,
@@ -98,7 +99,8 @@ describe("horário de atendimento", () => {
 describe("limites do ambiente", () => {
   it("sem variável nenhuma usa os padrões conservadores", () => {
     expect(LIMITES).toEqual({
-      esperaMinutos: 60,
+      esperaMinutos: 20,
+      segundoLembreteHoras: 24,
       janelaHoras: 48,
       horaInicio: 9,
       horaFim: 20,
@@ -119,6 +121,39 @@ describe("limites do ambiente", () => {
   it("valor válido manda", () => {
     const l = limitesDoAmbiente({ CARRINHO_MAX_POR_DIA: "5" } as unknown as NodeJS.ProcessEnv);
     expect(l.maxPorDia).toBe(5);
+  });
+});
+
+describe("etapas da recuperação", () => {
+  it("libera o primeiro toque aos 20 minutos", () => {
+    expect(etapaDaRecuperacao({}, AGORA, LIMITES)).toBe("primeiro");
+  });
+
+  it("só libera o último lembrete 24 horas após o primeiro envio", () => {
+    const estado = {
+      primeiroCriadoEm: new Date(AGORA.getTime() - 24 * 3600_000).toISOString(),
+      primeiroEnviadoEm: new Date(AGORA.getTime() - 24 * 3600_000).toISOString(),
+    };
+    expect(etapaDaRecuperacao(estado, AGORA, LIMITES)).toBe("ultimo");
+    expect(
+      etapaDaRecuperacao(
+        { ...estado, primeiroCriadoEm: new Date(AGORA.getTime() - 23 * 3600_000).toISOString() },
+        AGORA,
+        LIMITES
+      )
+    ).toBeNull();
+  });
+
+  it("não cria segundo toque se o primeiro falhou ou se o último já foi reservado", () => {
+    const ontem = new Date(AGORA.getTime() - 25 * 3600_000).toISOString();
+    expect(etapaDaRecuperacao({ primeiroCriadoEm: ontem }, AGORA, LIMITES)).toBeNull();
+    expect(
+      etapaDaRecuperacao(
+        { primeiroCriadoEm: ontem, primeiroEnviadoEm: ontem, ultimoReservado: true },
+        AGORA,
+        LIMITES
+      )
+    ).toBeNull();
   });
 });
 

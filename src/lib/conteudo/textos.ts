@@ -26,6 +26,7 @@
 
 import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { REGISTRO, type ChaveDeTexto } from "./registro";
+import { MIDIA_REMOVIDA, urlsDasFotosDoSite } from "./fotos-do-site";
 
 /**
  * O leitor de texto de uma página.
@@ -94,7 +95,17 @@ export async function edicoesDaPagina(pagina: string): Promise<Map<string, strin
 /** Carrega as edições e devolve o leitor pronto para a página usar. */
 export async function textosDaPagina(pagina: string): Promise<LeitorDeTexto> {
   const edicoes = await edicoesDaPagina(pagina);
-  return (chave) => edicoes.get(chave) ?? REGISTRO[chave].padrao;
+  const imagensPadrao = (Object.keys(REGISTRO) as ChaveDeTexto[])
+    .filter((chave) => REGISTRO[chave].pagina === pagina && (REGISTRO[chave].tipo === "imagem" || REGISTRO[chave].tipo === "video"))
+    .map((chave) => REGISTRO[chave].padrao);
+  const urls = await urlsDasFotosDoSite(imagensPadrao);
+  return (chave) => {
+    const valor = edicoes.get(chave);
+    if (valor === MIDIA_REMOVIDA) return "";
+    if (valor) return valor;
+    const registro = REGISTRO[chave];
+    return (registro.tipo === "imagem" || registro.tipo === "video") ? (urls.get(registro.padrao) ?? registro.padrao) : registro.padrao;
+  };
 }
 
 /**

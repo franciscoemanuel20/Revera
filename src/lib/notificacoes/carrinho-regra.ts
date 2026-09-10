@@ -10,7 +10,10 @@
 
 /** Minutos de espera antes de tocar. Menos que isso é atropelar quem ainda
  *  está com o Pix aberto em outra aba. */
-export const ESPERA_MINUTOS_PADRAO = 60;
+export const ESPERA_MINUTOS_PADRAO = 20;
+
+/** Tempo entre o primeiro toque e o último lembrete. */
+export const SEGUNDO_LEMBRETE_HORAS_PADRAO = 24;
 
 /**
  * Janela máxima. Depois disso não se toca mais no assunto.
@@ -38,6 +41,7 @@ function inteiro(bruto: string | undefined, padrao: number): number {
 
 export interface Limites {
   esperaMinutos: number;
+  segundoLembreteHoras: number;
   janelaHoras: number;
   horaInicio: number;
   horaFim: number;
@@ -48,6 +52,10 @@ export interface Limites {
 export function limitesDoAmbiente(env: NodeJS.ProcessEnv = process.env): Limites {
   return {
     esperaMinutos: inteiro(env.CARRINHO_ESPERA_MINUTOS, ESPERA_MINUTOS_PADRAO),
+    segundoLembreteHoras: inteiro(
+      env.CARRINHO_SEGUNDO_LEMBRETE_HORAS,
+      SEGUNDO_LEMBRETE_HORAS_PADRAO
+    ),
     janelaHoras: inteiro(env.CARRINHO_JANELA_HORAS, JANELA_HORAS_PADRAO),
     horaInicio: inteiro(env.CARRINHO_HORA_INICIO, HORA_INICIO_PADRAO),
     horaFim: inteiro(env.CARRINHO_HORA_FIM, HORA_FIM_PADRAO),
@@ -124,6 +132,32 @@ export interface PedidoCandidato {
 export type MotivoPulo = "sem_telefone" | "fora_da_janela" | "moeda_sem_template";
 
 export type Decisao = { enviar: true } | { enviar: false; motivo: MotivoPulo };
+
+export type EtapaRecuperacao = "primeiro" | "ultimo";
+
+/**
+ * Decide qual é o único toque ainda permitido para um pedido. A tabela usa
+ * uma reserva por etapa; `primeiroEnviadoEm` precisa existir para uma falha
+ * de entrega nunca ser reinterpretada como autorização para um segundo toque.
+ */
+export function etapaDaRecuperacao(
+  estado: {
+    primeiroCriadoEm?: string | null;
+    primeiroEnviadoEm?: string | null;
+    ultimoReservado?: boolean;
+  },
+  agora: Date,
+  limites: Limites
+): EtapaRecuperacao | null {
+  if (estado.ultimoReservado) return null;
+  if (!estado.primeiroCriadoEm) return "primeiro";
+  if (!estado.primeiroEnviadoEm) return null;
+  const primeiro = new Date(estado.primeiroCriadoEm).getTime();
+  if (!Number.isFinite(primeiro)) return null;
+  return agora.getTime() - primeiro >= limites.segundoLembreteHoras * 3600_000
+    ? "ultimo"
+    : null;
+}
 
 /**
  * Só português, e só quem paga em real.

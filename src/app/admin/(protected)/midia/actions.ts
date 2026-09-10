@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { createClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
 import {
@@ -9,6 +11,8 @@ import {
   nomeArquivoSeguro,
   tipoAceito,
 } from "@/lib/conteudo/midia";
+import { listarFotosDoRepositorio } from "@/lib/conteudo/fotos-do-repositorio";
+import { MIDIA_REMOVIDA } from "@/lib/conteudo/fotos-do-site";
 
 // Server Actions da Biblioteca de Fotos (/admin/midia) — 30/08/2026.
 //
@@ -78,6 +82,127 @@ export async function enviarImagem(formData: FormData): Promise<EnviarImagemResu
 }
 
 export type ExcluirImagemResultado = { error: string } | { ok: true };
+
+type ResultadoFotoDoSite = { error: string } | { ok: true };
+
+function revalidarFotosDoSite() {
+  for (const rota of ["/", "/cores", "/sobre-as-proteses", "/naturalidade", "/produtos"]) revalidatePath(rota);
+  revalidatePath("/produtos/[slug]", "page");
+  revalidatePath("/admin/midia");
+}
+
+function caminhoStorageDoOriginal(caminho: string) {
+  return `originais/${caminho.replace(/^\/media\//, "").replace(/[^a-zA-Z0-9._/-]/g, "-")}`;
+}
+
+async function usuario(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.email ?? null;
+}
+
+/** Copia, uma única vez, as fotos versionadas para o Storage público. */
+export async function migrarFotosQueVieramComOSite(): Promise<ResultadoFotoDoSite> {
+  const supabase = await createClient();
+  const fotos = await listarFotosDoRepositorio();
+  const existentes = await supabase.from("site_media_assets").select("source_path").not("source_path", "is", null);
+  if (existentes.error) return { error: "A tabela da biblioteca ainda não existe. Aplique a migration 19 no Supabase." };
+  const jaMigradas = new Set((existentes.data ?? []).map((f) => f.source_path));
+
+  try {
+    for (const foto of fotos) {
+      if (jaMigradas.has(foto.caminho)) continue;
+      const relativo = foto.caminho.replace(/^\//, "");
+      const absoluto = path.join(process.cwd(), "public", relativo);
+      const conteudo = await fs.readFile(absoluto);
+      const storagePath = caminhoStorageDoOriginal(foto.caminho);
+      const extensao = path.extname(storagePath).toLowerCase();
+      const contentType = extensao === ".png" ? "image/png" : extensao === ".webp" ? "image/webp" : extensao === ".avif" ? "image/avif" : "image/jpeg";
+      const upload = await supabase.storage.from(BUCKET_MIDIA).upload(storagePath, conteudo, { contentType, upsert: false });
+      if (upload.error && !upload.error.message.toLowerCase().includes("already exists")) throw upload.error;
+      const url = supabase.storage.from(BUCKET_MIDIA).getPublicUrl(storagePath).data.publicUrl;
+      const gravar = await supabase.from("site_media_assets").upsert({
+        source_path: foto.caminho, storage_path: storagePath, url, nome: path.basename(foto.caminho), tamanho: foto.tamanho, tipo: contentType, ativo: true, updated_at: new Date().toISOString(), updated_by: await usuario(supabase),
+      }, { onConflict: "source_path" });
+      if (gravar.error) throw gravar.error;
+      // Referências já gravadas no banco deixam de depender do deploy.
+      await Promise.all([
+        supabase.from("colors").update({ photo_url: url }).eq("photo_url", foto.caminho),
+        supabase.from("product_media").update({ url }).eq("url", foto.caminho),
+        supabase.from("banners").update({ imagem_url: url }).eq("imagem_url", foto.caminho),
+        supabase.from("site_texts").update({ valor: url }).eq("valor", foto.caminho),
+      ]);
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? `Não foi possível migrar as fotos: ${e.message}` : "Não foi possível migrar as fotos agora." };
+  }
+  revalidarFotosDoSite();
+  return { ok: true };
+}
+
+async function guardarArquivo(arquivo: File, prefixo: string) {
+  if (!tipoAceito(arquivo.type) || !arquivo.type.startsWith("image/")) throw new Error("Envie uma foto em JPG, PNG, WEBP ou AVIF.");
+  if (arquivo.size > TAMANHO_MAXIMO_BYTES) throw new Error("A foto é grande demais. O tamanho máximo é 5 MB.");
+  const supabase = await createClient();
+  const storagePath = `${prefixo}/${nomeArquivoSeguro(arquivo.name, arquivo.type)}`;
+  const envio = await supabase.storage.from(BUCKET_MIDIA).upload(storagePath, await arquivo.arrayBuffer(), { contentType: arquivo.type, upsert: false });
+  if (envio.error) throw envio.error;
+  return { supabase, storagePath, url: supabase.storage.from(BUCKET_MIDIA).getPublicUrl(storagePath).data.publicUrl };
+}
+
+export async function adicionarFotoDoSite(formData: FormData): Promise<ResultadoFotoDoSite> {
+  const arquivo = formData.get("arquivo");
+  if (!(arquivo instanceof File) || arquivo.size === 0) return { error: "Escolha uma foto antes de adicionar." };
+  try {
+    const { supabase, storagePath, url } = await guardarArquivo(arquivo, "adicionadas");
+    const { error } = await supabase.from("site_media_assets").insert({ storage_path: storagePath, url, nome: arquivo.name, tamanho: arquivo.size, tipo: arquivo.type, updated_by: await usuario(supabase) });
+    if (error) throw error;
+    revalidarFotosDoSite();
+    return { ok: true };
+  } catch (e) { return { error: e instanceof Error ? e.message : "Não foi possível adicionar a foto." }; }
+}
+
+export async function substituirFotoDoSite(id: string, formData: FormData): Promise<ResultadoFotoDoSite> {
+  const arquivo = formData.get("arquivo");
+  if (!id || !(arquivo instanceof File) || arquivo.size === 0) return { error: "Escolha uma foto antes de substituir." };
+  try {
+    const { supabase, storagePath, url } = await guardarArquivo(arquivo, "substituicoes");
+    const atual = await supabase.from("site_media_assets").select("storage_path, source_path, url").eq("id", id).maybeSingle();
+    if (atual.error || !atual.data) throw new Error("Foto não encontrada.");
+    const { error } = await supabase.from("site_media_assets").update({ storage_path: storagePath, url, nome: arquivo.name, tamanho: arquivo.size, tipo: arquivo.type, ativo: true, updated_at: new Date().toISOString(), updated_by: await usuario(supabase) }).eq("id", id);
+    if (error) throw error;
+    await Promise.all([
+      supabase.from("colors").update({ photo_url: url }).eq("photo_url", atual.data.url),
+      supabase.from("product_media").update({ url }).eq("url", atual.data.url),
+      supabase.from("banners").update({ imagem_url: url }).eq("imagem_url", atual.data.url),
+      supabase.from("site_texts").update({ valor: url }).eq("valor", atual.data.url),
+      supabase.storage.from(BUCKET_MIDIA).remove([atual.data.storage_path]),
+    ]);
+    revalidarFotosDoSite();
+    return { ok: true };
+  } catch (e) { return { error: e instanceof Error ? e.message : "Não foi possível substituir a foto." }; }
+}
+
+/** Desativa e apaga o arquivo; referências conhecidas são removidas, não bloqueadas. */
+export async function excluirFotoDoSite(id: string): Promise<ResultadoFotoDoSite> {
+  const supabase = await createClient();
+  const { data: foto, error } = await supabase.from("site_media_assets").select("storage_path, url, source_path").eq("id", id).maybeSingle();
+  if (error || !foto) return { error: "Foto não encontrada." };
+  const valores = [foto.url, foto.source_path].filter(Boolean) as string[];
+  const marcador = MIDIA_REMOVIDA;
+  const [cores, produtos, banners, textos] = await Promise.all([
+    supabase.from("colors").update({ photo_url: null }).in("photo_url", valores),
+    supabase.from("product_media").delete().in("url", valores),
+    supabase.from("banners").update({ imagem_url: null }).in("imagem_url", valores),
+    supabase.from("site_texts").update({ valor: marcador }).in("valor", valores),
+  ]);
+  if (cores.error || produtos.error || banners.error || textos.error) return { error: "Não foi possível remover todas as referências da foto." };
+  const desativar = await supabase.from("site_media_assets").update({ ativo: false, updated_at: new Date().toISOString(), updated_by: await usuario(supabase) }).eq("id", id);
+  if (desativar.error) return { error: "Não foi possível excluir a foto." };
+  await supabase.storage.from(BUCKET_MIDIA).remove([foto.storage_path]);
+  await registrarAuditoria(supabase, { action: "midia.excluirSite", entityType: "site_media_assets", entityId: id, diff: { sourcePath: foto.source_path } });
+  revalidarFotosDoSite();
+  return { ok: true };
+}
 
 /**
  * Apaga uma foto do bucket "site-media" — mas só depois de confirmar que

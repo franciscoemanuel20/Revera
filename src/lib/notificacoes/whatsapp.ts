@@ -64,6 +64,12 @@ export interface MensagemWhatsApp {
   /** Parâmetros na ordem em que o template os espera. */
   parametros: string[];
   /**
+   * Parâmetros do template da Clint. Separado de `parametros` porque os
+   * avisos internos antigos passam detalhes para a Meta, mas o template da
+   * Clint correspondente é fixo e não pode receber esses sete valores.
+   */
+  parametrosDeTemplate?: string[];
+  /**
    * Nome com que o contato é CRIADO na Clint, quando ele ainda não existe.
    *
    * Não vai na mensagem: os templates deste projeto são fixos, sem variável.
@@ -163,7 +169,7 @@ export async function enviarWhatsApp(mensagem: MensagemWhatsApp): Promise<Result
     // Uma linha só, marcada, para achar no log da Vercel. O texto já vem
     // sem endereço e sem dado sensível — ver montarAvisoVendaPaga().
     console.info(
-      `[whatsapp:simulado] para=${mascarar(mensagem.para)} :: ${mensagem.texto.replace(/\n/g, " | ")}`
+      `[whatsapp:simulado] para=${mascarar(mensagem.para)} :: ${textoParaLog(mensagem.texto)}`
     );
     return { estado: "enviado", providerMessageId: null };
   }
@@ -224,6 +230,13 @@ export async function enviarWhatsApp(mensagem: MensagemWhatsApp): Promise<Result
       motivo: erro instanceof Error ? erro.message : "falha desconhecida ao chamar a Meta",
     };
   }
+}
+
+/** URLs de retomada carregam token opaco do pedido: úteis ao cliente, nunca ao log. */
+function textoParaLog(texto: string): string {
+  return texto
+    .replace(/https?:\/\/[^\s]+/g, "[link de retomada oculto]")
+    .replace(/\n/g, " | ");
 }
 
 /** 5511976543210 -> 5511****3210. Para log, nunca para a mensagem. */
@@ -313,8 +326,11 @@ async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnv
       return { estado: "erro", motivo: `Clint: ${contato.erro}` };
     }
 
-    // Sem `chat_id`: a Clint acha ou cria a conversa. Sem `parameters`: o
-    // template deste modo é fixo (ver o cabeçalho do arquivo).
+    // Sem `chat_id`: a Clint acha ou cria a conversa. Quando existem
+    // parâmetros, eles são os campos `{{n}}` do template aprovado. A
+    // recuperação de checkout usa um único parâmetro: a URL opaca do próprio
+    // pedido. O link não contém cartão, valor ou qualquer dado de pagamento.
+    // Omitir a chave em templates fixos preserva o contrato dos avisos antigos.
     const resposta = await fetch(`${CLINT_BASE}/v2/messages/template`, {
       method: "POST",
       headers: { "api-token": token, "content-type": "application/json" },
@@ -322,6 +338,9 @@ async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnv
         channel_account_id: canalId,
         contact_id: contato.id,
         template_id: templateId,
+        ...(mensagem.parametrosDeTemplate?.length
+          ? { parameters: mensagem.parametrosDeTemplate }
+          : {}),
       }),
       signal: mensagem.sinal,
     });

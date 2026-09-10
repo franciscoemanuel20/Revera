@@ -126,10 +126,9 @@ export default async function ProdutoPage({
     }));
 
   // Galeria do produto: a principal primeiro, depois a ordem cadastrada.
-  // Só imagem — `product_media` também aceita 'video', que a galeria da
-  // página ainda não sabe tocar (o <Image> do Next quebraria com um .mp4).
+  // Cada item mantém sua variante; a ilha do cliente faz o recorte quando
+  // uma cor é escolhida, para nunca vazar foto/vídeo de outra cor.
   const fotos = (produto.product_media ?? [])
-    .filter((m) => m.type === "image")
     .sort((a, b) => {
       if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
       return (a.sort_order as number) - (b.sort_order as number);
@@ -137,6 +136,7 @@ export default async function ProdutoPage({
     .map((m) => ({
       src: m.url as string,
       alt: (m.alt_text as string | null) ?? produto.name,
+      tipo: (m.type as "image" | "video") ?? "image",
       /**
        * A foto pertence a uma VARIANTE específica? (29/08/2026)
        *

@@ -6,6 +6,7 @@ import { CartProvider } from "@/components/cart/CartProvider";
 import { Footer } from "@/components/ui/Footer";
 import { Header } from "@/components/ui/Header";
 import { baseUrl } from "@/lib/config/urls";
+import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
 import "./globals.css";
 
 // Fraunces: display serifado com itálico óptico, para headline e nome de
@@ -83,11 +84,12 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const logo = await urlDaFotoDoSite("/media/marca/logo-revera.png");
   return (
     <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
       <body className="flex min-h-screen flex-col">
@@ -106,9 +108,9 @@ export default function RootLayout({
               empurra o conteúdo sozinho. Cada página pública compensa com
               padding-top próprio (HEADER_HEIGHT_PX), igual o hero da home já
               fazia antes de o header existir. */}
-          <Header />
+          <Header logo={logo} />
           <div className="flex-1">{children}</div>
-          <Footer />
+          <Footer logo={logo} />
         </CartProvider>
       </body>
     </html>

@@ -31,10 +31,12 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/server";
+import { baseUrl } from "@/lib/config/urls";
 import { enviarWhatsApp, modoWhatsApp } from "./whatsapp";
 import {
   comDDI,
   decidir,
+  etapaDaRecuperacao,
   dentroDoHorario,
   limitesDoAmbiente,
   type Limites,
@@ -42,7 +44,14 @@ import {
   type PedidoCandidato,
 } from "./carrinho-regra";
 
-const KIND = "carrinho_abandonado";
+const KIND_LEGADO = "carrinho_abandonado";
+const KIND_PRIMEIRO = "checkout_abandonado_primeiro";
+const KIND_ULTIMO = "checkout_abandonado_ultimo";
+type Etapa = "primeiro" | "ultimo";
+
+function kindDaEtapa(etapa: Etapa): string {
+  return etapa === "primeiro" ? KIND_PRIMEIRO : KIND_ULTIMO;
+}
 
 export interface ResultadoRodada {
   executou: boolean;
@@ -62,8 +71,21 @@ export interface ResultadoRodada {
   >;
 }
 
-function templateDoCarrinho(): string {
-  return (process.env.CLINT_TEMPLATE_CARRINHO_ID ?? "").trim();
+function templateDoCarrinho(etapa: Etapa): string {
+  return (
+    process.env[
+      etapa === "primeiro"
+        ? "CLINT_TEMPLATE_CARRINHO_PRIMEIRO_ID"
+        : "CLINT_TEMPLATE_CARRINHO_ULTIMO_ID"
+    ] ?? ""
+  ).trim();
+}
+
+function textoDaEtapa(etapa: Etapa, link: string): string {
+  if (etapa === "primeiro") {
+    return `Olá! Vi que seu pedido na Reverá ficou aguardando a finalização do pagamento. Se você teve qualquer dificuldade, estou aqui para ajudar. Você pode retomar com segurança por este link: ${link}`;
+  }
+  return `Olá! Passando para lembrar que seu pedido da Reverá ainda está aguardando pagamento. Se quiser concluir, use este link: ${link}. Se precisar de ajuda, é só responder por aqui.`;
 }
 
 /**
@@ -89,14 +111,6 @@ export async function rodadaDeCarrinhoAbandonado(
     // esta trava sai junto com a implementação.
     if (modo === "meta") {
       return { ...vazio, motivo: "modo meta não suportado neste fluxo" };
-    }
-
-    const template = templateDoCarrinho();
-    if (modo === "clint" && !template) {
-      // Mesma trava do aviso de contato: sem template próprio o envio cairia
-      // no `CLINT_TEMPLATE_ID`, que é o aviso INTERNO de venda paga — o
-      // cliente receberia "nova venda, abra o painel".
-      return { ...vazio, motivo: "CLINT_TEMPLATE_CARRINHO_ID não definida" };
     }
 
     const limites = limitesDoAmbiente();
@@ -128,7 +142,7 @@ export async function rodadaDeCarrinhoAbandonado(
     const { count: hoje, error: erroConta } = await supabase
       .from("order_notifications")
       .select("id", { count: "exact", head: true })
-      .eq("kind", KIND)
+      .in("kind", [KIND_LEGADO, KIND_PRIMEIRO, KIND_ULTIMO])
       .gte("created_at", desdeDia.toISOString());
 
     if (erroConta || hoje === null) {
@@ -186,7 +200,7 @@ export async function rodadaDeCarrinhoAbandonado(
 
       resultado.vistos += leitura.candidatos.length;
 
-      for (const pedido of leitura.candidatos) {
+      for (const { pedido, etapa } of leitura.candidatos) {
         if (reservados >= limites.maxPorRodada) break;
         if (hoje + reservados >= limites.maxPorDia) break;
 
@@ -202,7 +216,9 @@ export async function rodadaDeCarrinhoAbandonado(
         continue;
       }
 
-      if (telefonesDaRodada.has(destino)) {
+      const telefonesAvisadosNestaEtapa =
+        etapa === "primeiro" ? historico.telefonesComPrimeiro : historico.telefonesComUltimo;
+      if (telefonesDaRodada.has(destino) || telefonesAvisadosNestaEtapa.has(destino.replace(/^55/, ""))) {
         conta("mesma_pessoa_nesta_rodada");
         continue;
       }
@@ -226,7 +242,9 @@ export async function rodadaDeCarrinhoAbandonado(
       if (recente.erro) {
         return { ...vazio, motivo: "não deu para conferir o histórico antes de enviar" };
       }
-      if (recente.telefonesAvisados.has(destino.replace(/^55/, ""))) {
+      const recentesNestaEtapa =
+        etapa === "primeiro" ? recente.telefonesComPrimeiro : recente.telefonesComUltimo;
+      if (recentesNestaEtapa.has(destino.replace(/^55/, ""))) {
         conta("mesma_pessoa_nesta_rodada");
         continue;
       }
@@ -240,7 +258,7 @@ export async function rodadaDeCarrinhoAbandonado(
       const { count: agoraHoje, error: erroRecontagem } = await supabase
         .from("order_notifications")
         .select("id", { count: "exact", head: true })
-        .eq("kind", KIND)
+        .in("kind", [KIND_LEGADO, KIND_PRIMEIRO, KIND_ULTIMO])
         .gte("created_at", desdeDia.toISOString());
       if (erroRecontagem || agoraHoje === null || agoraHoje >= limites.maxPorDia) break;
 
@@ -289,7 +307,7 @@ export async function rodadaDeCarrinhoAbandonado(
       // sobrepor), quem perder o INSERT sabe disso antes de gastar mensagem.
       const { error: erroReserva } = await supabase
         .from("order_notifications")
-        .insert({ order_id: pedido.id, kind: KIND, channel: "whatsapp" });
+        .insert({ order_id: pedido.id, kind: kindDaEtapa(etapa), channel: "whatsapp" });
 
       if (erroReserva) {
         // 23505 = já reservado. Qualquer outro erro (inclusive o CHECK antigo,
@@ -304,7 +322,20 @@ export async function rodadaDeCarrinhoAbandonado(
       }
 
       reservados += 1;
+      // Mesmo se um pedido estiver no primeiro aviso e outro no último,
+      // a pessoa recebe no máximo UMA mensagem nesta execução.
       telefonesDaRodada.add(destino);
+
+      const template = templateDoCarrinho(etapa);
+      if (modo === "clint" && !template) {
+        await supabase
+          .from("order_notifications")
+          .update({ last_error: `CLINT_TEMPLATE_CARRINHO_${etapa === "primeiro" ? "PRIMEIRO" : "ULTIMO"}_ID não definida` })
+          .eq("order_id", pedido.id)
+          .eq("kind", kindDaEtapa(etapa));
+        conta("envio_recusado");
+        continue;
+      }
 
       const envio = await enviarWhatsApp({
         // Com DDI, sempre. Sem isso a Clint cria um contato novo com o número
@@ -313,8 +344,11 @@ export async function rodadaDeCarrinhoAbandonado(
         // Quem recebe aqui é o CLIENTE. Sem isto ele entraria no CRM como
         // "Equipe Reverá", o padrão do aviso interno.
         nomeDoContato: (pedido.nome ?? "").trim() || "Cliente Reverá",
-        texto: "Você começou uma compra na Reverá e não finalizou. Posso ajudar?",
-        parametros: [],
+        texto: textoDaEtapa(etapa, pedido.linkDeRetomada),
+        // Os templates aprovados precisam de um único {{1}}, a URL opaca
+        // para retomar este pedido. Ela nunca é escrita em logs do banco.
+        parametros: [pedido.linkDeRetomada],
+        parametrosDeTemplate: [pedido.linkDeRetomada],
         template,
       });
 
@@ -327,7 +361,7 @@ export async function rodadaDeCarrinhoAbandonado(
             last_error: null,
           })
           .eq("order_id", pedido.id)
-          .eq("kind", KIND);
+          .eq("kind", kindDaEtapa(etapa));
 
         resultado.enviados += 1;
 
@@ -356,7 +390,7 @@ export async function rodadaDeCarrinhoAbandonado(
         .from("order_notifications")
         .update({ last_error: motivo })
         .eq("order_id", pedido.id)
-        .eq("kind", KIND);
+        .eq("kind", kindDaEtapa(etapa));
         conta("envio_recusado");
       }
 
@@ -433,8 +467,9 @@ const PAGINA = 50;
 const MAX_PAGINAS = 10;
 
 interface Historico {
-  pedidosAvisados: Set<string>;
-  telefonesAvisados: Set<string>;
+  porPedido: Map<string, Array<{ kind: string; createdAt: string; sentAt: string | null }>>;
+  telefonesComPrimeiro: Set<string>;
+  telefonesComUltimo: Set<string>;
   desde: string;
 }
 
@@ -455,8 +490,8 @@ async function lerHistorico(
 
   const { data: avisos, error: erroAvisos } = await supabase
     .from("order_notifications")
-    .select("order_id")
-    .eq("kind", KIND)
+    .select("order_id, kind, created_at, sent_at")
+    .in("kind", [KIND_LEGADO, KIND_PRIMEIRO, KIND_ULTIMO])
     .gte("created_at", desde);
 
   if (erroAvisos || !avisos) {
@@ -464,30 +499,46 @@ async function lerHistorico(
     return { erro: true };
   }
 
-  const pedidosAvisados = new Set(avisos.map((l: { order_id: string }) => l.order_id));
-  const telefonesAvisados = new Set<string>();
+  const porPedido = new Map<string, Array<{ kind: string; createdAt: string; sentAt: string | null }>>();
+  for (const aviso of avisos as Array<{
+    order_id: string;
+    kind: string;
+    created_at: string;
+    sent_at: string | null;
+  }>) {
+    const lista = porPedido.get(aviso.order_id) ?? [];
+    lista.push({ kind: aviso.kind, createdAt: aviso.created_at, sentAt: aviso.sent_at });
+    porPedido.set(aviso.order_id, lista);
+  }
+  const telefonesComPrimeiro = new Set<string>();
+  const telefonesComUltimo = new Set<string>();
 
-  if (pedidosAvisados.size > 0) {
+  if (porPedido.size > 0) {
     const { data: pedidos, error: erroPedidos } = await supabase
       .from("orders")
-      .select("customers ( phone )")
-      .in("id", [...pedidosAvisados]);
+      .select("id, customers ( phone )")
+      .in("id", [...porPedido.keys()]);
 
     if (erroPedidos || !pedidos) {
       console.error("[carrinho] telefones já avisados ilegíveis", erroPedidos?.message);
       return { erro: true };
     }
 
-    for (const linha of pedidos) {
+    for (const linha of pedidos as Array<{ id: string; customers: { phone: string | null } | { phone: string | null }[] | null }>) {
       const c = (linha as { customers: { phone: string | null } | { phone: string | null }[] | null })
         .customers;
       const cliente = Array.isArray(c) ? c[0] : c;
       const digitos = (cliente?.phone ?? "").replace(/\D/g, "");
-      if (digitos) telefonesAvisados.add(digitos);
+      if (!digitos) continue;
+      const eventos = porPedido.get(linha.id) ?? [];
+      if (eventos.some((e) => e.kind === KIND_LEGADO || e.kind === KIND_PRIMEIRO)) {
+        telefonesComPrimeiro.add(digitos);
+      }
+      if (eventos.some((e) => e.kind === KIND_ULTIMO)) telefonesComUltimo.add(digitos);
     }
   }
 
-  return { erro: false, pedidosAvisados, telefonesAvisados, desde };
+  return { erro: false, porPedido, telefonesComPrimeiro, telefonesComUltimo, desde };
 }
 
 /**
@@ -501,13 +552,19 @@ async function lerPagina(
   limites: Limites,
   pagina: number,
   historico: Historico
-): Promise<{ erro: true } | { erro: false; candidatos: PedidoCandidato[]; fim: boolean }> {
+): Promise<{
+  erro: true;
+} | {
+  erro: false;
+  candidatos: Array<{ pedido: PedidoCandidato & { linkDeRetomada: string }; etapa: Etapa }>;
+  fim: boolean;
+}> {
   const maduroAte = new Date(agora.getTime() - limites.esperaMinutos * 60_000).toISOString();
   const de = pagina * PAGINA;
 
   const { data, error } = await supabase
     .from("orders")
-    .select("id, created_at, currency, customers ( phone, email, full_name )")
+    .select("id, created_at, currency, access_token, customers ( phone, email, full_name )")
     .eq("payment_status", "pending")
     // Cancelar NÃO mexe em payment_status: a action do painel grava só
     // `canceled_at` (admin/pedidos/actions.ts). Sem este filtro, um pedido que
@@ -528,6 +585,7 @@ async function lerPagina(
     id: string;
     created_at: string;
     currency: string | null;
+    access_token: string | null;
     customers:
       | { phone: string | null; email: string | null; full_name: string | null }
       | { phone: string | null; email: string | null; full_name: string | null }[]
@@ -535,21 +593,39 @@ async function lerPagina(
   };
 
   const linhas = (data ?? []) as Linha[];
-  const candidatos: PedidoCandidato[] = [];
+  const candidatos: Array<{ pedido: PedidoCandidato & { linkDeRetomada: string }; etapa: Etapa }> = [];
 
   for (const linha of linhas) {
-    if (historico.pedidosAvisados.has(linha.id)) continue;
+    const eventos = historico.porPedido.get(linha.id) ?? [];
+    const primeiro = eventos.find((e) => e.kind === KIND_PRIMEIRO || e.kind === KIND_LEGADO);
+    const etapa = etapaDaRecuperacao(
+      {
+        primeiroCriadoEm: primeiro?.createdAt,
+        primeiroEnviadoEm: primeiro?.sentAt,
+        ultimoReservado: eventos.some((e) => e.kind === KIND_ULTIMO),
+      },
+      agora,
+      limites
+    );
+    if (!etapa) continue;
     const c = linha.customers;
     const cliente = Array.isArray(c) ? c[0] : c;
     const digitos = (cliente?.phone ?? "").replace(/\D/g, "");
-    if (digitos && historico.telefonesAvisados.has(digitos)) continue;
+    const avisadosNestaEtapa =
+      etapa === "primeiro" ? historico.telefonesComPrimeiro : historico.telefonesComUltimo;
+    if (digitos && avisadosNestaEtapa.has(digitos)) continue;
+    if (!linha.access_token) continue;
     candidatos.push({
-      id: linha.id,
-      criadoEm: linha.created_at,
-      telefone: cliente?.phone ?? null,
-      email: cliente?.email ?? null,
-      nome: cliente?.full_name ?? null,
-      moeda: linha.currency,
+      etapa,
+      pedido: {
+        id: linha.id,
+        criadoEm: linha.created_at,
+        telefone: cliente?.phone ?? null,
+        email: cliente?.email ?? null,
+        nome: cliente?.full_name ??null,
+        moeda: linha.currency,
+        linkDeRetomada: `${baseUrl()}/checkout/pagamento?pedido=${encodeURIComponent(linha.access_token)}`,
+      },
     });
   }
 

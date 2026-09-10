@@ -19,6 +19,7 @@ let pedidos: Array<{
   id: string;
   created_at: string;
   currency: string;
+  access_token: string;
   customers: { phone: string; email: string; full_name: string };
 }> = [];
 let reservas = 0;
@@ -27,6 +28,8 @@ let contagemDoDia = 0;
 let jaComprouPorOutro = false;
 /** Simula histórico de avisos ilegível (erro de consulta). */
 let historicoQuebrado = false;
+let pagamentoAtual: "pending" | "paid" = "pending";
+let pedidoCancelado = false;
 
 /**
  * Supabase falso: cada método encadeável devolve o próprio objeto, e o
@@ -52,7 +55,7 @@ vi.mock("@/lib/supabase/server", () => {
               return resolver({ data: [], error: null });
             }
             if (estado.single) {
-              return resolver({ data: { payment_status: "pending", canceled_at: null }, error: null });
+              return resolver({ data: { payment_status: pagamentoAtual, canceled_at: pedidoCancelado ? "2026-09-05T17:00:00Z" : null }, error: null });
             }
             // A consulta de "pagou por outro pedido" filtra por paid.
             if (estado.buscaPagos) {
@@ -90,17 +93,21 @@ beforeEach(() => {
   contagemDoDia = 0;
   jaComprouPorOutro = false;
   historicoQuebrado = false;
+  pagamentoAtual = "pending";
+  pedidoCancelado = false;
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   process.env.WHATSAPP_PROVIDER = "clint";
   process.env.CLINT_API_TOKEN = "t";
   process.env.CLINT_CANAL_ID = "c";
-  process.env.CLINT_TEMPLATE_CARRINHO_ID = "template-carrinho";
+  process.env.CLINT_TEMPLATE_CARRINHO_PRIMEIRO_ID = "template-carrinho-primeiro";
+  process.env.CLINT_TEMPLATE_CARRINHO_ULTIMO_ID = "template-carrinho-ultimo";
   // dez candidatos elegíveis, todos com 2h de idade
   // Pessoas DIFERENTES: o teto por rodada é o que se testa aqui. Telefones
   // iguais são o outro teste, o da dedupe por pessoa.
   pedidos = Array.from({ length: 10 }, (_, i) => ({
     id: `pedido-${i}`,
+    access_token: `token-${i}`,
     created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
     currency: "BRL",
     customers: { phone: `4899988${String(i).padStart(4, "0")}`, email: `c${i}@exemplo.com`, full_name: `Cliente ${i}` },
@@ -159,6 +166,30 @@ describe("rodada com a Clint recusando tudo", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("relê o pedido e não envia se ele foi pago antes da reserva", async () => {
+    pagamentoAtual = "paid";
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.pulados.mudou_de_estado).toBe(10);
+    expect(reservas).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("relê o pedido e não envia se ele foi cancelado antes da reserva", async () => {
+    pedidoCancelado = true;
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.pulados.mudou_de_estado).toBe(10);
+    expect(reservas).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   /**
    * Achado do Codex (8ª rodada): quem tenta pagar três vezes gera três
    * pedidos e três customers. A reserva por `order_id` impede repetir pelo
@@ -168,6 +199,7 @@ describe("rodada com a Clint recusando tudo", () => {
   it("três tentativas da mesma pessoa viram UM toque só", async () => {
     pedidos = Array.from({ length: 3 }, (_, i) => ({
       id: `tentativa-${i}`,
+      access_token: `token-tentativa-${i}`,
       created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
       currency: "BRL",
       customers: { phone: "48999887766", email: "mesma@pessoa.com", full_name: "Maria Souza" },
@@ -208,6 +240,7 @@ describe("rodada com a Clint recusando tudo", () => {
     pedidos = [
       {
         id: "pedido-unico",
+        access_token: "token-unico",
         created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
         currency: "BRL",
         customers: { phone: "48999887766", email: "maria@exemplo.com", full_name: "Maria Souza" },

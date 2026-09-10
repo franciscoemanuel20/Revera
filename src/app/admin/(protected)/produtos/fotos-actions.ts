@@ -4,7 +4,15 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
-import { motivoDeImagemInvalida, tipoDeMidiaPelaUrl } from "@/lib/conteudo/midia";
+import {
+  BUCKET_MIDIA,
+  TAMANHO_MAXIMO_BYTES,
+  TAMANHO_MAXIMO_BYTES_VIDEO,
+  motivoDeImagemInvalida,
+  nomeArquivoSeguro,
+  tipoAceito,
+  tipoDeMidiaPelaUrl,
+} from "@/lib/conteudo/midia";
 
 /**
  * Server Actions das FOTOS DO PRODUTO (/admin/produtos/[id]) — 03/09/2026.
@@ -47,6 +55,42 @@ const fotoSchema = z.object({
 
 export type FotoProdutoEntrada = z.input<typeof fotoSchema>;
 export type ResultadoFoto = { error: string } | { ok: true; id: string };
+
+/**
+ * Envia um arquivo diretamente para a variante que está sendo editada.
+ * A associação ao produto continua sendo criada pela mesma action de salvar
+ * abaixo, para que upload e cadastro usem as mesmas validações de escopo.
+ */
+export async function enviarMidiaProduto(formData: FormData): Promise<{ error: string } | { ok: true; url: string }> {
+  const arquivo = formData.get("arquivo");
+  if (!(arquivo instanceof File) || arquivo.size === 0) {
+    return { error: "Escolha um arquivo antes de enviar." };
+  }
+  if (!tipoAceito(arquivo.type)) {
+    return { error: "Formato não aceito. Envie JPG, PNG, WEBP, AVIF ou vídeo MP4." };
+  }
+
+  const limite = arquivo.type.startsWith("video/") ? TAMANHO_MAXIMO_BYTES_VIDEO : TAMANHO_MAXIMO_BYTES;
+  if (arquivo.size > limite) {
+    return { error: arquivo.type.startsWith("video/") ? "O vídeo pode ter no máximo 25 MB." : "A foto pode ter no máximo 5 MB." };
+  }
+
+  const supabase = await createClient();
+  const caminho = `produtos/${nomeArquivoSeguro(arquivo.name, arquivo.type)}`;
+  const { error } = await supabase.storage
+    .from(BUCKET_MIDIA)
+    .upload(caminho, await arquivo.arrayBuffer(), { contentType: arquivo.type, upsert: false });
+
+  if (error) {
+    return {
+      error: error.message?.toLowerCase().includes("bucket not found")
+        ? "A biblioteca de mídias ainda não foi configurada no banco."
+        : "Não foi possível enviar o arquivo agora. Tente de novo.",
+    };
+  }
+
+  return { ok: true, url: supabase.storage.from(BUCKET_MIDIA).getPublicUrl(caminho).data.publicUrl };
+}
 
 export async function salvarFotoProduto(entrada: FotoProdutoEntrada): Promise<ResultadoFoto> {
   const analise = fotoSchema.safeParse(entrada);
@@ -94,19 +138,24 @@ export async function salvarFotoProduto(entrada: FotoProdutoEntrada): Promise<Re
    * SEM foto nenhuma isso deixava zero principais, e aí quem abre a página é
    * quem o `sort_order` sortear. Com uma foto só não há decisão a proteger.
    */
-  let isPrimary = dados.isPrimary;
+  const tipo = tipoDeMidiaPelaUrl(dados.url);
+  // Vídeo não disputa capa: a foto principal é sempre uma imagem.
+  let isPrimary = dados.isPrimary && tipo === "image";
   if (!dados.id && !isPrimary) {
-    const { count } = await supabase
+    let contar = supabase
       .from("product_media")
       .select("id", { count: "exact", head: true })
-      .eq("product_id", dados.productId);
+      .eq("product_id", dados.productId)
+      .eq("type", "image");
+    contar = dados.variantId ? contar.eq("variant_id", dados.variantId) : contar.is("variant_id", null);
+    const { count } = await contar;
     if ((count ?? 0) === 0) isPrimary = true;
   }
 
   const linha = {
     product_id: dados.productId,
     variant_id: dados.variantId,
-    type: tipoDeMidiaPelaUrl(dados.url),
+    type: tipo,
     url: dados.url,
     alt_text: dados.altText,
     sort_order: dados.sortOrder,
@@ -146,14 +195,18 @@ export async function salvarFotoProduto(entrada: FotoProdutoEntrada): Promise<Re
    * A galeria ordena por `is_primary` e depois por `sort_order` — com duas
    * fotos marcadas como principal, qual abre primeiro vira sorteio do banco.
    * O schema não tem índice único para isso, então quem garante é esta linha:
-   * marcou uma, as outras deste produto desmarcam.
+   * marcou uma, as outras DA MESMA VARIANTE desmarcam. Cada cor pode ter
+   * sua própria capa; uma capa da Cor 2 jamais deve mexer na Cor 1B.
    */
   if (isPrimary) {
-    const { error: erroDesmarcar } = await supabase
+    let desmarcar = supabase
       .from("product_media")
       .update({ is_primary: false })
       .eq("product_id", dados.productId)
+      .eq("type", "image")
       .neq("id", salva.id);
+    desmarcar = dados.variantId ? desmarcar.eq("variant_id", dados.variantId) : desmarcar.is("variant_id", null);
+    const { error: erroDesmarcar } = await desmarcar;
 
     // Se a segunda metade falhar o produto fica com DUAS principais, e qual
     // abre a página vira sorteio do banco. Não dá para esconder isso atrás de
@@ -220,13 +273,15 @@ export async function excluirFotoProduto(
    * primeira da ordem, que é a que já apareceria primeiro na galeria.
    */
   if (foto.is_primary) {
-    const { data: proxima, error: erroBusca } = await supabase
+    let proximaQuery = supabase
       .from("product_media")
       .select("id")
       .eq("product_id", analise.data.productId)
+      .eq("type", "image")
       .order("sort_order")
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    proximaQuery = foto.variant_id ? proximaQuery.eq("variant_id", foto.variant_id) : proximaQuery.is("variant_id", null);
+    const { data: proxima, error: erroBusca } = await proximaQuery.maybeSingle();
 
     const { error: erroPromocao } = proxima
       ? await supabase.from("product_media").update({ is_primary: true }).eq("id", proxima.id)

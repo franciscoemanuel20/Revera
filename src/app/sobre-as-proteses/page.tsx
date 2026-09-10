@@ -105,7 +105,7 @@ export default async function SobreAsProtesesPage() {
           // para as chaves, e `t()` só aceita ChaveDeTexto — que é
           // exatamente a trava que impede um erro de digitação virar um
           // espaço em branco na página (ver o cabeçalho de registro.ts).
-        ] as const).map((item) => (
+        ] as const).filter((item) => Boolean(t(item.foto))).map((item) => (
           <div
             key={item.foto}
             className="relative aspect-[4/3] overflow-hidden rounded-lg border border-sand bg-paper p-2"

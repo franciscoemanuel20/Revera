@@ -1,84 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
-import { BUCKET_MIDIA, formatarBytes } from "@/lib/conteudo/midia";
 import { listarFotosDoRepositorio } from "@/lib/conteudo/fotos-do-repositorio";
-import { MidiaManager, type FotoEnviada } from "./MidiaManager";
+import { FotosDoSiteManager, type FotoGerenciavel } from "./FotosDoSiteManager";
 
 export default async function MidiaPage() {
   const supabase = await createClient();
 
-  // list("") pede o nível raiz do bucket. enviarImagem (actions.ts) nunca
-  // grava em subpasta, então isto já é a lista inteira — não precisa
-  // percorrer recursivamente como a varredura de public/media abaixo.
-  const { data: objetos, error: erroStorage } = await supabase.storage
-    .from(BUCKET_MIDIA)
-    .list("", { sortBy: { column: "created_at", order: "desc" } });
-
-  const fotosEnviadas: FotoEnviada[] = (objetos ?? [])
-    // list() também devolve "pastas" nesse formato (sem metadata) quando
-    // existirem — filtrar por metadata presente garante que só arquivo de
-    // verdade apareça na grade, mesmo que alguém crie uma subpasta um dia.
-    .filter((item) => item.metadata != null)
-    .map((item) => {
-      const metadata = item.metadata as { size?: number; mimetype?: string } | null;
-      return {
-        caminho: item.name,
-        nome: item.name,
-        tamanho: metadata?.size ?? 0,
-        tipo: metadata?.mimetype ?? "application/octet-stream",
-        criadoEm: item.created_at ?? new Date().toISOString(),
-        url: supabase.storage.from(BUCKET_MIDIA).getPublicUrl(item.name).data.publicUrl,
-      };
-    });
-
   const fotosDoRepositorio = await listarFotosDoRepositorio();
+  const { data, error } = await supabase.from("site_media_assets").select("id, source_path, storage_path, url, nome, tamanho, tipo, ativo").order("created_at", { ascending: false });
+  const fotos = (data ?? []) as FotoGerenciavel[];
 
   return (
     <div className="flex flex-col gap-10 pb-16">
       <h1 className="font-display text-2xl text-ink">Biblioteca de fotos</h1>
 
-      {erroStorage ? (
+      {error ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Não foi possível carregar as fotos enviadas pelo painel. Se isto persistir, confira se a
-          migration 00000000000012_conteudo_editavel.sql já foi aplicada no Supabase — é ela que cria o
-          espaço de armazenamento ("site-media") usado por esta tela.
+          Não foi possível carregar a biblioteca. Aplique a migration 19 no Supabase e recarregue esta página.
         </p>
       ) : (
-        <MidiaManager fotosIniciais={fotosEnviadas} />
+        <FotosDoSiteManager originais={fotosDoRepositorio} fotosIniciais={fotos} />
       )}
-
-      <section className="flex flex-col gap-4">
-        <div>
-          <h2 className="font-display text-xl text-ink">Fotos que vieram com o site</h2>
-          <p className="text-sm text-ink/70">
-            Estas fotos fazem parte do código do site, não do painel — por isso não há botão de
-            excluir aqui. As fotos das páginas que já podem ser trocadas (as três de &quot;O que é a
-            base&quot;, a foto e a capa do vídeo da home) ficam na aba{" "}
-            <a href="/admin/textos" className="underline decoration-gold underline-offset-4">
-              Textos e fotos
-            </a>
-            ; as demais ainda exigem um deploy.
-          </p>
-        </div>
-
-        {fotosDoRepositorio.length === 0 ? (
-          <p className="text-sm text-ink/60">Nenhuma foto encontrada em public/media.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {fotosDoRepositorio.map((foto) => (
-              <figure key={foto.caminho} className="flex flex-col gap-2 rounded-md border border-sand p-2">
-                {/* eslint-disable-next-line @next/next/no-img-element -- arquivo
-                    estático de public/, não vale a pena passar pelo otimizador
-                    de imagem do Next só para uma tela interna de conferência. */}
-                <img src={foto.caminho} alt="" className="aspect-square w-full rounded object-cover" />
-                <figcaption className="truncate text-xs text-ink" title={foto.caminho}>
-                  {foto.caminho}
-                </figcaption>
-                <span className="text-xs text-ink/60">{formatarBytes(foto.tamanho)}</span>
-              </figure>
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 }
