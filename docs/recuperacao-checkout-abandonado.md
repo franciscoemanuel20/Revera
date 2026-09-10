@@ -22,10 +22,11 @@ segunda cobrança.
 
 1. Aplique `supabase/migrations/00000000000021_recuperacao_checkout_segundo_lembrete.sql`
    (ou `supabase/aplicar/RECUPERACAO-CHECKOUT-21.sql`) antes do deploy.
-2. Na Clint, aprove dois templates de marketing com **um único campo `{{1}}`**:
+2. Na Clint, envie para aprovação dois templates de marketing com **um único
+   campo `{{1}}`**. O campo não pode ficar no início ou no fim do texto:
 
-   - Primeiro: `Olá! Vi que seu pedido na Reverá ficou aguardando a finalização do pagamento. Se você teve qualquer dificuldade, estou aqui para ajudar. Você pode retomar com segurança por este link: {{1}}`
-   - Último: `Olá! Passando para lembrar que seu pedido da Reverá ainda está aguardando pagamento. Se quiser concluir, use este link: {{1}}. Se precisar de ajuda, é só responder por aqui.`
+   - Primeiro: `Olá! Vi que seu pedido na Reverá ficou aguardando a finalização do pagamento. Se você teve qualquer dificuldade, estamos aqui para ajudar. Acesse {{1}} para retomar seu pagamento com segurança.`
+   - Último: `Olá! Seu pedido da Reverá ainda está aguardando pagamento. Para concluir com segurança, acesse {{1}}. Se precisar de ajuda, é só responder por aqui.`
 
 3. Guarde somente os IDs dos templates no cofre e exporte para a produção:
 
