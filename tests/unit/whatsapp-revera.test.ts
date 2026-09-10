@@ -12,8 +12,11 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
+  MENSAGEM_PAGAMENTO_CONFIRMADO,
   WHATSAPP_REVERA,
   linkWhatsApp,
+  linkWhatsAppPagamentoConfirmado,
+  mensagemPagamentoConfirmado,
   whatsappLegivel,
 } from "../../src/lib/config/whatsapp";
 import { destinoDoAviso } from "../../src/lib/notificacoes/venda-paga";
@@ -36,6 +39,23 @@ describe("WhatsApp da Reverá", () => {
     expect(linkWhatsApp("Olá, tudo bem?")).toBe(
       "https://wa.me/5512981409901?text=Ol%C3%A1%2C%20tudo%20bem%3F"
     );
+  });
+
+  it("abre o WhatsApp da Reverá com a mensagem de rastreio após pagamento", () => {
+    expect(MENSAGEM_PAGAMENTO_CONFIRMADO).toBe(
+      "Olá! Meu pagamento foi confirmado e gostaria de receber o código de rastreio do meu pedido, por favor."
+    );
+    expect(linkWhatsAppPagamentoConfirmado()).toBe(
+      "https://wa.me/5512981409901?text=Ol%C3%A1!%20Meu%20pagamento%20foi%20confirmado%20e%20gostaria%20de%20receber%20o%20c%C3%B3digo%20de%20rastreio%20do%20meu%20pedido%2C%20por%20favor."
+    );
+  });
+
+  it.each([
+    ["en", "Hello! My payment has been confirmed and I would like to receive my order tracking code, please."],
+    ["es", "Hola! Mi pago fue confirmado y me gustaría recibir el código de seguimiento de mi pedido, por favor."],
+  ] as const)("traduz a mensagem pós-pagamento para %s", (idioma, esperada) => {
+    expect(mensagemPagamentoConfirmado(idioma)).toBe(esperada);
+    expect(linkWhatsAppPagamentoConfirmado(idioma)).toContain(encodeURIComponent(esperada));
   });
 
   it("escreve o número do jeito que se lê aqui e lá fora", () => {

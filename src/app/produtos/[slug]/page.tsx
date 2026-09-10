@@ -96,6 +96,7 @@ export default async function ProdutoPage({
     supabase
       .from("colors")
       .select("id, code, name, hex_preview, photo_url")
+      .eq("is_active", true)
       .order("sort_order"),
     supabase
       .from("quantity_discount_rules")

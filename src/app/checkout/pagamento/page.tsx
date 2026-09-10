@@ -334,7 +334,10 @@ export default async function PagamentoPage({
       customerPhone: cliente?.phone ?? undefined,
       // PORTA 2 da confirmação: o cliente volta para cá depois de pagar, e
       // essa página confirma com o gateway. Ver src/lib/payments/confirmar.ts.
-      redirectUrl: `${base}/pedido/${accessToken}`,
+      // O retorno é apenas um sinal de navegação para abrir o WhatsApp. A
+      // página do pedido ainda reconfirma o pagamento antes de agir; a query
+      // nunca aprova dinheiro por si só.
+      redirectUrl: `${base}/pedido/${accessToken}?retorno=pagamento`,
       // PORTA 1: o aviso do gateway. Segredo no caminho, nunca em query.
       webhookUrl: urlDoWebhook(base),
       // O frete entra como LINHA, não fica embutido no preço da peça.

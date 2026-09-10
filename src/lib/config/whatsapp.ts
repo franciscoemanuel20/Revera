@@ -78,3 +78,31 @@ export function whatsappLegivel(internacional = false): string {
 export function linkWhatsApp(mensagem: string): string {
   return `https://wa.me/${WHATSAPP_REVERA}?text=${encodeURIComponent(mensagem)}`;
 }
+
+/**
+ * Mensagem do comprador logo depois de uma confirmação de pagamento real.
+ * Não leva número de pedido, valores ou qualquer dado que possa ser exposto
+ * se o link for encaminhado: a equipe identifica a compra no atendimento.
+ */
+export const MENSAGEM_PAGAMENTO_CONFIRMADO =
+  "Olá! Meu pagamento foi confirmado e gostaria de receber o código de rastreio do meu pedido, por favor.";
+
+export type IdiomaDaMensagemWhatsApp = "pt" | "en" | "es";
+
+/** Mantém a conversa pós-pagamento no idioma de entrega do pedido. */
+export function mensagemPagamentoConfirmado(idioma: IdiomaDaMensagemWhatsApp = "pt"): string {
+  if (idioma === "en") {
+    return "Hello! My payment has been confirmed and I would like to receive my order tracking code, please.";
+  }
+  if (idioma === "es") {
+    return "Hola! Mi pago fue confirmado y me gustaría recibir el código de seguimiento de mi pedido, por favor.";
+  }
+  return MENSAGEM_PAGAMENTO_CONFIRMADO;
+}
+
+/** Conversa pronta para o pós-pagamento, sempre no WhatsApp da Reverá. */
+export function linkWhatsAppPagamentoConfirmado(
+  idioma: IdiomaDaMensagemWhatsApp = "pt"
+): string {
+  return linkWhatsApp(mensagemPagamentoConfirmado(idioma));
+}

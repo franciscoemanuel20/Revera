@@ -91,12 +91,25 @@ export async function adicionarItemAoCarrinho(
 
   const { data: variante } = await admin()
     .from("product_variants")
-    .select("id, is_active, stock_qty, price_cents")
+    .select("id, color_id, is_active, stock_qty, price_cents")
     .eq("id", variantId)
     .maybeSingle();
 
   if (!variante || !variante.is_active) {
     return { erro: "Esta variante não está disponível para compra." };
+  }
+
+  // Uma cor desativada no admin sai da vitrine E não pode continuar sendo
+  // adicionada por uma aba antiga ou por chamada direta à Server Action.
+  // Variante sem cor continua válida: há produtos que não usam cartela.
+  if (variante.color_id) {
+    const { data: cor } = await admin()
+      .from("colors")
+      .select("id")
+      .eq("id", variante.color_id)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (!cor) return { erro: "Esta cor não está mais disponível para compra." };
   }
 
   /**
@@ -184,9 +197,18 @@ export async function alterarQuantidadeDoItem(
 
   const { data: variante } = await admin()
     .from("product_variants")
-    .select("stock_qty")
+    .select("color_id, stock_qty")
     .eq("id", item.variant_id)
     .maybeSingle();
+  if (variante?.color_id) {
+    const { data: cor } = await admin()
+      .from("colors")
+      .select("id")
+      .eq("id", variante.color_id)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (!cor) return { erro: "Esta cor não está mais disponível para compra." };
+  }
   const estoque = (variante?.stock_qty as number | undefined) ?? 0;
 
   if (quantidade > estoque) {
@@ -331,10 +353,10 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
     new Set(Array.from(variantesPorId.values()).map((v) => v.gray_level_id as string | null).filter((id): id is string => Boolean(id)))
   );
 
-  const [{ data: produtos }, { data: cores }, { data: tamanhos }, { data: niveisGrisalho }, regrasPorProduto] =
+  const [{ data: produtos }, resultadoCores, { data: tamanhos }, { data: niveisGrisalho }, regrasPorProduto] =
     await Promise.all([
       productIds.length > 0 ? admin().from("products").select("id, name").in("id", productIds) : Promise.resolve({ data: [] }),
-      colorIds.length > 0 ? admin().from("colors").select("id, name, photo_url").in("id", colorIds) : Promise.resolve({ data: [] }),
+      colorIds.length > 0 ? admin().from("colors").select("id, name, photo_url, is_active").in("id", colorIds) : Promise.resolve({ data: [] }),
       sizeIds.length > 0 ? admin().from("sizes").select("id, label").in("id", sizeIds) : Promise.resolve({ data: [] }),
       grayLevelIds.length > 0
         ? admin().from("gray_levels").select("id, label").in("id", grayLevelIds)
@@ -342,10 +364,49 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
       buscarRegrasVigentesPorProduto(productIds),
     ]);
 
+  const cores = resultadoCores.data;
+  // Quando não há itens com cor, o atalho local não possui a chave `error`.
+  // Mantemos ambos os ramos explícitos para não confundir esse caso normal
+  // com uma falha real da consulta ao Supabase.
+  const erroCores = "error" in resultadoCores ? resultadoCores.error : null;
   const produtosPorId = new Map((produtos ?? []).map((p) => [p.id as string, p.name as string]));
   const coresPorId = new Map((cores ?? []).map((c) => [c.id as string, c]));
   const tamanhosPorId = new Map((tamanhos ?? []).map((s) => [s.id as string, s.label as string]));
   const niveisPorId = new Map((niveisGrisalho ?? []).map((g) => [g.id as string, g.label as string]));
+
+  // Esta é a lista que vale para preço, quantidade e pedido. A mesma regra
+  // precisa acontecer ANTES de somar os degraus de desconto: se uma cor foi
+  // desativada depois de entrar na sacola, ela não pode nem aparecer nem
+  // ajudar outra cor a ganhar desconto por volume.
+  // Uma indisponibilidade temporária do banco não é uma cor desativada. Sem
+  // uma leitura confiável, preservamos o carrinho até conseguir conferir de
+  // novo, em vez de apagar uma escolha válida do cliente.
+  const leituraDasCoresDisponivel = !erroCores;
+  const linhasVendaveis = itensBrutos.filter((linha) => {
+    const variante = variantesPorId.get(linha.variant_id as string);
+    if (!variante) return false;
+    if (!variante.color_id) return true;
+    if (!leituraDasCoresDisponivel) return true;
+    const cor = coresPorId.get(variante.color_id as string);
+    return Boolean(cor && cor.is_active !== false);
+  });
+
+  // Limpa a linha que ficou inválida em vez de apenas escondê-la. Assim ela
+  // não volta silenciosamente caso o admin reative a cor no futuro. O filtro
+  // é limitado ao carrinho atual, que já foi obtido pelo token do cliente.
+  const idsDeCoresIndisponiveis = itensBrutos.flatMap((linha) => {
+    const variante = variantesPorId.get(linha.variant_id as string);
+    if (!variante?.color_id) return [];
+    const cor = coresPorId.get(variante.color_id as string);
+    return !cor || cor.is_active === false ? [linha.id as string] : [];
+  });
+  if (leituraDasCoresDisponivel && idsDeCoresIndisponiveis.length > 0) {
+    await admin()
+      .from("cart_items")
+      .delete()
+      .eq("cart_id", cartId)
+      .in("id", idsDeCoresIndisponiveis);
+  }
 
   /**
    * QUANTIDADE POR PRODUTO, não por linha (29/08/2026).
@@ -369,7 +430,7 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
    * preço unitário resultante vale para todas as linhas dele.
    */
   const quantidadePorProduto = new Map<string, number>();
-  for (const linha of itensBrutos) {
+  for (const linha of linhasVendaveis) {
     const variante = variantesPorId.get(linha.variant_id as string);
     if (!variante) continue;
     const produtoId = variante.product_id as string;
@@ -379,7 +440,7 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
     );
   }
 
-  const items: CartItemView[] = itensBrutos.flatMap((linha): CartItemView[] => {
+  const items: CartItemView[] = linhasVendaveis.flatMap((linha): CartItemView[] => {
     const variante = variantesPorId.get(linha.variant_id as string);
     // Variante removida do catálogo depois de estar no carrinho — descarta
     // a linha da leitura em vez de quebrar a página; ela continua existindo

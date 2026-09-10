@@ -127,6 +127,7 @@ const NAV_ITEMS = [
   { href: "/admin", label: "Painel" },
   { href: "/admin/pedidos", label: "Vendas" },
   { href: "/admin/produtos", label: "Produtos" },
+  { href: "/admin/cores", label: "Cores" },
   { href: "/admin/precos", label: "Preços" },
   { href: "/admin/internacional", label: "Internacional" },
   { href: "/admin/solicitacoes", label: "Solicitações" },

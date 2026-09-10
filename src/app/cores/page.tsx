@@ -28,6 +28,7 @@ export default async function CoresPage() {
   const { data: colors } = await supabase
     .from("colors")
     .select("id, code, name, photo_url")
+    .eq("is_active", true)
     .order("sort_order");
 
   return (

@@ -10,6 +10,7 @@ import { LANG_HTML, textos } from "@/lib/internacional/idioma";
 import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacional/endereco";
 import { PurchaseTracker } from "./PurchaseTracker";
 import { SuportePosCompra } from "./SuportePosCompra";
+import { RedirecionarWhatsAppPagamento } from "./RedirecionarWhatsAppPagamento";
 
 export const metadata: Metadata = {
   title: "Seu pedido",
@@ -58,10 +59,13 @@ function passos(t: ReturnType<typeof textos>) {
  */
 export default async function PedidoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ retorno?: string }>;
 }) {
   const { token } = await params;
+  const { retorno } = await searchParams;
   const supabase = createAdminClient();
 
   const { data: pedido } = await supabase
@@ -156,6 +160,12 @@ export default async function PedidoPage({
       style={{ paddingTop: HEADER_HEIGHT_PX + 40 }}
     >
       {purchase ? <PurchaseTracker payload={purchase} /> : null}
+      {/* O parâmetro nasce exclusivamente no redirect_url entregue ao gateway.
+          Mesmo se alguém o copiar na URL, o componente só aparece depois de
+          `pago` ser verdade, calculado acima a partir da confirmação real. */}
+      {pago && retorno === "pagamento" ? (
+        <RedirecionarWhatsAppPagamento token={token} idioma={idioma} />
+      ) : null}
 
       <header className="flex flex-col gap-2 text-center">
         <span className="eyebrow-ink">{t.pedidoNumero(pedido.order_number as string)}</span>
