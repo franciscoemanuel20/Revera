@@ -81,11 +81,11 @@ function templateDoCarrinho(etapa: Etapa): string {
   ).trim();
 }
 
-function textoDaEtapa(etapa: Etapa, link: string): string {
+function textoDaEtapa(etapa: Etapa): string {
   if (etapa === "primeiro") {
-    return `Olá! Vi que seu pedido na Reverá ficou aguardando a finalização do pagamento. Se você teve qualquer dificuldade, estou aqui para ajudar. Você pode retomar com segurança por este link: ${link}`;
+    return "Olá! Notamos que seu pedido da Reverá ainda aguarda a finalização do pagamento. Se precisar de ajuda para concluir, responda a esta mensagem. Estamos aqui para ajudar.";
   }
-  return `Olá! Passando para lembrar que seu pedido da Reverá ainda está aguardando pagamento. Se quiser concluir, use este link: ${link}. Se precisar de ajuda, é só responder por aqui.`;
+  return "Olá! Seu pedido da Reverá continua aguardando pagamento. Se quiser concluir ou tiver alguma dúvida, responda a esta mensagem. Nossa equipe está à disposição para ajudar.";
 }
 
 /**
@@ -303,6 +303,16 @@ export async function rodadaDeCarrinhoAbandonado(
         continue;
       }
 
+      const template = templateDoCarrinho(etapa);
+      // Não reserve o pedido se o modelo ainda não foi aprovado/configurado.
+      // Reserva é idempotência de um envio que pode custar dinheiro; criá-la
+      // sem poder enviar bloquearia este pedido para sempre, mesmo depois de
+      // a Meta aprovar o modelo.
+      if (modo === "clint" && !template) {
+        conta("envio_recusado");
+        continue;
+      }
+
       // Reserva primeiro. Se duas rodadas se cruzarem (o cron pode atrasar e
       // sobrepor), quem perder o INSERT sabe disso antes de gastar mensagem.
       const { error: erroReserva } = await supabase
@@ -326,17 +336,6 @@ export async function rodadaDeCarrinhoAbandonado(
       // a pessoa recebe no máximo UMA mensagem nesta execução.
       telefonesDaRodada.add(destino);
 
-      const template = templateDoCarrinho(etapa);
-      if (modo === "clint" && !template) {
-        await supabase
-          .from("order_notifications")
-          .update({ last_error: `CLINT_TEMPLATE_CARRINHO_${etapa === "primeiro" ? "PRIMEIRO" : "ULTIMO"}_ID não definida` })
-          .eq("order_id", pedido.id)
-          .eq("kind", kindDaEtapa(etapa));
-        conta("envio_recusado");
-        continue;
-      }
-
       const envio = await enviarWhatsApp({
         // Com DDI, sempre. Sem isso a Clint cria um contato novo com o número
         // incompleto e a mensagem paga vai para quem não é o cliente.
@@ -344,11 +343,10 @@ export async function rodadaDeCarrinhoAbandonado(
         // Quem recebe aqui é o CLIENTE. Sem isto ele entraria no CRM como
         // "Equipe Reverá", o padrão do aviso interno.
         nomeDoContato: (pedido.nome ?? "").trim() || "Cliente Reverá",
-        texto: textoDaEtapa(etapa, pedido.linkDeRetomada),
-        // Os templates aprovados precisam de um único {{1}}, a URL opaca
-        // para retomar este pedido. Ela nunca é escrita em logs do banco.
-        parametros: [pedido.linkDeRetomada],
-        parametrosDeTemplate: [pedido.linkDeRetomada],
+        texto: textoDaEtapa(etapa),
+        // Os modelos de recuperação são fixos: não há link, código ou campo
+        // variável. A pessoa responde no WhatsApp e a equipe conduz o caso.
+        parametros: [],
         template,
       });
 

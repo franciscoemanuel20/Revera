@@ -13,20 +13,20 @@ recupera somente pedidos nacionais que ainda estejam com `payment_status =
 4. Imediatamente antes de reservar, a rotina relê o pedido. Pago, cancelado
    ou com uma compra posterior da mesma pessoa não recebe mensagem.
 
-O link enviado é `/checkout/pagamento?pedido=<token-opaco>`. Ele só permite
-retomar aquele checkout; não expõe cartão, valores internos ou dados do
-cliente. A página reaproveita o mesmo checkout da InfinitePay, sem criar uma
-segunda cobrança.
+O aviso de WhatsApp é intencionalmente sem link, código ou campo variável.
+Ele orienta a pessoa a responder diretamente à equipe. A página de pedido
+continua permitindo retomar com segurança o checkout já existente, sem criar
+uma segunda cobrança.
 
 ## Publicação
 
 1. Aplique `supabase/migrations/00000000000021_recuperacao_checkout_segundo_lembrete.sql`
    (ou `supabase/aplicar/RECUPERACAO-CHECKOUT-21.sql`) antes do deploy.
-2. Na Clint, envie para aprovação dois templates de marketing com **um único
-   campo `{{1}}`**. O campo não pode ficar no início ou no fim do texto:
+2. Na Clint, envie para aprovação dois templates de **Marketing**, sem
+   variáveis, links ou códigos:
 
-   - Primeiro: `Olá! Vi que seu pedido na Reverá ficou aguardando a finalização do pagamento. Se você teve qualquer dificuldade, estamos aqui para ajudar. Acesse {{1}} para retomar seu pagamento com segurança.`
-   - Último: `Olá! Seu pedido da Reverá ainda está aguardando pagamento. Para concluir com segurança, acesse {{1}}. Se precisar de ajuda, é só responder por aqui.`
+   - Primeiro (`revera_pagamento_ajuda_1`): `Olá! Notamos que seu pedido da Reverá ainda aguarda a finalização do pagamento. Se precisar de ajuda para concluir, responda a esta mensagem. Estamos aqui para ajudar.`
+   - Último (`revera_pagamento_ajuda_2`): `Olá! Seu pedido da Reverá continua aguardando pagamento. Se quiser concluir ou tiver alguma dúvida, responda a esta mensagem. Nossa equipe está à disposição para ajudar.`
 
 3. Guarde somente os IDs dos templates no cofre e exporte para a produção:
 

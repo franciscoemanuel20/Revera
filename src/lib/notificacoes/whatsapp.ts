@@ -327,10 +327,8 @@ async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnv
     }
 
     // Sem `chat_id`: a Clint acha ou cria a conversa. Quando existem
-    // parâmetros, eles são os campos `{{n}}` do template aprovado. A
-    // recuperação de checkout usa um único parâmetro: a URL opaca do próprio
-    // pedido. O link não contém cartão, valor ou qualquer dado de pagamento.
-    // Omitir a chave em templates fixos preserva o contrato dos avisos antigos.
+    // parâmetros, eles são os campos `{{n}}` do template aprovado. Omitir a
+    // chave em modelos fixos preserva o contrato deles.
     const resposta = await fetch(`${CLINT_BASE}/v2/messages/template`, {
       method: "POST",
       headers: { "api-token": token, "content-type": "application/json" },

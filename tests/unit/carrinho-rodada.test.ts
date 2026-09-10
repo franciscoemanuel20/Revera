@@ -273,10 +273,55 @@ describe("rodada com a Clint recusando tudo", () => {
     );
 
     await rodadaDeCarrinhoAbandonado(AGORA);
-
     expect(criacoes).toHaveLength(1);
     expect(criacoes[0]!.name).toBe("Maria Souza");
     expect(criacoes[0]!.name).not.toBe("Equipe Reverá");
+  });
+
+  it("modelo de recuperação sem variável não envia parâmetros para a Clint", async () => {
+    const corposDeTemplate: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(entrada);
+        if (url.includes("/v1/contacts")) {
+          if (init?.method === "POST") {
+            return new Response(JSON.stringify({ id: "c1" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        corposDeTemplate.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ id: "msg" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      })
+    );
+
+    const resultado = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(resultado.enviados).toBeGreaterThan(0);
+    expect(corposDeTemplate).not.toHaveLength(0);
+    expect(corposDeTemplate.every((corpo) => !("parameters" in corpo))).toBe(true);
+  });
+
+  it("sem modelo aprovado, não reserva pedido nem tenta falar com a Clint", async () => {
+    delete process.env.CLINT_TEMPLATE_CARRINHO_PRIMEIRO_ID;
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const resultado = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(resultado.enviados).toBe(0);
+    expect(resultado.pulados.envio_recusado).toBe(10);
+    expect(reservas).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   /**
