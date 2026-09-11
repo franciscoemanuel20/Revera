@@ -7,6 +7,9 @@ import { AmbiguousChargeError } from "@/lib/payments/provider";
 import { confirmarPagamento } from "@/lib/payments/confirmar";
 import { urlDoWebhook } from "@/lib/payments/webhook-url";
 import { baseUrl } from "@/lib/config/urls";
+import { idiomaDoPais } from "@/lib/internacional/paises";
+import { pedidoInternacionalPagavel } from "@/lib/internacional/mercado";
+import { urlCheckoutStripeSegura } from "@/lib/payments/stripe-provider";
 
 /**
  * Quanto tempo uma reserva `pending` sem URL em lugar nenhum (nem
@@ -62,7 +65,7 @@ export default async function PagamentoPage({
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, payment_status, total_cents, shipping_cents, discount_cents, currency, access_token, customer_id"
+      "id, order_number, status, payment_status, total_cents, shipping_cents, discount_cents, currency, access_token, customer_id, address_id, intl_shipping_quote_id"
     )
     .eq("access_token", accessToken)
     .maybeSingle();
@@ -98,6 +101,19 @@ export default async function PagamentoPage({
   if (pedido.status !== "new") {
     redirect(`/pedido/${accessToken}`);
   }
+
+  let idiomaPagamento: "pt" | "en" | "es" = "pt";
+  if (pedido.currency !== "BRL") {
+    const { data: endereco } = await supabase.from("addresses").select("country")
+      .eq("id", pedido.address_id).maybeSingle();
+    // Revalida antes de criar OU reaproveitar uma sessão: um pedido antigo
+    // não contorna país fechado, cotação vencida ou catálogo incompleto.
+    if (!(await pedidoInternacionalPagavel(endereco?.country ?? "", pedido.currency, pedido.intl_shipping_quote_id, pedido.shipping_cents))) {
+      return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
+    }
+    idiomaPagamento = idiomaDoPais(endereco!.country);
+  }
+  const linkPermitido = (url: string) => pedido.currency === "BRL" || urlCheckoutStripeSegura(url);
 
   const [{ data: itens }, { data: cliente }] = await Promise.all([
     supabase
@@ -144,6 +160,7 @@ export default async function PagamentoPage({
   const urlGuardada = (pagamentoExistente?.raw_response as { checkout_url?: string } | null)
     ?.checkout_url;
   if (urlGuardada) {
+    if (!linkPermitido(urlGuardada)) return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
     redirect(urlGuardada);
   }
 
@@ -165,6 +182,7 @@ export default async function PagamentoPage({
     const urlRecuperada = dadosRecuperados?.checkout_url;
 
     if (urlRecuperada) {
+      if (!linkPermitido(urlRecuperada)) return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
       const { error: erroRestaurar } = await supabase
         .from("payments")
         .update({
@@ -299,7 +317,7 @@ export default async function PagamentoPage({
         .maybeSingle();
       const url = (doVencedor?.raw_response as { checkout_url?: string } | null)?.checkout_url;
       // Fora de try/catch: `redirect` funciona lançando exceção do Next.
-      if (url) redirect(url);
+      if (url && linkPermitido(url)) redirect(url);
     }
 
     // Não existe autorização para criar outra cobrança. A linha pendente sem
@@ -329,6 +347,7 @@ export default async function PagamentoPage({
       orderNumber: pedido.order_number,
       amountCents: pedido.total_cents,
       currency: pedido.currency as string,
+      locale: idiomaPagamento,
       customerName: cliente?.full_name ?? undefined,
       customerEmail: cliente?.email ?? undefined,
       customerPhone: cliente?.phone ?? undefined,
@@ -359,7 +378,7 @@ export default async function PagamentoPage({
         ...(pedido.shipping_cents > 0
           ? [
               {
-                description: "Frete",
+                description: idiomaPagamento === "en" ? "DHL shipping" : idiomaPagamento === "es" ? "Envío DHL" : "Frete",
                 quantity: 1,
                 priceCents: pedido.shipping_cents as number,
               },
@@ -526,6 +545,7 @@ export default async function PagamentoPage({
   // Fora do try: `redirect` funciona lançando uma exceção especial do Next,
   // que um catch por perto engoliria — e o cliente veria a tela de erro
   // depois de a cobrança ter sido criada com sucesso.
+  if (!linkPermitido(checkoutUrl)) return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
   redirect(checkoutUrl);
 }
 

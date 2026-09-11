@@ -44,7 +44,7 @@ export default async function CheckoutPage({
   const sp = await searchParams;
   const paises = paisesDoCheckout();
   const paisPedido = (sp.pais ?? "BR").toUpperCase();
-  const pais = paises.includes(paisPedido) ? paisPedido : "BR";
+  const pais = regraDoPais(paisPedido) ? paisPedido : "BR";
 
   // O idioma sai do PAÍS ESCOLHIDO, não do cabeçalho do navegador. Um
   // brasileiro com o Chrome em inglês comprando para o Brasil continua
@@ -113,7 +113,7 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
     return (
       <IndisponivelInternacional
         pais={pais}
-        motivo={t.indisponivelGenerico}
+        motivo={mensagemDeBloqueio(mercado.aberto ? undefined : mercado.codigo, idioma)}
       />
     );
   }
@@ -183,6 +183,16 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
       <CheckoutInternacionalForm resumo={resumo} />
     </div>
   );
+}
+
+function mensagemDeBloqueio(codigo: string | undefined, idioma: "pt" | "en" | "es"): string {
+  const mensagens = {
+    pt: { frete: "Ainda não há cotação DHL vigente para este destino. O pagamento está indisponível.", precos: "Os preços deste mercado ainda estão em preparação. O pagamento está indisponível.", pagamento: "O pagamento internacional está indisponível no momento. Tente novamente mais tarde.", pais: "As vendas para este destino ainda não estão disponíveis." },
+    en: { frete: "There is no valid DHL shipping quote for this destination yet. Payment is unavailable.", precos: "Prices for this market are still being prepared. Payment is unavailable.", pagamento: "International payment is currently unavailable. Please try again later.", pais: "Sales to this destination are not available yet." },
+    es: { frete: "Todavía no hay una cotización DHL vigente para este destino. El pago no está disponible.", precos: "Los precios de este mercado todavía están en preparación. El pago no está disponible.", pagamento: "El pago internacional no está disponible en este momento. Inténtalo más tarde.", pais: "Las ventas a este destino todavía no están disponibles." },
+  };
+  const chave = codigo && codigo in mensagens[idioma] ? codigo as keyof typeof mensagens.pt : "pais";
+  return mensagens[idioma][chave];
 }
 
 function IndisponivelInternacional({ pais, motivo }: { pais: string; motivo: string }) {

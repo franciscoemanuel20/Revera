@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
 import { pagamentoInternacionalDisponivel } from "@/lib/payments";
+import { StripeProvider } from "@/lib/payments/stripe-provider";
 import { ehMoedaSuportada, type Moeda } from "./moeda";
 import { paisesDoCheckout, regraDoPais } from "./paises";
 
@@ -37,7 +38,7 @@ export interface CotacaoInternacional {
 
 export type ProntidaoMercado =
   | { aberto: true; moeda: Moeda; frete: CotacaoInternacional }
-  | { aberto: false; motivo: string };
+  | { aberto: false; motivo: string; codigo?: "pais" | "pagamento" | "frete" | "precos" };
 
 /**
  * Cotação de frete vigente para o país, na moeda dada. A mais RECENTE entre
@@ -46,19 +47,25 @@ export type ProntidaoMercado =
  */
 export async function cotacaoFreteInternacional(
   pais: string,
-  moeda: Moeda
+  moeda: Moeda,
+  cotacaoId?: string
 ): Promise<CotacaoInternacional | null> {
   const supabase = createAdminClient();
   const hoje = new Date().toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
+  let consulta = supabase
     .from("intl_shipping_quotes")
     .select("id, carrier, service_name, currency, price_cents, eta_days_min, eta_days_max, valid_until")
     .eq("country", pais.toUpperCase())
     .eq("currency", moeda)
     .eq("is_active", true)
-    .gte("valid_until", hoje)
+    .eq("carrier", "DHL")
+    .lte("quoted_at", hoje)
+    .gte("valid_until", hoje);
+  if (cotacaoId) consulta = consulta.eq("id", cotacaoId);
+  const { data, error } = await consulta
     .order("quoted_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -80,6 +87,15 @@ export async function cotacaoFreteInternacional(
   };
 }
 
+export async function pedidoInternacionalPagavel(pais: string, moeda: string, cotacaoId: string | null, freteContratado: number): Promise<boolean> {
+  const mercado = await prontidaoDoMercado(pais);
+  if (!mercado.aberto || mercado.moeda !== moeda || !cotacaoId) return false;
+  // O pedido mantém seu preço contratado. Revalida a cotação referenciada,
+  // não exige que ela seja a mais recente nem reprifica pedidos em aberto.
+  const cotacao = await cotacaoFreteInternacional(pais, mercado.moeda, cotacaoId);
+  return cotacao !== null && cotacao.priceCents === freteContratado;
+}
+
 export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado> {
   const iso = pais.toUpperCase();
   const regra = regraDoPais(iso);
@@ -88,13 +104,13 @@ export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado
     return { aberto: false, motivo: "Este caminho é só para mercado internacional." };
   }
   if (!paisesDoCheckout().includes(iso)) {
-    return { aberto: false, motivo: "Ainda não vendemos para este país." };
+    return { aberto: false, motivo: "Ainda não vendemos para este país.", codigo: "pais" };
   }
   if (!ehMoedaSuportada(regra.moedaPadrao)) {
     return { aberto: false, motivo: "Moeda do mercado não suportada." };
   }
-  if (!pagamentoInternacionalDisponivel()) {
-    return { aberto: false, motivo: "Pagamento internacional não configurado." };
+  if (!pagamentoInternacionalDisponivel() || !(await new StripeProvider().disponivel())) {
+    return { aberto: false, motivo: "Pagamento internacional indisponível.", codigo: "pagamento" };
   }
 
   const frete = await cotacaoFreteInternacional(iso, regra.moedaPadrao);
@@ -102,10 +118,31 @@ export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado
     return {
       aberto: false,
       motivo: "Frete internacional não configurado para este destino.",
+      codigo: "frete",
     };
   }
 
+  if (!(await catalogoCompletoNoMercado(regra.moedaPadrao))) {
+    return { aberto: false, motivo: "Faltam preços ativos no catálogo deste mercado.", codigo: "precos" };
+  }
+
   return { aberto: true, moeda: regra.moedaPadrao, frete };
+}
+
+/** Uma variante ausente bloqueia TODO o mercado, inclusive carrinhos de outros produtos. */
+export async function catalogoCompletoNoMercado(moeda: Moeda): Promise<boolean> {
+  const db = createAdminClient();
+  const [variantes, precos] = await Promise.all([
+    db.from("product_variants").select("id, products!inner(status)", { count: "exact" })
+      .eq("is_active", true).eq("products.status", "active"),
+    db.from("variant_prices").select("variant_id", { count: "exact" })
+      .eq("currency", moeda).eq("is_active", true).gt("price_cents", 0),
+  ]);
+  // Resposta truncada, erro ou catálogo vazio nunca significa pronto.
+  if (variantes.error || precos.error || !variantes.data?.length || !precos.data ||
+      variantes.count !== variantes.data.length || precos.count !== precos.data.length) return false;
+  const ids = new Set(precos.data.map(p => p.variant_id));
+  return variantes.data.every(v => ids.has(v.id));
 }
 
 export interface ItemPrecificado {

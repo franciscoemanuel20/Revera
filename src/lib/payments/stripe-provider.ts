@@ -192,6 +192,19 @@ export function localeDaStripe(locale: string | undefined): string {
 export class StripeProvider implements PaymentProvider {
   readonly name = "stripe";
 
+  /** Consulta real, sem criar cobrança. Configuração ausente ou conta suspensa fecha o mercado. */
+  async disponivel(): Promise<boolean> {
+    try {
+      if (!process.env.STRIPE_WEBHOOK_SECRET?.trim()) return false;
+      const res = await this.chamar("/v1/account", { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return false;
+      const conta = await res.json();
+      return conta.charges_enabled === true && conta.capabilities?.card_payments === "active";
+    } catch {
+      return false;
+    }
+  }
+
   private async chamar(
     caminho: string,
     init?: { method?: string; body?: string; signal?: AbortSignal }
@@ -230,6 +243,9 @@ export class StripeProvider implements PaymentProvider {
     const moedaMinuscula = charge.currency.toLowerCase();
     const body = formEncode({
       mode: "payment",
+      // Moeda comercial explícita por mercado; não permitir conversão automática no gateway.
+      adaptive_pricing: { enabled: false },
+      payment_method_types: ["card"],
       client_reference_id: charge.orderId,
       /**
        * Sem isto a Stripe usa "auto" — o idioma do NAVEGADOR. Um comprador
@@ -353,6 +369,10 @@ export class StripeProvider implements PaymentProvider {
       // de rede.
       console.error("[stripe] resposta 2xx sem id/url — gateway pode ter criado a sessão mesmo assim");
       throw new AmbiguousChargeError("A Stripe respondeu OK, mas sem os dados da sessão de checkout.");
+    }
+
+    if (!urlCheckoutStripeSegura(sessao.url)) {
+      throw new AmbiguousChargeError("A Stripe respondeu com um link de checkout não permitido.");
     }
 
     return { providerPaymentId: sessao.id, checkoutUrl: sessao.url };
@@ -520,4 +540,12 @@ export class StripeProvider implements PaymentProvider {
       raw: pago,
     };
   }
+}
+
+export function urlCheckoutStripeSegura(valor: string): boolean {
+  try {
+    const url = new URL(valor);
+    return url.protocol === "https:" && url.hostname === "checkout.stripe.com" &&
+      !url.username && !url.password && !url.port && !/[\\\s]/.test(valor);
+  } catch { return false; }
 }
