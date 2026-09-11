@@ -202,11 +202,11 @@ export async function substituirFotoDoSite(id: string, formData: FormData): Prom
 }
 
 /**
- * A exclusão só acontece quando a mídia não está ligada a nenhuma área.
- * Apagar silenciosamente as referências parecia conveniente, mas deixa o
- * comprador sem uma foto ou vídeo e impede o administrador de entender a
- * consequência antes de confirmar. Substituir continua sendo o caminho
- * seguro para uma mídia que já está em uso.
+ * A administradora pode excluir qualquer mídia, inclusive uma que esteja em
+ * uso. A confirmação visual lista os usos; ao confirmar, estes vínculos são
+ * retirados antes do arquivo. Se uma seção tiver conteúdo original, ela volta
+ * para ele; produto sem mídia própria usa a galeria padrão. Assim a dona tem
+ * controle total sem deixar uma URL quebrada exposta ao comprador.
  */
 export async function excluirFotoDoSite(id: string): Promise<ResultadoFotoDoSite> {
   const supabase = await createClient();
@@ -220,8 +220,17 @@ export async function excluirFotoDoSite(id: string): Promise<ResultadoFotoDoSite
     supabase.from("site_texts").select("chave").in("valor", valores),
   ]);
   if (cores.error || produtos.error || banners.error || textos.error) return { error: "Não foi possível confirmar onde esta mídia está sendo usada. Tente de novo em instantes." };
-  const usos = (cores.data?.length ?? 0) + (produtos.data?.length ?? 0) + (banners.data?.length ?? 0) + (textos.data?.length ?? 0);
-  if (usos > 0) return { error: "Esta mídia está em uso. Substitua-a no local indicado antes de excluir." };
+  const desvincular = await Promise.all([
+    supabase.from("colors").update({ photo_url: null }).in("photo_url", valores),
+    supabase.from("product_media").delete().in("url", valores),
+    supabase.from("banners").update({ imagem_url: null }).in("imagem_url", valores),
+    // Sem a edição, textosDaPagina() volta automaticamente para o original
+    // que veio com o site, em vez de guardar uma URL apagada.
+    supabase.from("site_texts").delete().in("valor", valores),
+  ]);
+  if (desvincular.some((resultado) => resultado.error)) {
+    return { error: "Não foi possível retirar esta mídia de todos os locais. Nenhum arquivo foi apagado." };
+  }
   const desativar = await supabase.from("site_media_assets").update({ ativo: false, updated_at: new Date().toISOString(), updated_by: await usuario(supabase) }).eq("id", id);
   if (desativar.error) return { error: "Não foi possível atualizar a Biblioteca antes de excluir o arquivo." };
   const removido = await supabase.storage.from(BUCKET_MIDIA).remove([foto.storage_path]);
