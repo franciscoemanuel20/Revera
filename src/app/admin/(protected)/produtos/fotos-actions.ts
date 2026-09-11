@@ -89,7 +89,22 @@ export async function enviarMidiaProduto(formData: FormData): Promise<{ error: s
     };
   }
 
-  return { ok: true, url: supabase.storage.from(BUCKET_MIDIA).getPublicUrl(caminho).data.publicUrl };
+  const url = supabase.storage.from(BUCKET_MIDIA).getPublicUrl(caminho).data.publicUrl;
+  // Todo arquivo de produto também entra no acervo central; assim a mesma
+  // foto ou vídeo pode ser localizado e reutilizado sem copiar URL.
+  const biblioteca = await supabase.from("site_media_assets").insert({
+    storage_path: caminho,
+    url,
+    nome: arquivo.name,
+    tamanho: arquivo.size,
+    tipo: arquivo.type,
+    categoria: "Produtos",
+  });
+  if (biblioteca.error) {
+    await supabase.storage.from(BUCKET_MIDIA).remove([caminho]);
+    return { error: "O arquivo foi recebido, mas não entrou na Biblioteca de mídias. Confira se a migration 25 foi aplicada." };
+  }
+  return { ok: true, url };
 }
 
 export async function salvarFotoProduto(entrada: FotoProdutoEntrada): Promise<ResultadoFoto> {

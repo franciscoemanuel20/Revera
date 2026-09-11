@@ -20,6 +20,7 @@ export function FotosDoProduto({ productId, fotosIniciais, variantes, disponivei
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupados, setOcupados] = useState<ReadonlySet<string>>(new Set());
   const [arrastando, setArrastando] = useState<string | null>(null);
+  const [escolhidaPorGrupo, setEscolhidaPorGrupo] = useState<Record<string, string>>({});
 
   useEffect(() => { if (ocupados.size === 0) setMidias(fotosIniciais); }, [fotosIniciais, ocupados.size]);
   function ocupar(id: string, valor: boolean) { setOcupados((antes) => { const depois = new Set(antes); valor ? depois.add(id) : depois.delete(id); return depois; }); }
@@ -47,6 +48,20 @@ export function FotosDoProduto({ productId, fotosIniciais, variantes, disponivei
     if ("error" in resultado) { setErro(resultado.error); return; }
     setMidias((antes) => [...antes, { id: resultado.id, url: envio.url, altText: "", variantId, sortOrder: ordem, isPrimary: tipo === "image" && !antes.some((m) => m.variantId === variantId && m.tipo === "image"), tipo }]);
     setAviso(tipo === "video" ? "Vídeo adicionado." : "Foto adicionada."); router.refresh();
+  }
+
+  async function adicionarDaBiblioteca(variantId: string | null) {
+    const chave = `novo-${variantId ?? "geral"}`;
+    const url = escolhidaPorGrupo[chave];
+    if (!url) return;
+    const tipo = tipoDeMidiaPelaUrl(url);
+    ocupar(chave, true); setErro(null);
+    const ordem = proximaOrdem(variantId, tipo);
+    const resultado = await salvarFotoProduto({ productId, url, altText: null, variantId, sortOrder: ordem, isPrimary: false });
+    ocupar(chave, false);
+    if ("error" in resultado) { setErro(resultado.error); return; }
+    setMidias((antes) => [...antes, { id: resultado.id, url, altText: "", variantId, sortOrder: ordem, isPrimary: tipo === "image" && !antes.some((m) => m.variantId === variantId && m.tipo === "image"), tipo }]);
+    setEscolhidaPorGrupo((antes) => ({ ...antes, [chave]: "" })); setAviso("Mídia da Biblioteca adicionada ao produto."); router.refresh();
   }
 
   async function substituir(midia: FotoDoProduto, event: ChangeEvent<HTMLInputElement>) {
@@ -86,6 +101,7 @@ export function FotosDoProduto({ productId, fotosIniciais, variantes, disponivei
         <div><h3 className="font-semibold text-ink">{grupo.rotulo}{!grupo.corAtiva ? " (desativada)" : ""}</h3><p className="text-sm text-ink/60">A foto principal abre em destaque quando esta variante for escolhida.</p></div>
         <Secao titulo="Fotos da variante" vazio="Nenhuma foto cadastrada."><ul className="grid gap-3 sm:grid-cols-2">{fotos.map((midia) => <li key={midia.id} draggable onDragStart={() => setArrastando(midia.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => soltar(midia, e)} className="flex gap-3 rounded-md border border-sand p-2"><Miniatura midia={midia} /><div className="flex min-w-0 flex-1 flex-col gap-2"><span className="text-xs text-ink/60">Arraste para reorganizar</span><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant={midia.isPrimary ? "secondary" : "ghost"} onClick={() => salvar(midia, { isPrimary: true })} disabled={ocupados.has(midia.id)}>{midia.isPrimary ? "Principal" : "Definir principal"}</Button><Arquivo label="Substituir" accept="image/jpeg,image/png,image/webp,image/avif" onChange={(e) => substituir(midia, e)} /><Button type="button" size="sm" variant="ghost" onClick={() => excluir(midia)} disabled={ocupados.has(midia.id)}>Excluir</Button></div></div></li>)}</ul><Envio accept="image/jpeg,image/png,image/webp,image/avif" label="Adicionar fotos" ocupado={ocupados.has(chave)} onChange={(e) => adicionarArquivo(grupo.id, e)} /></Secao>
         <Secao titulo="Vídeos da variante" vazio="Nenhum vídeo cadastrado."><ul className="grid gap-3 sm:grid-cols-2">{videos.map((midia) => <li key={midia.id} className="flex gap-3 rounded-md border border-sand p-2"><Miniatura midia={midia} /><div className="flex flex-1 items-center gap-2"><Arquivo label="Substituir" accept="video/mp4" onChange={(e) => substituir(midia, e)} /><Button type="button" size="sm" variant="ghost" onClick={() => excluir(midia)} disabled={ocupados.has(midia.id)}>Excluir</Button></div></li>)}</ul><Envio accept="video/mp4" label="Adicionar vídeo" ocupado={ocupados.has(chave)} onChange={(e) => adicionarArquivo(grupo.id, e)} /></Secao>
+        {disponiveis.length > 0 ? <div className="flex flex-wrap items-end gap-2 rounded bg-sand/40 p-3"><label className="flex min-w-56 flex-1 flex-col gap-1 text-sm text-ink">Adicionar da Biblioteca<select value={escolhidaPorGrupo[chave] ?? ""} onChange={(e) => setEscolhidaPorGrupo((antes) => ({ ...antes, [chave]: e.target.value }))} className="min-h-toque rounded border border-sand bg-paper px-2"><option value="">Escolha uma foto ou vídeo</option>{disponiveis.map((midia) => <option key={midia.url} value={midia.url}>{midia.grupo} — {midia.rotulo}</option>)}</select></label><Button type="button" size="sm" variant="secondary" onClick={() => adicionarDaBiblioteca(grupo.id)} disabled={ocupados.has(chave) || !escolhidaPorGrupo[chave]}>Adicionar esta mídia</Button></div> : null}
       </article>;
     })}
     {disponiveis.length > 0 ? <p className="text-xs text-ink/50">Os arquivos já enviados continuam na Biblioteca de fotos; esta tela envia e associa novos arquivos diretamente à variante.</p> : null}

@@ -26,7 +26,10 @@ import { TextosManager, type GrupoTextos } from "./TextosManager";
 // qual é o texto de verdade do site.
 export default async function TextosPage() {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("site_texts").select("chave, valor, updated_by");
+  const [{ data, error }, { data: midias }] = await Promise.all([
+    supabase.from("site_texts").select("chave, valor, updated_by"),
+    supabase.from("site_media_assets").select("url, nome, tipo, categoria").eq("ativo", true).like("tipo", "image/%").order("nome"),
+  ]);
 
   // migration 00000000000012_conteudo_editavel.sql pode não ter sido
   // aplicada ainda — a tabela nem existe, e a consulta falha. O registro
@@ -99,7 +102,11 @@ export default async function TextosPage() {
         </p>
       ) : null}
 
-      <TextosManager grupos={grupos} somenteLeitura={somenteLeitura} />
+      <TextosManager
+        grupos={grupos}
+        somenteLeitura={somenteLeitura}
+        midias={(midias ?? []).map((m) => ({ url: m.url as string, nome: m.nome as string, categoria: (m.categoria as string | null) ?? "Geral" }))}
+      />
     </div>
   );
 }

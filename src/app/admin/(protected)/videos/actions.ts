@@ -97,10 +97,27 @@ export async function trocarVideo(
     };
   }
 
+  // Vídeos trocados nesta tela também são arquivos da Biblioteca. Assim a
+  // prévia, a busca e o aviso de vínculo enxergam o mesmo arquivo que está
+  // na página pública.
+  const biblioteca = await supabase.from("site_media_assets").insert({
+    storage_path: caminho,
+    url,
+    nome: arquivo.name,
+    tamanho: arquivo.size,
+    tipo: arquivo.type,
+    categoria: "Vídeos do site",
+  });
+  if (biblioteca.error) {
+    await supabase.storage.from(BUCKET_MIDIA).remove([caminho]);
+    return { error: "O vídeo foi recebido, mas não entrou na Biblioteca de mídias. Confira se a migration 25 foi aplicada." };
+  }
+
   const resultado = await salvarTexto(parsedChave.data, url);
   if ("error" in resultado) {
     // Não colou: o vídeo não pode ficar no bucket sem dono.
     await supabase.storage.from(BUCKET_MIDIA).remove([caminho]);
+    await supabase.from("site_media_assets").delete().eq("storage_path", caminho);
     return resultado;
   }
 

@@ -30,15 +30,19 @@ export interface GrupoTextos {
   itens: TextoItemView[];
 }
 
+export interface MidiaParaEscolha { url: string; nome: string; categoria: string; }
+
 const inputClass =
   "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink disabled:cursor-not-allowed disabled:bg-sand/40 disabled:text-ink/50";
 
 export function TextosManager({
   grupos,
   somenteLeitura,
+  midias,
 }: {
   grupos: GrupoTextos[];
   somenteLeitura: boolean;
+  midias: MidiaParaEscolha[];
 }) {
   const [busca, setBusca] = useState("");
   const termo = busca.trim().toLowerCase();
@@ -82,7 +86,7 @@ export function TextosManager({
             <div className="flex flex-col gap-4">
               {grupo.itens.map((item) =>
                 item.tipo === "imagem" ? (
-                  <ItemImagem key={item.chave} item={item} somenteLeitura={somenteLeitura} />
+                  <ItemImagem key={item.chave} item={item} somenteLeitura={somenteLeitura} midias={midias} />
                 ) : (
                   <ItemTexto key={item.chave} item={item} somenteLeitura={somenteLeitura} />
                 )
@@ -223,7 +227,7 @@ function ItemTexto({ item, somenteLeitura }: { item: TextoItemView; somenteLeitu
  * deixa a PÁGINA quebrada (ver motivoDeImagemInvalida em lib/conteudo/midia).
  * O botão de enviar arquivo cobre o caso real e não tem como errar o formato.
  */
-function ItemImagem({ item, somenteLeitura }: { item: TextoItemView; somenteLeitura: boolean }) {
+function ItemImagem({ item, somenteLeitura, midias }: { item: TextoItemView; somenteLeitura: boolean; midias: MidiaParaEscolha[] }) {
   const router = useRouter();
   const inputArquivo = useRef<HTMLInputElement>(null);
   const [arquivo, setArquivo] = useState<File | null>(null);
@@ -231,6 +235,7 @@ function ItemImagem({ item, somenteLeitura }: { item: TextoItemView; somenteLeit
   const [restaurando, setRestaurando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
+  const [midiaEscolhida, setMidiaEscolhida] = useState("");
 
   async function enviar() {
     if (!arquivo) {
@@ -270,6 +275,15 @@ function ItemImagem({ item, somenteLeitura }: { item: TextoItemView; somenteLeit
       return;
     }
     router.refresh();
+  }
+
+  async function usarDaBiblioteca() {
+    if (!midiaEscolhida) return;
+    setErro(null); setSucesso(false); setEnviando(true);
+    const resultado = await salvarTexto(item.chave, midiaEscolhida);
+    setEnviando(false);
+    if ("error" in resultado) { setErro(resultado.error); return; }
+    setSucesso(true); router.refresh();
   }
 
   return (
@@ -345,6 +359,8 @@ function ItemImagem({ item, somenteLeitura }: { item: TextoItemView; somenteLeit
           <p className="text-xs text-ink/50">
             JPG, PNG, WEBP ou AVIF, até 5 MB. A foto nova entra no site em instantes.
           </p>
+
+          {midias.length > 0 ? <div className="flex flex-wrap items-end gap-2 rounded bg-sand/40 p-3"><label className="flex min-w-52 flex-1 flex-col gap-1 text-sm text-ink">Ou escolha uma foto já enviada à Biblioteca<select value={midiaEscolhida} onChange={(e) => setMidiaEscolhida(e.target.value)} className={inputClass}><option value="">Escolha uma foto</option>{midias.map((midia) => <option key={midia.url} value={midia.url}>{midia.categoria} — {midia.nome}</option>)}</select></label><Button type="button" size="sm" variant="secondary" onClick={usarDaBiblioteca} disabled={enviando || !midiaEscolhida}>Usar esta foto</Button></div> : null}
 
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" size="sm" onClick={enviar} disabled={enviando || !arquivo}>

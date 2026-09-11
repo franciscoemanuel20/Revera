@@ -13,7 +13,10 @@ import { VideosManager, type VideoItemView } from "./VideosManager";
 // inicial" seria uma seção de uma linha.
 export default async function VideosPage() {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("site_texts").select("chave, valor, updated_by");
+  const [{ data, error }, { data: midias }] = await Promise.all([
+    supabase.from("site_texts").select("chave, valor, updated_by"),
+    supabase.from("site_media_assets").select("url, nome, categoria").eq("ativo", true).like("tipo", "video/%").order("nome"),
+  ]);
 
   // migration 00000000000012_conteudo_editavel.sql (ou a 16, que acrescenta
   // o tipo "video") pode não ter sido aplicada ainda. O registro segue
@@ -70,7 +73,7 @@ export default async function VideosPage() {
       {itens.length === 0 ? (
         <p className="text-sm text-ink/60">Nenhum vídeo cadastrado ainda.</p>
       ) : (
-        <VideosManager itens={itens} somenteLeitura={somenteLeitura} />
+        <VideosManager itens={itens} somenteLeitura={somenteLeitura} midias={(midias ?? []).map((m) => ({ url: m.url as string, nome: m.nome as string, categoria: (m.categoria as string | null) ?? "Geral" }))} />
       )}
     </div>
   );

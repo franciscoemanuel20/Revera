@@ -239,10 +239,27 @@ export async function trocarImagem(
     return { error: "A foto foi enviada, mas o endereço gerado não serve para o site. Avise quem cuida do site." };
   }
 
+  // A troca direta pela seção também entra na Biblioteca. Sem esta linha a
+  // foto apareceria para o comprador, mas ficaria invisível para quem depois
+  // procura onde ela está ou quer substituí-la pelo painel.
+  const biblioteca = await supabase.from("site_media_assets").insert({
+    storage_path: caminho,
+    url,
+    nome: arquivo.name,
+    tamanho: arquivo.size,
+    tipo: arquivo.type,
+    categoria: "Seções do site",
+  });
+  if (biblioteca.error) {
+    await supabase.storage.from(BUCKET_MIDIA).remove([caminho]);
+    return { error: "A foto foi recebida, mas não entrou na Biblioteca de mídias. Confira se a migration 25 foi aplicada." };
+  }
+
   const resultado = await salvarTexto(parsedChave.data, url);
   if ("error" in resultado) {
     // Não colou: a foto não pode ficar no bucket sem dono (ver o cabeçalho).
     await supabase.storage.from(BUCKET_MIDIA).remove([caminho]);
+    await supabase.from("site_media_assets").delete().eq("storage_path", caminho);
     return resultado;
   }
 

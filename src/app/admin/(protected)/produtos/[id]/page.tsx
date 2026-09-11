@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { BUCKET_MIDIA } from "@/lib/conteudo/midia";
 import { listarFotosDoRepositorio } from "@/lib/conteudo/fotos-do-repositorio";
 import { ProductForm } from "../ProductForm";
 import { FotosDoProduto, type FotoDisponivel } from "../FotosDoProduto";
@@ -74,16 +73,21 @@ export default async function EditarProdutoPage({ params }: { params: Promise<{ 
    * não aplicada) e pasta ausente viram lista vazia, e o campo continua
    * utilizável com o que sobrou.
    */
-  const { data: objetos } = await supabase.storage
-    .from(BUCKET_MIDIA)
-    .list("", { sortBy: { column: "created_at", order: "desc" } });
+  // A tabela é a fonte da Biblioteca — listar a raiz do Storage só enxerga
+  // arquivos sem pasta e deixava de fora o que foi organizado em
+  // `biblioteca/`, `produtos/` ou `substituicoes/`.
+  const { data: objetos } = await supabase
+    .from("site_media_assets")
+    .select("url, nome, categoria, tipo")
+    .eq("ativo", true)
+    .order("nome");
 
   const enviadas: FotoDisponivel[] = (objetos ?? [])
-    .filter((item) => item.metadata != null)
+    .filter((item) => item.url && item.nome)
     .map((item) => ({
-      url: supabase.storage.from(BUCKET_MIDIA).getPublicUrl(item.name).data.publicUrl,
-      rotulo: item.name,
-      grupo: "Enviadas pelo painel",
+      url: item.url as string,
+      rotulo: item.nome as string,
+      grupo: (item.categoria as string | null) ?? "Biblioteca",
     }));
 
   const doRepositorio: FotoDisponivel[] = (await listarFotosDoRepositorio()).map((f) => ({

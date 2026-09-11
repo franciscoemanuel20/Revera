@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { trocarVideo, restaurarOriginal } from "./actions";
+import { salvarTexto } from "../textos/actions";
 
 export interface VideoItemView {
   chave: string;
@@ -22,14 +23,16 @@ export interface VideoItemView {
 export function VideosManager({
   itens,
   somenteLeitura,
+  midias,
 }: {
   itens: VideoItemView[];
   somenteLeitura: boolean;
+  midias: { url: string; nome: string; categoria: string }[];
 }) {
   return (
     <div className="flex flex-col gap-4">
       {itens.map((item) => (
-        <ItemVideo key={item.chave} item={item} somenteLeitura={somenteLeitura} />
+        <ItemVideo key={item.chave} item={item} somenteLeitura={somenteLeitura} midias={midias} />
       ))}
     </div>
   );
@@ -42,7 +45,7 @@ export function VideosManager({
  * pelo mesmo motivo de lá: endereço errado não deixa o vídeo quebrado,
  * deixa a PÁGINA quebrada.
  */
-function ItemVideo({ item, somenteLeitura }: { item: VideoItemView; somenteLeitura: boolean }) {
+function ItemVideo({ item, somenteLeitura, midias }: { item: VideoItemView; somenteLeitura: boolean; midias: { url: string; nome: string; categoria: string }[] }) {
   const router = useRouter();
   const inputArquivo = useRef<HTMLInputElement>(null);
   const [arquivo, setArquivo] = useState<File | null>(null);
@@ -50,6 +53,7 @@ function ItemVideo({ item, somenteLeitura }: { item: VideoItemView; somenteLeitu
   const [restaurando, setRestaurando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
+  const [midiaEscolhida, setMidiaEscolhida] = useState("");
 
   async function enviar() {
     if (!arquivo) {
@@ -87,6 +91,15 @@ function ItemVideo({ item, somenteLeitura }: { item: VideoItemView; somenteLeitu
       return;
     }
     router.refresh();
+  }
+
+  async function usarDaBiblioteca() {
+    if (!midiaEscolhida) return;
+    setErro(null); setSucesso(false); setEnviando(true);
+    const resultado = await salvarTexto(item.chave, midiaEscolhida);
+    setEnviando(false);
+    if ("error" in resultado) { setErro(resultado.error); return; }
+    setSucesso(true); router.refresh();
   }
 
   return (
@@ -142,6 +155,8 @@ function ItemVideo({ item, somenteLeitura }: { item: VideoItemView; somenteLeitu
             />
           </label>
           <p className="text-xs text-ink/50">MP4, até 25 MB. O vídeo novo entra no site em instantes.</p>
+
+          {midias.length > 0 ? <div className="flex flex-wrap items-end gap-2 rounded bg-sand/40 p-3"><label className="flex min-w-52 flex-1 flex-col gap-1 text-sm text-ink">Ou escolha um vídeo já enviado à Biblioteca<select value={midiaEscolhida} onChange={(e) => setMidiaEscolhida(e.target.value)} className="min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink"><option value="">Escolha um vídeo</option>{midias.map((midia) => <option key={midia.url} value={midia.url}>{midia.categoria} — {midia.nome}</option>)}</select></label><Button type="button" size="sm" variant="secondary" onClick={usarDaBiblioteca} disabled={enviando || !midiaEscolhida}>Usar este vídeo</Button></div> : null}
 
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" size="sm" onClick={enviar} disabled={enviando || !arquivo}>
