@@ -181,6 +181,7 @@ export default async function HomePage() {
             <video
               controls
               preload="metadata"
+              poster={t("home.naturalidade.videoCapa")}
               className="w-full rounded-md bg-ink"
             >
               <source src={t("home.naturalidade.videoArquivo")} type="video/mp4" />
