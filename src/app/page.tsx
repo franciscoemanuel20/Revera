@@ -116,23 +116,24 @@ export default async function HomePage() {
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-px bg-[linear-gradient(90deg,transparent,rgba(201,180,95,.72),transparent)]"
         />
-        <Reveal className="relative mx-auto flex w-full max-w-5xl flex-col items-center gap-6 text-center">
-          {logo ? <Image
-            src={logo}
-            alt="Reverá — Prótese Capilar"
-            width={1500}
-            height={920}
-            priority
-            className="h-auto w-[250px] sm:w-[330px]"
-          /> : null}
+        <Reveal className="relative mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.78fr)] lg:gap-14">
+          <div className="flex flex-col items-center gap-6 text-center lg:items-start lg:text-left">
+            {logo ? <Image
+              src={logo}
+              alt="Reverá — Prótese Capilar"
+              width={1500}
+              height={920}
+              priority
+              className="h-auto w-[210px] sm:w-[270px]"
+            /> : null}
 
-          <span className="eyebrow">{t("home.hero.eyebrow")}</span>
-          <h1 className="max-w-2xl text-balance font-display text-4xl leading-[1.05] text-paper sm:text-[clamp(2.75rem,5vw,4rem)]">
-            {t("home.hero.titulo")}
-          </h1>
-          <p className="max-w-xl text-balance text-paper/70">{t("home.hero.subtitulo")}</p>
+            <span className="eyebrow">{t("home.hero.eyebrow")}</span>
+            <h1 className="max-w-2xl text-balance font-display text-4xl leading-[1.05] text-paper sm:text-[clamp(2.75rem,5vw,4rem)]">
+              {t("home.hero.titulo")}
+            </h1>
+            <p className="max-w-xl text-balance text-paper/70">{t("home.hero.subtitulo")}</p>
 
-          <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <div className="flex w-full flex-col items-center gap-3 sm:flex-row lg:justify-start">
             {/* "Comprar agora" só aparece quando existe algo comprável. Um
                 botão de compra que leva a 404 custa mais caro que a ausência
                 dele: a pessoa clica com intenção de compra e recebe um erro.
@@ -160,7 +161,32 @@ export default async function HomePage() {
                 {t("home.hero.botaoConhecer")}
               </Button>
             </Link>
+            </div>
           </div>
+
+          {t("home.micropele.foto") ? <div className="relative hidden lg:block">
+            <div aria-hidden className="absolute -inset-3 rounded-[2rem] border border-gold/20" />
+            <div className="relative overflow-hidden rounded-[1.65rem] border border-white/[0.12] bg-ink-soft p-2 shadow-[0_26px_60px_-32px_rgb(0_0_0_/_0.9)]">
+              <div className="relative aspect-[4/5] overflow-hidden rounded-[1.2rem]">
+                <Image
+                  src={t("home.micropele.foto")}
+                  alt={t("home.micropele.fotoAlt")}
+                  fill
+                  priority
+                  sizes="(min-width: 1024px) 40vw, 0px"
+                  className="object-cover"
+                />
+                <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,transparent_46%,rgba(10,10,10,.82))]" />
+                <div className="absolute inset-x-5 bottom-5 flex items-end justify-between gap-3 text-paper">
+                  <div>
+                    <span className="block text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-gold-light">Linha Micropele</span>
+                    <strong className="mt-1 block font-display text-xl">0,08 mm e 0,06 mm</strong>
+                  </div>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-paper/30 bg-ink/45 text-lg">→</span>
+                </div>
+              </div>
+            </div>
+          </div> : null}
         </Reveal>
       </section>
 

@@ -20,13 +20,13 @@ export interface PassosNumeradosProps {
  */
 export function PassosNumerados({ passos }: PassosNumeradosProps) {
   return (
-    <ol className="flex flex-col gap-6 sm:flex-row sm:gap-8">
+    <ol className="grid gap-3 sm:grid-cols-3 sm:gap-4">
       {passos.map((passo) => (
-        <li key={passo.numero} className="flex flex-1 gap-3">
-          <span className="font-display text-2xl text-gold" aria-hidden="true">
+        <li key={passo.numero} className="relative flex min-h-40 flex-col gap-4 overflow-hidden rounded-2xl border border-white/[0.09] bg-white/[0.035] p-5 transition-colors duration-300 hover:bg-white/[0.06]">
+          <span className="font-display text-3xl leading-none text-gold" aria-hidden="true">
             {passo.numero}
           </span>
-          <div className="flex flex-col gap-1">
+          <div className="mt-auto flex flex-col gap-1">
             <h3 className="font-display text-lg text-paper">{passo.titulo}</h3>
             <p className="text-sm text-paper/70">{passo.texto}</p>
           </div>

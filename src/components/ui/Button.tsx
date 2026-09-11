@@ -26,9 +26,9 @@ type ButtonSize = "sm" | "md" | "lg";
 // o resultado dependendo da ordem de geração do Tailwind.
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
-    "bg-gold-metal text-ink transition-all duration-300 hover:brightness-105 hover:shadow-glow-gold",
-  secondary: "bg-transparent text-ink border border-ink transition-colors hover:bg-sand",
-  ghost: "bg-transparent text-ink transition-colors hover:bg-sand",
+    "bg-gold-metal text-ink shadow-[0_8px_20px_-10px_rgb(var(--gold-rgb)_/_0.9)] transition-all duration-300 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-glow-gold active:translate-y-0",
+  secondary: "border border-ink/25 bg-paper/40 text-ink shadow-[inset_0_1px_0_rgb(255_255_255_/_0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:border-gold-deep hover:bg-paper hover:shadow-soft active:translate-y-0",
+  ghost: "text-ink transition-colors hover:bg-sand/70",
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
@@ -50,7 +50,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`min-h-toque min-w-toque rounded-md font-body font-semibold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`}
+      className={`min-h-toque min-w-toque rounded-xl font-body font-semibold tracking-[-0.01em] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`}
       {...rest}
     />
   );
