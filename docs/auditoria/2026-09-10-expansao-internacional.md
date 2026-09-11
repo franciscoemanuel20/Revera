@@ -94,3 +94,22 @@ da validade DHL e da cobertura de todo o catálogo.
 
 Brasil mantém o fluxo nacional em BRL e o provedor existente. Todas as
 próteses e suas variantes mantêm os preços BRL originais.
+
+## Publicação e conferência no domínio
+
+- Código: commit `42ce664`, revisão independente aprovada antes de publicar.
+- Build local e build Vercel aprovados; 559 testes verdes. Varredura do bundle
+  público não encontrou nomes ou valores sensíveis.
+- Deployment `dpl_9gimo5JMoxKPax4VTgWAb4GvjrJJ`, status Ready, produção;
+  domínio `https://www.reveraprotesecapilar.com` confirmado como alias.
+- Navegador: inclusão de uma Micropele 0,08 cor 1B na sacola, seguida de
+  seleção dos cinco destinos liberados. Conferidos idioma, endereço, DDI,
+  postal obrigatório, preço, frete, total e bloqueio sem aceite de importação.
+  Preenchimento e aceite habilitam continuação. Formulários não enviados.
+- Totais para essa peça: US USD204, CA CAD291, PT EUR193, GB GBP165, AU AUD318.
+- Brasil: preço original R$650; consulta de CEP e cálculo de frete funcionaram
+  (CEP 12216-530: LOGGI R$16,44; total R$666,44 no momento da consulta).
+- Todos os 21 destinos sem DHL responderam HTTP 200 com aviso localizado
+  explícito de ausência de cotação vigente e sem formulário/botão de pagamento.
+- Nenhum pedido pago nem cobrança real foi criado. A confirmação completa de
+  pagamento/webhook foi coberta por testes automatizados, não por cartão real.
