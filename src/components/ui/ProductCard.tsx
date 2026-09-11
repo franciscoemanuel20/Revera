@@ -6,9 +6,12 @@ export interface ProductCardProps {
   slug: string;
   name: string;
   imageUrl?: string | null;
+  imageAlt?: string | null;
   priceCents?: number | null;
   compareAtCents?: number | null;
   isFeatured?: boolean;
+  summary?: string | null;
+  textureLabel?: string | null;
 }
 
 // Card de vitrine — priceCents/imageUrl são opcionais porque o produto seed
@@ -18,9 +21,12 @@ export function ProductCard({
   slug,
   name,
   imageUrl,
+  imageAlt,
   priceCents,
   compareAtCents,
   isFeatured,
+  summary,
+  textureLabel,
 }: ProductCardProps) {
   return (
     <Link
@@ -31,7 +37,7 @@ export function ProductCard({
         {imageUrl ? (
           <Image
             src={imageUrl}
-            alt={name}
+            alt={imageAlt || name}
             fill
             className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
           />
@@ -42,7 +48,11 @@ export function ProductCard({
           </span>
         ) : null}
       </div>
-      <h3 className="font-display text-base text-ink">{name}</h3>
+      <div className="flex flex-col gap-1">
+        {textureLabel ? <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/60">{textureLabel}</span> : null}
+        <h3 className="font-display text-base text-ink">{name}</h3>
+        {summary ? <p className="text-sm leading-5 text-ink/70">{summary}</p> : null}
+      </div>
       {priceCents != null ? (
         <Price cents={priceCents} compareAtCents={compareAtCents} />
       ) : (

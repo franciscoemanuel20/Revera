@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
-import { ProductCard } from "@/components/ui/ProductCard";
 import { createClient } from "@/lib/supabase/server";
 import { produtoEstaVendavel, type ProdutoVitrine } from "@/lib/catalog/vitrine";
 import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
+import { apresentacaoDoProduto } from "@/lib/catalog/apresentacao";
+import { CatalogoGuiado } from "./CatalogoGuiado";
 
 export const metadata: Metadata = {
   title: "Próteses",
@@ -79,10 +80,16 @@ export default async function ProdutosPage() {
           return ((a.sort_order as number | null) ?? 0) - ((b.sort_order as number | null) ?? 0);
         })[0];
 
+      const apresentacao = apresentacaoDoProduto(p.slug as string, p.name as string);
+
       return {
         paraVitrine,
         slug: p.slug as string,
         name: p.name as string,
+        titulo: apresentacao.titulo,
+        resumo: apresentacao.resumo,
+        textura: apresentacao.textura,
+        prioridade: apresentacao.prioridade,
         description: (p.description as string | null) ?? null,
         isFeatured: Boolean(p.is_featured),
         priceCents: precos.length > 0 ? Math.min(...precos) : null,
@@ -112,21 +119,7 @@ export default async function ProdutosPage() {
         </p>
       </header>
 
-      {vendaveis.length > 0 ? (
-        <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {vendaveis.map((produto) => (
-            <li key={produto.slug}>
-              <ProductCard
-                slug={produto.slug}
-                name={produto.name}
-                imageUrl={produto.imageUrl}
-                priceCents={produto.priceCents}
-                isFeatured={produto.isFeatured}
-              />
-            </li>
-          ))}
-        </ul>
-      ) : (
+      {vendaveis.length > 0 ? <CatalogoGuiado produtos={vendaveis} /> : (
         <p className="text-ink/70">
           Nenhuma peça disponível para compra neste momento.
         </p>
