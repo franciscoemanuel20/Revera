@@ -61,6 +61,8 @@ export interface RegraDePais {
   rotuloRegiao: string | null;
   /** Rótulo local do código postal — "ZIP Code", "Postcode", "CEP". */
   rotuloPostal: string;
+  /** Alguns destinos (como os Emirados Árabes) não usam código postal. */
+  exigeCodigoPostal?: boolean;
   /**
    * Formato do código postal. Alfanumérico é a regra, não a exceção: só o
    * Brasil e alguns outros usam apenas dígitos. Um validador de CEP
@@ -72,16 +74,9 @@ export interface RegraDePais {
 }
 
 /**
- * Os sete mercados que o sistema sabe representar. A ordem é a do pedido do
- * Francisco (Brasil, EUA, Portugal, Reino Unido, Austrália, Canadá), com a
- * Espanha entrando por último, em 29/08/2026.
- *
- * A Espanha entrou pela regra "conforme as moedas": ela é o único mercado
- * hispanofalante que usa uma moeda que JÁ tem preço gravado (euro, as cinco
- * linhas em produção desde 29/08). México e Argentina precisariam de moeda
- * nova em `moeda.ts`, de 5 linhas novas em `variant_prices` e de cotação
- * DHL própria — é abertura de mercado, não tradução, e por isso não entra
- * junto com o idioma.
+ * Os mercados que o sistema sabe representar. Esta lista é estrutura de
+ * endereço, idioma e moeda; ela não abre uma venda por si só. Um país só
+ * aparece no checkout após preço e frete próprios serem publicados.
  *
  * As expressões de código postal seguem o formato publicado por cada
  * serviço postal. A do Reino Unido é a mais complexa porque o formato
@@ -202,6 +197,26 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     postalRegex: /^\d{5}$/,
     postalExemplo: "28013",
   },
+  MX: { iso: "MX", nomePt: "México", nomeEn: "Mexico", nomeEs: "México", moedaPadrao: "USD", idioma: "es", locale: "es-MX", ddi: "52", exigeRegiao: true, rotuloRegiao: "Estado", rotuloPostal: "Código Postal", postalRegex: /^\d{5}$/, postalExemplo: "06000" },
+  CL: { iso: "CL", nomePt: "Chile", nomeEn: "Chile", nomeEs: "Chile", moedaPadrao: "USD", idioma: "es", locale: "es-CL", ddi: "56", exigeRegiao: false, rotuloRegiao: "Región", rotuloPostal: "Código Postal", postalRegex: /^\d{7}$/, postalExemplo: "8320000" },
+  AR: { iso: "AR", nomePt: "Argentina", nomeEn: "Argentina", nomeEs: "Argentina", moedaPadrao: "USD", idioma: "es", locale: "es-AR", ddi: "54", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^(?:[A-Z]\d{4}[A-Z]{0,3}|\d{4})$/i, postalExemplo: "C1000" },
+  CO: { iso: "CO", nomePt: "Colômbia", nomeEn: "Colombia", nomeEs: "Colombia", moedaPadrao: "USD", idioma: "es", locale: "es-CO", ddi: "57", exigeRegiao: false, rotuloRegiao: "Departamento", rotuloPostal: "Código Postal", postalRegex: /^\d{6}$/, postalExemplo: "110111" },
+  VE: { iso: "VE", nomePt: "Venezuela", nomeEn: "Venezuela", nomeEs: "Venezuela", moedaPadrao: "USD", idioma: "es", locale: "es-VE", ddi: "58", exigeRegiao: false, rotuloRegiao: "Estado", rotuloPostal: "Código Postal", postalRegex: /^\d{4}$/, postalExemplo: "1010" },
+  EC: { iso: "EC", nomePt: "Equador", nomeEn: "Ecuador", nomeEs: "Ecuador", moedaPadrao: "USD", idioma: "es", locale: "es-EC", ddi: "593", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^\d{6}$/, postalExemplo: "170150" },
+  GT: { iso: "GT", nomePt: "Guatemala", nomeEn: "Guatemala", nomeEs: "Guatemala", moedaPadrao: "USD", idioma: "es", locale: "es-GT", ddi: "502", exigeRegiao: false, rotuloRegiao: "Departamento", rotuloPostal: "Código Postal", postalRegex: /^\d{5}$/, postalExemplo: "01001" },
+  PA: { iso: "PA", nomePt: "Panamá", nomeEn: "Panama", nomeEs: "Panamá", moedaPadrao: "USD", idioma: "es", locale: "es-PA", ddi: "507", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^\d{4}$/, postalExemplo: "0801" },
+  CR: { iso: "CR", nomePt: "Costa Rica", nomeEn: "Costa Rica", nomeEs: "Costa Rica", moedaPadrao: "USD", idioma: "es", locale: "es-CR", ddi: "506", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^\d{5}$/, postalExemplo: "10101" },
+  DO: { iso: "DO", nomePt: "República Dominicana", nomeEn: "Dominican Republic", nomeEs: "República Dominicana", moedaPadrao: "USD", idioma: "es", locale: "es-DO", ddi: "1", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^\d{5}$/, postalExemplo: "10101" },
+  DE: { iso: "DE", nomePt: "Alemanha", nomeEn: "Germany", nomeEs: "Alemania", moedaPadrao: "EUR", idioma: "en", locale: "de-DE", ddi: "49", exigeRegiao: false, rotuloRegiao: "State", rotuloPostal: "Postcode", postalRegex: /^\d{5}$/, postalExemplo: "10115" },
+  NL: { iso: "NL", nomePt: "Holanda", nomeEn: "Netherlands", nomeEs: "Países Bajos", moedaPadrao: "EUR", idioma: "en", locale: "nl-NL", ddi: "31", exigeRegiao: false, rotuloRegiao: "Province", rotuloPostal: "Postcode", postalRegex: /^\d{4}\s?[A-Z]{2}$/i, postalExemplo: "1012 JS" },
+  IE: { iso: "IE", nomePt: "Irlanda", nomeEn: "Ireland", nomeEs: "Irlanda", moedaPadrao: "EUR", idioma: "en", locale: "en-IE", ddi: "353", exigeRegiao: false, rotuloRegiao: "County", rotuloPostal: "Eircode", postalRegex: /^[A-Z]\d{2}\s?[A-Z0-9]{4}$/i, postalExemplo: "D02 X285" },
+  IN: { iso: "IN", nomePt: "Índia", nomeEn: "India", nomeEs: "India", moedaPadrao: "USD", idioma: "en", locale: "en-IN", ddi: "91", exigeRegiao: true, rotuloRegiao: "State", rotuloPostal: "PIN Code", postalRegex: /^\d{6}$/, postalExemplo: "110001" },
+  CN: { iso: "CN", nomePt: "China", nomeEn: "China", nomeEs: "China", moedaPadrao: "USD", idioma: "en", locale: "en-CN", ddi: "86", exigeRegiao: true, rotuloRegiao: "Province", rotuloPostal: "Postal Code", postalRegex: /^\d{6}$/, postalExemplo: "100000" },
+  ID: { iso: "ID", nomePt: "Indonésia", nomeEn: "Indonesia", nomeEs: "Indonesia", moedaPadrao: "USD", idioma: "en", locale: "en-ID", ddi: "62", exigeRegiao: true, rotuloRegiao: "Province", rotuloPostal: "Postal Code", postalRegex: /^\d{5}$/, postalExemplo: "10110" },
+  BD: { iso: "BD", nomePt: "Bangladesh", nomeEn: "Bangladesh", nomeEs: "Bangladés", moedaPadrao: "USD", idioma: "en", locale: "en-BD", ddi: "880", exigeRegiao: false, rotuloRegiao: "Division", rotuloPostal: "Postcode", postalRegex: /^\d{4}$/, postalExemplo: "1000" },
+  ZA: { iso: "ZA", nomePt: "África do Sul", nomeEn: "South Africa", nomeEs: "Sudáfrica", moedaPadrao: "USD", idioma: "en", locale: "en-ZA", ddi: "27", exigeRegiao: false, rotuloRegiao: "Province", rotuloPostal: "Postal Code", postalRegex: /^\d{4}$/, postalExemplo: "2000" },
+  AE: { iso: "AE", nomePt: "Emirados Árabes Unidos", nomeEn: "United Arab Emirates", nomeEs: "Emiratos Árabes Unidos", moedaPadrao: "USD", idioma: "en", locale: "en-AE", ddi: "971", exigeRegiao: false, rotuloRegiao: "Emirate", rotuloPostal: "Postal Code", exigeCodigoPostal: false, postalRegex: /^$/, postalExemplo: "Not required" },
+  NZ: { iso: "NZ", nomePt: "Nova Zelândia", nomeEn: "New Zealand", nomeEs: "Nueva Zelanda", moedaPadrao: "USD", idioma: "en", locale: "en-NZ", ddi: "64", exigeRegiao: false, rotuloRegiao: "Region", rotuloPostal: "Postcode", postalRegex: /^\d{4}$/, postalExemplo: "6011" },
 };
 
 export const PAISES_SUPORTADOS: CodigoPais[] = Object.keys(PAISES);

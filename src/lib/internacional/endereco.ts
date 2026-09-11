@@ -138,7 +138,7 @@ function construirSchemaInternacional(idioma: Idioma) {
     linha2: z.string().trim().nullable().default(null),
     cidade: z.string().trim().min(1, t.erroCidadeObrigatoria),
     regiao: z.string().trim().nullable().default(null),
-    codigoPostal: z.string().trim().min(1, t.erroPostalObrigatorio),
+    codigoPostal: z.string().trim().default(""),
     telefone: telefoneInternacional,
   });
 
@@ -159,7 +159,14 @@ function construirSchemaInternacional(idioma: Idioma) {
       return;
     }
 
-    if (!regra.postalRegex.test(valor.codigoPostal)) {
+    const exigeCodigoPostal = regra.exigeCodigoPostal !== false;
+    if (exigeCodigoPostal && !valor.codigoPostal) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["codigoPostal"],
+        message: t.erroPostalObrigatorio,
+      });
+    } else if (valor.codigoPostal && !regra.postalRegex.test(valor.codigoPostal)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["codigoPostal"],
@@ -289,7 +296,7 @@ export function paraLinha(e: Endereco): LinhaEndereco {
     state: null,
     line1: e.linha1,
     line2: e.linha2,
-    postal_code: e.codigoPostal,
+    postal_code: e.codigoPostal || null,
     region: e.regiao,
   };
 }
@@ -312,7 +319,8 @@ export function daLinha(l: LinhaEndereco, telefone: string): Endereco | null {
       telefone,
     };
   }
-  if (!l.line1 || !l.postal_code) return null;
+  const regra = regraDoPais(l.country);
+  if (!l.line1 || (!l.postal_code && regra?.exigeCodigoPostal !== false)) return null;
   return {
     pais: l.country,
     destinatario: l.recipient_name,
@@ -321,7 +329,7 @@ export function daLinha(l: LinhaEndereco, telefone: string): Endereco | null {
     linha2: l.line2,
     cidade: l.city,
     regiao: l.region,
-    codigoPostal: l.postal_code,
+    codigoPostal: l.postal_code ?? "",
     telefone,
   };
 }

@@ -143,6 +143,7 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
       nome: nomeDoPais(regra.iso, idioma),
       ddi: regra.ddi,
       exigeRegiao: regra.exigeRegiao,
+      exigeCodigoPostal: regra.exigeCodigoPostal !== false,
       rotuloRegiao: regra.rotuloRegiao,
       rotuloPostal: regra.rotuloPostal,
       postalExemplo: regra.postalExemplo,

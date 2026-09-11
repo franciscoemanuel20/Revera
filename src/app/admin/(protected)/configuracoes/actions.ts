@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
+import { validarAparenciaDoSite } from "@/lib/site/aparencia";
 
 // site_settings é chave-valor em jsonb (ver supabase/migrations/00000000000001_init.sql):
 // esta Server Action faz upsert por `key` — se a chave não existir, cria;
@@ -47,6 +48,12 @@ export async function salvarConfiguracaoAction(input: SalvarConfiguracaoInput): 
     };
   }
 
+  if (parsed.data.key === "site_appearance") {
+    const aparencia = validarAparenciaDoSite(valor);
+    if (!aparencia.ok) return { error: aparencia.error };
+    valor = aparencia.value;
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("site_settings")
@@ -63,5 +70,6 @@ export async function salvarConfiguracaoAction(input: SalvarConfiguracaoInput): 
   });
 
   revalidatePath("/admin/configuracoes");
+  if (parsed.data.key === "site_appearance") revalidatePath("/", "layout");
   return { ok: true };
 }

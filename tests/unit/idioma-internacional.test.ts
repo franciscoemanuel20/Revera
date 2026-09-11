@@ -107,6 +107,21 @@ describe("idioma vem do país de entrega", () => {
     expect(localeDoPais("ES")).toBe("es-ES");
   });
 
+  it("mercados hispanofalantes usam espanhol e dólar, sem confundir idioma com moeda", () => {
+    for (const iso of ["MX", "CL", "AR", "CO", "VE", "EC", "GT", "PA", "CR", "DO"]) {
+      expect(idiomaDoPais(iso), iso).toBe("es");
+      expect(regraDoPais(iso)?.moedaPadrao, iso).toBe("USD");
+    }
+  });
+
+  it("mercados adicionais têm país, moeda e endereço configurados antes de serem abertos", () => {
+    for (const iso of ["DE", "NL", "IE", "IN", "CN", "ID", "BD", "ZA", "AE", "NZ"]) {
+      const regra = regraDoPais(iso);
+      expect(regra, iso).not.toBeNull();
+      expect(ehMoedaSuportada(regra?.moedaPadrao ?? ""), iso).toBe(true);
+    }
+  });
+
   it("todo país da tabela tem idioma e locale", () => {
     for (const [iso, regra] of Object.entries(PAISES)) {
       expect(["pt", "en", "es"], iso).toContain(regra.idioma);
@@ -115,10 +130,9 @@ describe("idioma vem do país de entrega", () => {
   });
 
   /**
-   * A regra que o Francisco deu em 29/08/2026 — "conforme as moedas" —
-   * virando teste: país na tabela sem moeda suportada é país que o sistema
-   * não sabe precificar. É o que barra a entrada do México (MXN) ou da
-   * Argentina (ARS) só porque alguém traduziu a tela.
+   * País na tabela sem moeda suportada é país que o sistema não sabe
+   * precificar. Todos os mercados novos usam uma moeda já configurada,
+   * mas continuam fechados até que tenham preço e frete próprios.
    */
   it("nenhum país entra sem moeda que o sistema saiba cobrar", () => {
     for (const [iso, regra] of Object.entries(PAISES)) {
@@ -350,6 +364,18 @@ describe("erros de validação chegam na língua do comprador", () => {
     expect(mensagens).toMatch(/Introduce la ciudad/);
     // Nem português nem inglês vazando na tela do espanhol.
     expect(mensagens).not.toMatch(/Informe|inválido|Enter your|Invalid/);
+  });
+
+  it("Emirados Árabes aceitam endereço sem código postal", () => {
+    const r = validarEndereco({
+      ...enderecoUS,
+      pais: "AE",
+      cidade: "Dubai",
+      codigoPostal: "",
+      regiao: null,
+      telefone: "+971 50 123 4567",
+    });
+    expect(r.ok).toBe(true);
   });
 
   it("endereço brasileiro continua em português, como sempre foi", () => {

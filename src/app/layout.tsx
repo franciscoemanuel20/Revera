@@ -6,7 +6,7 @@ import { CartProvider } from "@/components/cart/CartProvider";
 import { Footer } from "@/components/ui/Footer";
 import { Header } from "@/components/ui/Header";
 import { baseUrl } from "@/lib/config/urls";
-import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
+import { aparenciaDoSite } from "@/lib/site/aparencia";
 import "./globals.css";
 
 // Fraunces: display serifado com itálico óptico, para headline e nome de
@@ -43,53 +43,53 @@ const manrope = Manrope({
  * openGraph.images — sem ele a imagem de compartilhamento sai com URL
  * relativa, que nenhum crawler resolve.
  */
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await aparenciaDoSite();
+  return {
   metadataBase: new URL(baseUrl()),
   title: {
-    default: "Reverá — Prótese capilar com acabamento natural",
-    template: "%s — Reverá",
+    default: site.seoTitle,
+    template: `%s — ${site.brandName}`,
   },
   // 02/09/2026 — as três descrições abaixo citavam só a 0,08mm. A 0,06mm
   // está ativa no catálogo e é a mais fina; a descrição que o Google e o
   // WhatsApp mostram é o primeiro lugar em que alguém lê o que a loja vende.
-  description:
-    "Próteses capilares premium. Base ultrafina em 0,08mm e 0,06mm, acabamento natural na linha frontal. Envio para todo o Brasil.",
-  applicationName: "Reverá",
-  authors: [{ name: "Reverá" }],
+  description: site.seoDescription,
+  applicationName: site.brandName,
+  authors: [{ name: site.brandName }],
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "pt_BR",
-    siteName: "Reverá",
-    title: "Reverá — Prótese capilar com acabamento natural",
-    description:
-      "Base ultrafina em 0,08mm e 0,06mm, acabamento natural na linha frontal. Envio para todo o Brasil.",
+    siteName: site.brandName,
+    title: site.seoTitle,
+    description: site.seoDescription,
     images: [
       {
         // Foto real do produto (public/media/hero), não arte gerada.
         url: "/media/hero/produto-close-1.jpeg",
         width: 1200,
         height: 630,
-        alt: "Prótese capilar Reverá — acabamento da linha frontal",
+        alt: `Prótese capilar ${site.brandName} — acabamento da linha frontal`,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Reverá — Prótese capilar com acabamento natural",
-    description:
-      "Base ultrafina em 0,08mm e 0,06mm, acabamento natural na linha frontal.",
+    title: site.seoTitle,
+    description: site.seoDescription,
     images: ["/media/hero/produto-close-1.jpeg"],
   },
   robots: { index: true, follow: true },
-};
+  };
+}
 
 export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const logo = await urlDaFotoDoSite("/media/marca/logo-revera.png");
+  const site = await aparenciaDoSite();
   return (
     <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
       <body className="flex min-h-screen flex-col">
@@ -108,9 +108,9 @@ export default async function RootLayout({
               empurra o conteúdo sozinho. Cada página pública compensa com
               padding-top próprio (HEADER_HEIGHT_PX), igual o hero da home já
               fazia antes de o header existir. */}
-          <Header logo={logo} />
+          <Header logo={site.logoUrl} brandName={site.brandName} menuPrincipal={site.menuPrincipal} menuConheca={site.menuConheca} linkProfissionais={site.linkProfissionais} />
           <div className="flex-1">{children}</div>
-          <Footer logo={logo} />
+          <Footer logo={site.logoUrl} brandName={site.brandName} instagramUrl={site.instagramUrl} />
         </CartProvider>
       </body>
     </html>

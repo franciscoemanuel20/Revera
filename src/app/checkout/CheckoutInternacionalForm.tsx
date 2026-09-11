@@ -39,6 +39,7 @@ export interface ResumoInternacional {
     nome: string;
     ddi: string;
     exigeRegiao: boolean;
+    exigeCodigoPostal: boolean;
     rotuloRegiao: string | null;
     rotuloPostal: string;
     postalExemplo: string;
@@ -254,13 +255,17 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
 
           <FormField
             label={resumo.pais.rotuloPostal}
-            hint={t.hintExemplo(resumo.pais.postalExemplo)}
+            hint={
+              resumo.pais.exigeCodigoPostal
+                ? t.hintExemplo(resumo.pais.postalExemplo)
+                : t.hintOpcional
+            }
             error={erros.codigoPostal}
           >
             {(props) => (
               <input
                 {...props}
-                required
+                required={resumo.pais.exigeCodigoPostal}
                 value={campos.codigoPostal}
                 onChange={(e) => atualizar("codigoPostal", e.target.value)}
                 className={inputClass}

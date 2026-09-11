@@ -63,7 +63,9 @@ function construirSchema(idioma: Idioma) {
   linha2: z.string().trim().nullable().default(null),
   cidade: z.string().trim().min(1, t.erroCidadeObrigatoria),
   regiao: z.string().trim().nullable().default(null),
-  codigoPostal: z.string().trim().min(1, t.erroPostalObrigatorio),
+  // Alguns destinos não têm código postal. A validação de endereço decide
+  // se ele é obrigatório conforme o país, depois de ler o payload.
+  codigoPostal: z.string().trim().default(""),
   /**
    * O aceite é OBRIGATÓRIO e específico (estrutura §6). `literal(true)`:
    * não existe pedido internacional sem ele, nem por payload adulterado —

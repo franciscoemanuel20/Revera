@@ -51,7 +51,7 @@ const GRUPOS_DE_LINKS = [
   },
 ];
 
-export function Footer({ logo }: { logo: string }) {
+export function Footer({ logo, brandName = "Reverá", instagramUrl = "" }: { logo: string; brandName?: string; instagramUrl?: string }) {
   const pathname = usePathname();
 
   if (pathname?.startsWith("/admin")) {
@@ -67,7 +67,7 @@ export function Footer({ logo }: { logo: string }) {
         {/* PNG com alfa reconstruído — ver comentário em src/app/page.tsx */}
         {logo ? <Image
           src={logo}
-          alt="Reverá — Prótese Capilar"
+          alt={brandName}
           width={1500}
           height={920}
           className="h-auto w-[170px]"
@@ -94,7 +94,8 @@ export function Footer({ logo }: { logo: string }) {
             </nav>
           ))}
         </div>
-        <p className="text-xs text-paper/40">© {new Date().getFullYear()} Reverá</p>
+        {instagramUrl ? <a href={instagramUrl} target="_blank" rel="noreferrer" className="text-sm text-paper/70 hover:text-gold">Instagram</a> : null}
+        <p className="text-xs text-paper/40">© {new Date().getFullYear()} {brandName}</p>
       </div>
     </footer>
   );

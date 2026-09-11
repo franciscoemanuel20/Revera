@@ -59,7 +59,7 @@ const LINKS_MOBILE = [...LINKS, ...LINKS_CONHECA, LINK_PROFISSIONAIS];
  * --paper por trás dá ≈3,13:1; o mesmo texto sobre --ink puro (home, hero)
  * dá ≈18,68:1. A diferença é só ISSO — de onde vem a regra acima.
  */
-export function Header({ logo }: { logo: string }) {
+export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHECA, linkProfissionais = LINK_PROFISSIONAIS, brandName = "Reverá" }: { logo: string; menuPrincipal?: { href: string; label: string }[]; menuConheca?: { href: string; label: string }[]; linkProfissionais?: { href: string; label: string }; brandName?: string }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
 
@@ -116,6 +116,7 @@ export function Header({ logo }: { logo: string }) {
   // única rota com hero escuro logo atrás do header. Em qualquer outra
   // página, ou depois de rolar na própria home, o header é sólido.
   const flutuante = pathname === "/" && !scrolled;
+  const linksMobile = [...menuPrincipal, ...menuConheca, linkProfissionais];
 
   return (
     <header
@@ -127,14 +128,14 @@ export function Header({ logo }: { logo: string }) {
       style={{ height: HEADER_HEIGHT_PX }}
     >
       <div className="mx-auto flex h-full w-full max-w-5xl items-center justify-between px-6">
-        <Link href="/" className="shrink-0" aria-label="Reverá — início">
+        <Link href="/" className="shrink-0" aria-label={`${brandName} — início`}>
           {/* logo-revera.png é a versão com alfa para fundo escuro (ver
               comentário em src/app/page.tsx) — o header nunca fica sobre
               fundo claro sem o degradê escuro acima, então é sempre seguro
               usar esta versão aqui. */}
           {logo ? <Image
             src={logo}
-            alt="Reverá"
+            alt={brandName}
             width={1500}
             height={920}
             priority
@@ -148,7 +149,7 @@ export function Header({ logo }: { logo: string }) {
             sacola) quebraria esse espaçamento se ficasse solto aqui. */}
         <div className="flex items-center gap-4">
         <nav className="hidden items-center gap-8 sm:flex">
-          {LINKS.map((link) => (
+          {menuPrincipal.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -171,7 +172,7 @@ export function Header({ logo }: { logo: string }) {
               <span aria-hidden="true" className="text-xs">▾</span>
             </summary>
             <nav className="surface-elevada absolute left-1/2 top-full mt-2 flex w-56 -translate-x-1/2 flex-col gap-1 rounded-md p-2 shadow-glow-gold">
-              {LINKS_CONHECA.map((link) => (
+              {menuConheca.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -184,10 +185,10 @@ export function Header({ logo }: { logo: string }) {
           </details>
 
           <Link
-            href={LINK_PROFISSIONAIS.href}
+            href={linkProfissionais.href}
             className="text-sm text-paper/85 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
           >
-            {LINK_PROFISSIONAIS.label}
+            {linkProfissionais.label}
           </Link>
         </nav>
 
@@ -211,7 +212,7 @@ export function Header({ logo }: { logo: string }) {
             </span>
           </summary>
           <nav className="surface-elevada absolute right-0 top-full mt-2 flex w-56 flex-col gap-1 rounded-md p-2 shadow-glow-gold">
-            {LINKS_MOBILE.map((link) => (
+            {linksMobile.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
