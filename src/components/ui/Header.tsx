@@ -124,6 +124,14 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
   ];
   const linksMobile = [...menuPrincipal, ...menuConheca, linkProfissionais];
 
+  // DESTAQUE DE PRÓTESES (18/09/2026, pedido do Francisco): o link do
+  // catálogo sai do meio dos textos do menu e vira um botão dourado no topo,
+  // e no celular fica visível fora do ≡. Achado pelo href, não pela posição
+  // nem pelo rótulo — o menu é editável no painel e pode ser reordenado.
+  const linkProteses = menuPrincipal.find((link) => link.href === "/produtos");
+  const classeDestaque =
+    "rounded-full border border-gold/70 bg-gold/10 px-4 py-1.5 text-sm font-semibold text-gold transition-colors hover:bg-gold hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold";
+
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 transition-[background-color,border-color] duration-300 ${
@@ -159,7 +167,11 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm text-paper/85 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+              className={
+                link === linkProteses
+                  ? classeDestaque
+                  : "text-sm text-paper/85 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+              }
             >
               {link.label}
             </Link>
@@ -189,6 +201,12 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
             </nav>
           </details>
         </nav>
+
+        {linkProteses ? (
+          <Link href={linkProteses.href} className={`sm:hidden ${classeDestaque}`}>
+            {linkProteses.label}
+          </Link>
+        ) : null}
 
         <CartTriggerButton className="text-paper/85 hover:text-gold" />
 
