@@ -59,7 +59,7 @@ export function ReengajamentoUnico({ texto }: { texto: string }) {
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-sand p-4">
       <div>
-        <h2 className="font-display text-lg text-ink">Mensagem única: pagamento ficou mais simples</h2>
+        <h2 className="font-display text-lg text-ink">Mensagem única: pedido registrado, aguardando pagamento</h2>
         <p className="text-sm text-ink/60">
           Para quem parou no pagamento nos últimos 10 dias. Uma vez por pessoa, até 20 por clique, das 9h às 20h.
         </p>

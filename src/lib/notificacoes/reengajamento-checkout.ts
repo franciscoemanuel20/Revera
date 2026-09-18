@@ -47,7 +47,7 @@ export const MAX_POR_CLIQUE = 20;
  * e de referência para quem conferir o que foi aprovado.
  */
 export const TEXTO_REENGAJAMENTO =
-  "Oi, tudo bem? Aqui é da Reverá. Vimos que seu pedido no site não chegou a ser pago, e pode ter sido por um erro nosso: a tela de pagamento pedia o endereço de novo. Já arrumamos, agora ela abre direto no Pix ou no cartão. Quer concluir? É só refazer em reveraprotesecapilar.com ou me responder aqui.";
+  "Seu pedido na Reverá foi registrado e está aguardando o pagamento para ser confirmado. Para concluir, é só responder esta mensagem.";
 
 /**
  * O WhatsApp da própria Reverá nunca é cliente: a equipe usou esse número em
