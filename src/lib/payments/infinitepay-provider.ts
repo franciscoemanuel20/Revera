@@ -38,6 +38,22 @@ function requireHandle(): string {
   return handle.replace(/^\$/, "");
 }
 
+/**
+ * Campos do `address` conforme a documentação do POST /links (lida de novo em
+ * 18/09/2026): cep, street, neighborhood, number, complement. Cidade e UF não
+ * existem lá — a InfinitePay deduz do CEP.
+ */
+function enderecoDaInfinitePay(endereco: PaymentCharge["customerAddress"]) {
+  const texto = (v: string | null | undefined) => (typeof v === "string" ? v.trim() : "");
+  const cep = texto(endereco?.postalCode).replace(/\D/g, "");
+  const street = texto(endereco?.street);
+  const number = texto(endereco?.number);
+  const neighborhood = texto(endereco?.neighborhood);
+  if (cep.length !== 8 || !street || !number || !neighborhood) return undefined;
+  const complement = texto(endereco?.complement);
+  return { cep, street, neighborhood, number, ...(complement ? { complement } : {}) };
+}
+
 export class InfinitePayProvider implements PaymentProvider {
   readonly name = "infinitepay";
 
@@ -64,6 +80,12 @@ export class InfinitePayProvider implements PaymentProvider {
         email: charge.customerEmail,
         phone_number: charge.customerPhone,
       },
+      // Sem `address`, a tela da InfinitePay pedia o CEP de novo — o cliente
+      // já tinha preenchido tudo aqui (atrito visto ao vivo em 31/08 e de novo
+      // em 18/09/2026). Com ele, a tela abre direto na escolha de pagamento
+      // (testado na API em 18/09). Endereço incompleto não vai: melhor a tela
+      // pedir do que abrir com um endereço pela metade.
+      address: enderecoDaInfinitePay(charge.customerAddress),
       items: charge.items.map((item) => ({
         quantity: item.quantity,
         // preço em CENTAVOS, igual ao resto do sistema — não converter.

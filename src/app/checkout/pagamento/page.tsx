@@ -316,18 +316,27 @@ export default async function PagamentoPage({
      * Perdemos a corrida (ou o banco recusou por outro motivo). O vencedor
      * está falando com o gateway agora e vai gravar a URL em seguida.
      *
-     * Espera curta e limitada: 5 tentativas de 300 ms. Se em 1,5 s a URL não
-     * apareceu, o vencedor provavelmente falhou — e aí cair na tela de
-     * "tentar novamente" é melhor que deixar o cliente numa página parada.
+     * Espera limitada: até 20 tentativas de 400 ms (8 s). Até 18/09/2026
+     * eram 1,5 s, e isso era curto: no teste de produção daquele dia o
+     * cliente viu "Estamos preparando seu pagamento" e só chegou à
+     * InfinitePay depois do recarregamento automático, ~10 s ao todo. Esta
+     * espera só LÊ o banco, nunca cria cobrança, então esperar mais não traz
+     * risco de link duplicado — só troca uma tela que parece erro por alguns
+     * segundos a mais de carregamento.
+     *
+     * Sai antes se a reserva sumiu (o vencedor falhou com erro certo e
+     * apagou a linha): aí não há link a esperar, e a tela de sempre é a
+     * resposta certa.
      */
-    for (let tentativa = 0; tentativa < 5; tentativa++) {
-      await new Promise((r) => setTimeout(r, 300));
-      const { data: doVencedor } = await supabase
+    for (let tentativa = 0; tentativa < 20; tentativa++) {
+      await new Promise((r) => setTimeout(r, 400));
+      const { data: doVencedor, error: erroLeitura } = await supabase
         .from("payments")
         .select("raw_response")
         .eq("order_id", pedido.id)
         .eq("status", "pending")
         .maybeSingle();
+      if (!erroLeitura && !doVencedor) break;
       const url = (doVencedor?.raw_response as { checkout_url?: string } | null)?.checkout_url;
       // Fora de try/catch: `redirect` funciona lançando exceção do Next.
       if (url && linkPermitido(url)) redirect(url);
