@@ -7,6 +7,8 @@ import {
   ETAPA_LABEL,
   type EtapaExibida,
 } from "@/lib/admin/recuperacao-consulta";
+import { TEXTO_REENGAJAMENTO } from "@/lib/notificacoes/reengajamento-checkout";
+import { ReengajamentoUnico } from "./ReengajamentoUnico";
 
 /**
  * RECUPERAÇÃO DE CARRINHO — a vitrine do que o cron
@@ -123,6 +125,8 @@ export default async function RecuperacaoPage() {
           destaque={resumo.recusadosDeVerdade > 0}
         />
       </div>
+
+      <ReengajamentoUnico texto={TEXTO_REENGAJAMENTO} />
 
       <AdminTable columns={columns} rows={rows} emptyMessage="Nenhum pedido pendente agora." />
     </div>

@@ -440,7 +440,7 @@ type Supabase = ReturnType<typeof createAdminClient>;
  *
  * Na dúvida (erro de consulta) devolve `true`: não mandar é o erro barato.
  */
-async function comprouPorOutroPedido(
+export async function comprouPorOutroPedido(
   supabase: Supabase,
   pedido: PedidoCandidato
 ): Promise<boolean> {
