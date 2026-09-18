@@ -57,6 +57,10 @@ const APRESENTACOES: Record<string, ApresentacaoProduto> = {
   },
 };
 
+export function prioridadeCatalogoProduto(slug: string): number {
+  return slug in APRESENTACOES ? 0 : 1;
+}
+
 export function apresentacaoDoProduto(slug: string, nomeOriginal: string): ApresentacaoProduto {
   return APRESENTACOES[slug] ?? {
     titulo: nomeOriginal,

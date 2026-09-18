@@ -6,6 +6,7 @@ import {
   produtoEstaVendavel,
   type ProdutoVitrine,
 } from "@/lib/catalog/vitrine";
+import { prioridadeCatalogoProduto } from "@/lib/catalog/apresentacao";
 
 /**
  * P0-1 — a home levava a 404 porque o slug estava fixo no código e ninguém
@@ -146,5 +147,16 @@ describe("linkDoProdutoVitrine", () => {
   it("sem produto, manda para uma página que existe — nunca para 404", () => {
     expect(linkDoProdutoVitrine(null)).toBe(DESTINO_SEM_PRODUTO);
     expect(DESTINO_SEM_PRODUTO.startsWith("/produtos/")).toBe(false);
+  });
+});
+
+describe("prioridadeCatalogoProduto", () => {
+  it("mantem as próteses conhecidas acima de produtos auxiliares", () => {
+    expect(prioridadeCatalogoProduto("micropele-008")).toBeLessThan(
+      prioridadeCatalogoProduto("cola-ultra-hold")
+    );
+    expect(prioridadeCatalogoProduto("full-lace")).toBeLessThan(
+      prioridadeCatalogoProduto("removedor-de-cola")
+    );
   });
 });

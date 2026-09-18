@@ -3,7 +3,7 @@ import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createClient } from "@/lib/supabase/server";
 import { produtoEstaVendavel, type ProdutoVitrine } from "@/lib/catalog/vitrine";
 import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
-import { apresentacaoDoProduto } from "@/lib/catalog/apresentacao";
+import { apresentacaoDoProduto, prioridadeCatalogoProduto } from "@/lib/catalog/apresentacao";
 import { CatalogoGuiado } from "./CatalogoGuiado";
 
 export const metadata: Metadata = {
@@ -103,7 +103,12 @@ export default async function ProdutosPage() {
         imageAlt: (foto?.alt_text as string | undefined) ?? null,
       };
     })
-    .filter((p) => produtoEstaVendavel(p.paraVitrine));
+    .filter((p) => produtoEstaVendavel(p.paraVitrine))
+    .sort((a, b) => {
+      const prioridade = prioridadeCatalogoProduto(a.slug) - prioridadeCatalogoProduto(b.slug);
+      if (prioridade !== 0) return prioridade;
+      return a.paraVitrine.sortOrder - b.paraVitrine.sortOrder;
+    });
 
   return (
     <main
