@@ -12,7 +12,8 @@
     "verify:secrets": "node scripts/verify-no-secrets-in-bundle.mjs",
     "seed": "node --env-file=.env.local scripts/seed.mjs",
     "db:aplicar": "node scripts/aplicar-migrations.mjs",
-    "verify:deploy": "node scripts/verify-deploy-seguro.mjs"
+    "verify:deploy": "node scripts/verify-deploy-seguro.mjs",
+    "guard:system-change": "node scripts/verificar-senha-mudanca-sistema.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",
@@ -22,6 +23,7 @@
     "react-dom": "^18.3.1",
     "server-only": "^0.0.1",
     "sharp": "0.35.4",
+    "ws": "^8.21.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {

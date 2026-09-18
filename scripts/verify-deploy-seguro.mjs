@@ -45,6 +45,16 @@ function env(nome) {
   return typeof v === "string" ? v.trim() : "";
 }
 
+function baseAsaasDeProducao(valor) {
+  if (!valor) return false;
+  try {
+    const url = new URL(valor);
+    return url.hostname === "api.asaas.com" || url.hostname === "asaas.com" || url.hostname === "www.asaas.com";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Mesma regra de src/lib/config/ambiente.ts — na dúvida, é produção.
  *
@@ -104,24 +114,52 @@ console.log(
 // ---------------------------------------------------------------------------
 // P0-2 — pagamento nunca pode cair em mock onde existe comprador real
 // ---------------------------------------------------------------------------
-const provider = env("PAYMENT_PROVIDER");
+const providerGenerico = env("PAYMENT_PROVIDER");
+const providerIsoladoRevera = env("REVERA_PAYMENT_PROVIDER");
+const provider = providerIsoladoRevera || providerGenerico;
+const nomeProvider = providerIsoladoRevera ? "REVERA_PAYMENT_PROVIDER" : "PAYMENT_PROVIDER";
 
 if (podeReceberComprador) {
   if (!provider) {
     problemas.push(
-      "PAYMENT_PROVIDER ausente. Neste ambiente existe comprador real e não " +
-        "há padrão: a loja subiria sem conseguir cobrar. Defina 'infinitepay'."
+      "REVERA_PAYMENT_PROVIDER/PAYMENT_PROVIDER ausente. Neste ambiente existe comprador real e não " +
+        "há padrão: a loja subiria sem conseguir cobrar. Defina 'asaas' ou 'infinitepay'."
     );
   } else if (provider === "mock") {
     problemas.push(
-      "PAYMENT_PROVIDER=mock neste ambiente. O provedor simulado APROVA " +
+      `${nomeProvider}=mock neste ambiente. O provedor simulado APROVA ` +
         "QUALQUER PAGAMENTO SEM COBRAR — a loja entregaria as peças de graça. " +
-        "Use 'infinitepay'."
+        "Use 'asaas' ou 'infinitepay'."
     );
-  } else if (provider !== "infinitepay") {
+  } else if (provider !== "infinitepay" && provider !== "asaas") {
     problemas.push(
-      `PAYMENT_PROVIDER="${provider}" não é um provedor conhecido. ` +
-        "Aceitos: 'infinitepay' (real), 'mock' (só em desenvolvimento e staging)."
+      `${nomeProvider}="${provider}" não é um provedor conhecido. ` +
+        "Aceitos: 'asaas' ou 'infinitepay' (reais), 'mock' (só em desenvolvimento e staging)."
+    );
+  }
+
+  if (provider === "asaas" && !env("ASAAS_API_KEY")) {
+    problemas.push(
+      `ASAAS_API_KEY ausente com ${nomeProvider}=asaas. ` +
+        "A criação do checkout falharia em toda compra."
+    );
+  }
+  if (provider === "asaas" && !env("ASAAS_WEBHOOK_AUTH_TOKEN")) {
+    problemas.push(
+      `ASAAS_WEBHOOK_AUTH_TOKEN ausente com ${nomeProvider}=asaas. ` +
+        "O webhook do Asaas não seria autenticado antes de liberar pedido."
+    );
+  }
+  if (provider === "asaas" && env("ASAAS_API_BASE")) {
+    problemas.push(
+      "ASAAS_API_BASE definida num ambiente com comprador real. Essa variável " +
+        "só existe para sandbox/teste; produção deve usar https://api.asaas.com/v3."
+    );
+  }
+  if (provider === "asaas" && env("ASAAS_CHECKOUT_BASE")) {
+    problemas.push(
+      "ASAAS_CHECKOUT_BASE definida num ambiente com comprador real. Essa variável " +
+        "só existe para sandbox/teste; produção deve usar o checkout oficial do Asaas."
     );
   }
 }
@@ -131,22 +169,50 @@ if (podeReceberComprador) {
 if (permiteSimulacao && ambiente === "staging") {
   if (!provider) {
     problemas.push(
-      "PAYMENT_PROVIDER ausente em staging. Mesmo aqui não existe padrão: " +
+      "REVERA_PAYMENT_PROVIDER/PAYMENT_PROVIDER ausente em staging. Mesmo aqui não existe padrão: " +
         "declare 'mock' para simular, ou o provedor de teste quando houver."
     );
-  } else if (provider !== "mock" && provider !== "infinitepay") {
-    problemas.push(`PAYMENT_PROVIDER="${provider}" desconhecido em staging.`);
+  } else if (provider !== "mock" && provider !== "infinitepay" && provider !== "asaas") {
+    problemas.push(`${nomeProvider}="${provider}" desconhecido em staging.`);
   } else if (provider === "infinitepay") {
     problemas.push(
-      "PAYMENT_PROVIDER=infinitepay em STAGING. Isso cobraria de verdade, " +
+      `${nomeProvider}=infinitepay em STAGING. Isso cobraria de verdade, ` +
         "com o gateway real, a partir de um ambiente de teste. Use 'mock'."
     );
+  } else if (provider === "asaas") {
+    const asaasApiBase = env("ASAAS_API_BASE");
+    const asaasCheckoutBase = env("ASAAS_CHECKOUT_BASE");
+    if (!asaasApiBase || !asaasCheckoutBase) {
+      problemas.push(
+        `${nomeProvider}=asaas em STAGING precisa de ASAAS_API_BASE e ` +
+          "ASAAS_CHECKOUT_BASE apontando para sandbox/teste. Sem override, " +
+          "o adapter usa o Asaas oficial e pode cobrar de verdade. Use 'mock' " +
+          "ou configure o sandbox explicitamente."
+      );
+    } else if (baseAsaasDeProducao(asaasApiBase) || baseAsaasDeProducao(asaasCheckoutBase)) {
+      problemas.push(
+        `${nomeProvider}=asaas em STAGING está apontando para endpoint oficial ` +
+          "do Asaas. Staging não pode criar checkout real; use sandbox/teste ou 'mock'."
+      );
+    }
   }
 
   if (provider === "infinitepay" && !env("INFINITEPAY_HANDLE")) {
     problemas.push(
-      "INFINITEPAY_HANDLE ausente com PAYMENT_PROVIDER=infinitepay. " +
+      `INFINITEPAY_HANDLE ausente com ${nomeProvider}=infinitepay. ` +
         "A criação da cobrança falharia em toda compra."
+    );
+  }
+  if (provider === "asaas" && !env("ASAAS_API_KEY")) {
+    problemas.push(
+      `ASAAS_API_KEY ausente com ${nomeProvider}=asaas. ` +
+        "A criação do checkout falharia em toda compra."
+    );
+  }
+  if (provider === "asaas" && !env("ASAAS_WEBHOOK_AUTH_TOKEN")) {
+    problemas.push(
+      `ASAAS_WEBHOOK_AUTH_TOKEN ausente com ${nomeProvider}=asaas. ` +
+        "O webhook do Asaas não seria autenticado antes de liberar pedido."
     );
   }
 

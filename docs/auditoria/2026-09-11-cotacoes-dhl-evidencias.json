@@ -1,0 +1,364 @@
+{
+  "source": "https://mydhl.express.dhl/br/pt/shipment.html#/rate-and-quote",
+  "collectedAt": "2026-09-11T03:07:59.416Z",
+  "origin": {
+    "city": "SAO JOSE DOS CAMPOS",
+    "state": "Sao Paulo",
+    "postal": "12216-530",
+    "country": "BR"
+  },
+  "parcel": {
+    "quantity": 1,
+    "weightKg": 0.1,
+    "dimensionsCm": [
+      20,
+      19,
+      9
+    ],
+    "packaging": "Sua Embalagem DHL",
+    "residentialDestination": true
+  },
+  "quotes": [
+    {
+      "iso": "ES",
+      "city": "MADRID",
+      "postal": "28013",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nMADRID, MADRID 28013\nSpain\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n10\nHoje\nSetembro\n11\nAmanhã\nSetembro\n12\nSábado\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n16\nQuarta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 420,07\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n16\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 485,88\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n16\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 520,34\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 10, 2026, 11:53 PM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "MX",
+      "city": "MEXICO CITY ALVARO OBREGON",
+      "postal": "01000",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nMEXICO CITY ALVARO OBREGON, DF 01000\nMexico\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n10\nHoje\nSetembro\n11\nAmanhã\nSetembro\n12\nSábado\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n17\nQuinta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n17\nQuinta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,00\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n17\nQuinta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 442,46\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 10, 2026, 11:56 PM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "AR",
+      "city": "BUENOS AIRES",
+      "postal": "1001",
+      "error": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText(/BRL \\d/).first()",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nBUENOS AIRES, Buenos Aires 1001\nArgentina\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n10\nHoje\nSetembro\n11\nAmanhã\nSetembro\n12\nSábado\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n15\nTerça-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n15\nTerça-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,00\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n15\nTerça-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 442,46\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 10, 2026, 11:57 PM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "CO",
+      "city": "BOGOTA",
+      "postal": "110111",
+      "error": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText(/BRL \\d/).first()",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nBOGOTA, Bogota 110111\nColombia\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n10\nHoje\nSetembro\n11\nAmanhã\nSetembro\n12\nSábado\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n16\nQuarta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n16\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,00\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n16\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 442,46\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 10, 2026, 11:57 PM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "IN",
+      "fields": [
+        {
+          "field": "country",
+          "value": "India"
+        },
+        {
+          "field": "address",
+          "value": ""
+        },
+        {
+          "field": "postal",
+          "value": "110001"
+        },
+        {
+          "field": "city",
+          "value": "NEW DELHI"
+        },
+        {
+          "field": "state",
+          "value": "Delhi"
+        },
+        {
+          "field": "checkbox_residentialAddress",
+          "value": "on"
+        }
+      ],
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nNEW DELHI, Delhi 110001\nIndia\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n21\nSegunda-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 661,85\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 773,30\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 807,81\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:06 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "DE",
+      "city": "BERLIN",
+      "postal": "10115",
+      "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText(/BRL \\d/).first()",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nBERLIN, Berlin 10115\nGermany\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n10\nHoje\nSetembro\n11\nAmanhã\nSetembro\n12\nSábado\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n16\nQuarta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 388,98\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n16\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 444,53\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n16\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 478,99\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 10, 2026, 11:58 PM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "IE",
+      "city": "DUBLIN",
+      "postal": "D02 X285",
+      "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText(/BRL \\d/).first()",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nDUBLIN, Dublin D02 X285\nIreland\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n10\nHoje\nSetembro\n11\nAmanhã\nSetembro\n12\nSábado\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n16\nQuarta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 388,98\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n16\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 444,53\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n16\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 478,99\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 10, 2026, 11:59 PM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "DO",
+      "city": "SANTO DOMINGO",
+      "suburb": "DISTRITO NACIONAL",
+      "postal": null,
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nSANTO DOMINGO,\nDominican Republic\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n18\nSexta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,72\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 443,29\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:02 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "BD",
+      "city": "DHAKA",
+      "postal": "1000",
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nDHAKA, Dhaka 1000\nBangladesh\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n23\nQuarta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 661,85\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n23\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 773,30\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n23\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 807,81\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:03 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "ZA",
+      "city": "JOHANNESBURG",
+      "postal": "2001",
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nJOHANNESBURG, Gauteng 2001\nSouth Africa\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n18\nSexta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 412,30\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 471,57\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 506,09\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:04 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "AE",
+      "city": "DUBAI",
+      "postal": "",
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nDUBAI, Dubai\nUnited Arab Emirates\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n21\nSegunda-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 661,85\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 773,30\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 807,81\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:04 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "NZ",
+      "city": "AUCKLAND",
+      "postal": "1010",
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nAUCKLAND, Auckland 1010\nNew Zealand\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n21\nSegunda-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 661,85\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 773,30\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 807,81\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:04 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "NL",
+      "city": "AMSTERDAM",
+      "postal": "1012 JS",
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nAMSTERDAM, 1012 JS\nNetherlands\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n18\nSexta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 388,98\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 445,36\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 479,87\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:04 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "CN",
+      "city": "BEIJING",
+      "postal": "100000",
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nBEIJING, Beijing 100000\nThe People’s Republic of China\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n23\nQuarta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 412,30\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n23\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 471,57\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n23\nQuarta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 506,09\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:04 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "CL",
+      "fields": [
+        {
+          "field": "country",
+          "value": "Chile"
+        },
+        {
+          "field": "address",
+          "value": ""
+        },
+        {
+          "field": "suburb",
+          "value": "SANTIAGO CENTRO"
+        },
+        {
+          "field": "city",
+          "value": "SANTIAGO"
+        },
+        {
+          "field": "province",
+          "value": ""
+        },
+        {
+          "field": "checkbox_residentialAddress",
+          "value": "on"
+        }
+      ],
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nSANTIAGO,\nChile\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n17\nQuinta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n17\nQuinta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,72\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n17\nQuinta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 443,29\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:05 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "VE",
+      "fields": [
+        {
+          "field": "country",
+          "value": "Venezuela"
+        },
+        {
+          "field": "address",
+          "value": ""
+        },
+        {
+          "field": "suburb",
+          "value": "CARACAS"
+        },
+        {
+          "field": "city",
+          "value": "CARACAS"
+        },
+        {
+          "field": "state",
+          "value": ""
+        },
+        {
+          "field": "checkbox_residentialAddress",
+          "value": "on"
+        }
+      ],
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nCARACAS,\nVenezuela\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n21\nSegunda-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 524,17\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 667,65\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 702,21\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:05 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "ID",
+      "fields": [
+        {
+          "field": "country",
+          "value": "Indonesia"
+        },
+        {
+          "field": "address",
+          "value": ""
+        },
+        {
+          "field": "postal",
+          "value": "10110"
+        },
+        {
+          "field": "city",
+          "value": "JAKARTA PUSAT, GAMBIR"
+        },
+        {
+          "field": "state",
+          "value": ""
+        },
+        {
+          "field": "checkbox_residentialAddress",
+          "value": "on"
+        }
+      ],
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nJAKARTA PUSAT, GAMBIR, 10110\nIndonesia\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n21\nSegunda-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 412,30\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 471,57\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n21\nSegunda-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 506,09\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:06 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "GT",
+      "fields": [
+        {
+          "field": "country",
+          "value": "Guatemala"
+        },
+        {
+          "field": "address",
+          "value": ""
+        },
+        {
+          "field": "suburb",
+          "value": "AMATITLAN"
+        },
+        {
+          "field": "city",
+          "value": "GUATEMALA"
+        },
+        {
+          "field": "state",
+          "value": ""
+        },
+        {
+          "field": "checkbox_residentialAddress",
+          "value": "on"
+        }
+      ],
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nGUATEMALA,\nGuatemala\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n18\nSexta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,72\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 443,29\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:06 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "PA",
+      "fields": [
+        {
+          "field": "country",
+          "value": "Panama"
+        },
+        {
+          "field": "address",
+          "value": ""
+        },
+        {
+          "field": "suburb",
+          "value": "BELLA VISTA"
+        },
+        {
+          "field": "city",
+          "value": "PANAMA"
+        },
+        {
+          "field": "checkbox_residentialAddress",
+          "value": "on"
+        }
+      ],
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nPANAMA,\nPanama\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n17\nQuinta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n17\nQuinta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,72\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n17\nQuinta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 443,29\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:07 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "CR",
+      "fields": [
+        {
+          "field": "country",
+          "value": "Costa Rica"
+        },
+        {
+          "field": "address",
+          "value": ""
+        },
+        {
+          "field": "suburb",
+          "value": "CENTRAL"
+        },
+        {
+          "field": "city",
+          "value": "SAN JOSE"
+        },
+        {
+          "field": "state",
+          "value": ""
+        },
+        {
+          "field": "checkbox_residentialAddress",
+          "value": "on"
+        }
+      ],
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nSAN JOSE,\nCosta Rica\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n17\nQuinta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n17\nQuinta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,72\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n17\nQuinta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 443,29\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:07 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    },
+    {
+      "iso": "EC",
+      "fields": [
+        {
+          "field": "country",
+          "value": "Ecuador"
+        },
+        {
+          "field": "address",
+          "value": ""
+        },
+        {
+          "field": "postal",
+          "value": "170101"
+        },
+        {
+          "field": "city",
+          "value": "QUITO"
+        },
+        {
+          "field": "province",
+          "value": ""
+        },
+        {
+          "field": "checkbox_residentialAddress",
+          "value": "on"
+        }
+      ],
+      "shipDate": "2026-09-14",
+      "text": " \nEnglish  Português\nAjuda e Suporte\nEncontrar localizações\n \nInício\tEnviar\tRastrear\n\t\nRegistro\n\t\nLogin\n Cancelar\nCotação rápida\nDe :\n\nSAO JOSE DOS CAMPOS, Sao Paulo 12216-530\nBrazil\nPara :\n\nQUITO, 170101\nEcuador\nEditar\nEmbalagens\nSua Embalagem DHL - 1 Peça - 0,1 kg (20 X 19 X 9 cm)\nEditar\nSerá enviado em\nSetembro\n11\nHoje\nSetembro\n12\nAmanhã\nSetembro\n13\nDomingo\nSetembro\n14\nSegunda-feira\nSetembro\n15\nTerça-feira\nSetembro\n16\nQuarta-feira\n \nMais\n+\n \n Compartilhe esta cotação  Nova cotação\nData de Entrega\nEntregue por\nPreço estimado\n Encontrar localizações\n Ir a uma Loja DHL\nSetembro\n18\nSexta-feira\nEXPRESS EASY\n\t\nFim do Dia\n\t\nBRL 329,86\nSem taxa de IVA\nDetalhes \nCriar Etiqueta Agora\n Preparar o Envio Online\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 408,72\nSem taxa de IVA\nDetalhes \n\nLigue para \n\n Agende uma Coleta\nSetembro\n18\nSexta-feira\nEXPRESS WORLDWIDE\n\t\nFim do Dia\n\t\nBRL 443,29\nSem taxa de IVA\nDetalhes \nTarifa DHL estimada com base em Set 11, 2026, 12:07 AM\n Aviso legal / isenção de responsabilidade e detalhes importantes\nCONTATO E SUPORTE\nAjuda e Suporte\nFAQs\nContate-nos\nEncontrar localizações\n\t\nINFORMAÇÃO LEGAL\nTermos e Condições\nGarantia de Devolução\nDeclaração de Privacidade\n\t\nALERTAS\nConhecimento de Fraudes\nInformações Importantes\n\t\nSobre a DHL\nImprensa\nTrabalhe Conosco\nAviso Legal\nSIGA-NOS   \tConfigurações de consentimento\t2026 © DHL Group - All rights reserved"
+    }
+  ],
+  "legalNoticeSummary": "A DHL informa que preços e prazos são estimativas, sujeitos às características reais do envio, tributos e adicionais. Nas lojas, a contagem considera a retirada do pacote pelo transportador. Não foi informada validade comercial de 30 dias.",
+  "limitations": [
+    "Cotações indicativas por localidade e data de postagem, não cobertura nacional.",
+    "O simulador não informou validade comercial de 30 dias.",
+    "Não foram criadas etiquetas, agendadas coletas ou realizadas cobranças.",
+    "Indonésia: aviso DHL exige identificação fiscal ou documento/passaporte do destinatário."
+  ]
+}

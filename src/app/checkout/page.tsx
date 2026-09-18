@@ -17,6 +17,7 @@ import {
   regraDoPais,
 } from "@/lib/internacional/paises";
 import { LANG_HTML, textos } from "@/lib/internacional/idioma";
+import { reveraApplePayDisponivel } from "@/lib/payments/revera";
 
 export const metadata: Metadata = {
   title: "Checkout",
@@ -56,7 +57,14 @@ export default async function CheckoutPage({
   let conteudo: React.ReactNode;
 
   if (pais === "BR") {
-    conteudo = <CheckoutForm />;
+    const carrinho = await lerCarrinhoCompleto();
+    const applePayDisponivel = await reveraApplePayDisponivel();
+    conteudo = (
+      <CheckoutForm
+        carrinhoInicial={carrinho}
+        applePayDisponivel={applePayDisponivel}
+      />
+    );
   } else {
     conteudo = await checkoutInternacional(pais);
   }

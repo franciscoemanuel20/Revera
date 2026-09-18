@@ -6,20 +6,42 @@ import { StripeProvider, urlCheckoutStripeSegura } from "@/lib/payments/stripe-p
 import { precoProtegido, destinoReveraValido } from "../../scripts/precificar-mercados.mjs";
 
 const resposta = vi.hoisted(() => ({
-  variantes: { data: [{ id: "v1" }, { id: "v2" }], count: 2, error: null as unknown },
+  variantes: {
+    data: [
+      { id: "v1", price_cents: 65000, stock_qty: 10 },
+      { id: "v2", price_cents: 75000, stock_qty: 10 },
+    ],
+    count: 2,
+    error: null as unknown,
+  },
   precos: { data: [{ variant_id: "v1" }, { variant_id: "v2" }], count: 2, error: null as unknown },
 }));
 vi.mock("@/lib/supabase/server", () => ({createAdminClient: () => ({from: (table: string) => {
   let id: string | undefined;
-  const q = { select: () => q, eq: (key: string, value: string) => { if(key === "id") id=value; return q; }, gt: () => q,
+  const filtrosGt: Array<[string, number]> = [];
+  const q = { select: () => q, eq: (key: string, value: string) => { if(key === "id") id=value; return q; }, gt: (key: string, value: number) => { filtrosGt.push([key, value]); return q; },
     lte:()=>q,gte:()=>q,order:()=>q,limit:()=>q,
     maybeSingle:async()=>({data:{id:id??"cotacao-nova",carrier:"DHL",service_name:"Express",currency:"USD",price_cents:id?6600:6800,valid_until:"2026-10-02"},error:null}),
-    then: (resolve: (x: unknown) => unknown) => Promise.resolve(resolve(table === "product_variants" ? resposta.variantes : resposta.precos)) };
+    then: (resolve: (x: unknown) => unknown) => {
+      if (table !== "product_variants") return Promise.resolve(resolve(resposta.precos));
+      const data = resposta.variantes.data.filter((linha) =>
+        filtrosGt.every(([key, value]) => Number((linha as Record<string, unknown>)[key] ?? 0) > value)
+      );
+      return Promise.resolve(resolve({ ...resposta.variantes, data, count: data.length }));
+    } };
   return q;
 }})}));
 
 beforeEach(() => {
   vi.unstubAllEnvs(); vi.unstubAllGlobals();
+  resposta.variantes = {
+    data: [
+      { id: "v1", price_cents: 65000, stock_qty: 10 },
+      { id: "v2", price_cents: 75000, stock_qty: 10 },
+    ],
+    count: 2,
+    error: null,
+  };
   resposta.precos = { data: [{variant_id:"v1"},{variant_id:"v2"}], count:2,error:null };
 });
 
@@ -34,7 +56,9 @@ describe("todos os destinos", () => {
       vi.stubGlobal("fetch",mock);
       await new StripeProvider().createCharge({orderId:"fixture",orderNumber:"TEST",currency:pais.moedaPadrao,locale:idiomaDoPais(pais.iso),amountCents:17000,redirectUrl:"https://www.reveraprotesecapilar.com/pedido/test",webhookUrl:"https://www.reveraprotesecapilar.com/api/test",items:[{description:"Produto",quantity:1,priceCents:10000},{description:"DHL",quantity:1,priceCents:7000}]});
       const args = mock.mock.calls as unknown as Array<[string,RequestInit]>;
-      const body = new URLSearchParams(String(args[0][1].body));
+      const primeiraChamada = args[0];
+      if (!primeiraChamada) throw new Error("StripeProvider não chamou fetch");
+      const body = new URLSearchParams(String(primeiraChamada[1].body));
       expect(body.get("locale")).toBe(pais.idioma);
       expect(body.get("line_items[0][price_data][currency]")).toBe(pais.moedaPadrao.toLowerCase());
       expect(body.get("adaptive_pricing[enabled]")).toBe("false");
@@ -49,6 +73,21 @@ it("recusa catálogo incompleto mesmo que o item no carrinho tenha preço", asyn
   expect(await catalogoCompletoNoMercado("USD")).toBe(false);
   resposta.precos.error={message:"indisponivel"};
   expect(await catalogoCompletoNoMercado("USD")).toBe(false);
+});
+
+it("não deixa variante não vendável travar mercado internacional", async () => {
+  const { catalogoCompletoNoMercado } = await import("@/lib/internacional/mercado");
+  resposta.variantes = {
+    data: [
+      { id: "v1", price_cents: 65000, stock_qty: 10 },
+      { id: "sem-preco", price_cents: 0, stock_qty: 999 },
+      { id: "sem-estoque", price_cents: 65000, stock_qty: 0 },
+    ],
+    count: 3,
+    error: null,
+  };
+  resposta.precos = { data: [{ variant_id: "v1" }], count: 1, error: null };
+  expect(await catalogoCompletoNoMercado("USD")).toBe(true);
 });
 
 it("não toma consulta truncada como catálogo completo",async()=>{

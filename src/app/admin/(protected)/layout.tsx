@@ -126,6 +126,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 const NAV_ITEMS = [
   { href: "/admin", label: "Painel" },
   { href: "/admin/pedidos", label: "Vendas" },
+  // 11/09/2026 — separado de "Vendas" porque responde outra pergunta: não
+  // "o que já vendeu", mas "quem ainda não pagou e por que o aviso de
+  // WhatsApp não chegou". Ver recuperacao-consulta.ts.
+  { href: "/admin/recuperacao", label: "Recuperação" },
   { href: "/admin/produtos", label: "Produtos" },
   { href: "/admin/cores", label: "Cores" },
   { href: "/admin/precos", label: "Preços" },

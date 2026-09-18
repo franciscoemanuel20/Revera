@@ -22,6 +22,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AmbiguousChargeError } from "@/lib/payments/provider";
+import { AsaasProvider } from "@/lib/payments/asaas-provider";
 import { InfinitePayProvider } from "@/lib/payments/infinitepay-provider";
 import { StripeProvider } from "@/lib/payments/stripe-provider";
 
@@ -102,6 +103,95 @@ describe("InfinitePayProvider.createCharge — ambiguidade de rede", () => {
   it("5xx (erro NO LADO do gateway) É ambíguo — pode ter criado mesmo assim", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("erro", { status: 500 })));
     const p = new InfinitePayProvider();
+    await expect(p.createCharge({ ...CHARGE_BASE, currency: "BRL" })).rejects.toBeInstanceOf(
+      AmbiguousChargeError
+    );
+  });
+});
+
+describe("AsaasProvider.createCharge — ambiguidade de rede", () => {
+  beforeEach(() => vi.stubEnv("ASAAS_API_KEY", "asaas_teste"));
+
+  const WEBHOOKS_OK = {
+    data: [
+      {
+        url: CHARGE_BASE.webhookUrl,
+        enabled: true,
+        interrupted: false,
+        events: ["CHECKOUT_PAID", "CHECKOUT_CANCELED", "CHECKOUT_EXPIRED"],
+      },
+    ],
+  };
+
+  it("fetch rejeitando (timeout/conexão perdida) lança AmbiguousChargeError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(WEBHOOKS_OK), { status: 200 }))
+        .mockRejectedValueOnce(new TypeError("fetch failed"))
+    );
+    const p = new AsaasProvider();
+    await expect(p.createCharge({ ...CHARGE_BASE, currency: "BRL" })).rejects.toBeInstanceOf(
+      AmbiguousChargeError
+    );
+  });
+
+  it("resposta 2xx cujo corpo falha ao ser lido também lança AmbiguousChargeError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(WEBHOOKS_OK), { status: 200 }))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.reject(new Error("conexão caiu no meio do corpo")),
+          text: () => Promise.reject(new Error("idem")),
+        })
+    );
+    const p = new AsaasProvider();
+    await expect(p.createCharge({ ...CHARGE_BASE, currency: "BRL" })).rejects.toBeInstanceOf(
+      AmbiguousChargeError
+    );
+  });
+
+  it("resposta 2xx sem `id` no corpo também lança AmbiguousChargeError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(WEBHOOKS_OK), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ status: "ACTIVE" }), { status: 200 }))
+    );
+    const p = new AsaasProvider();
+    await expect(p.createCharge({ ...CHARGE_BASE, currency: "BRL" })).rejects.toBeInstanceOf(
+      AmbiguousChargeError
+    );
+  });
+
+  it("4xx (gateway recusou a NOSSA requisição) NÃO é ambíguo — Error comum", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(WEBHOOKS_OK), { status: 200 }))
+        .mockResolvedValueOnce(new Response("erro", { status: 400 }))
+    );
+    const p = new AsaasProvider();
+    const erro = await p.createCharge({ ...CHARGE_BASE, currency: "BRL" }).catch((e: unknown) => e);
+    expect(erro).not.toBeInstanceOf(AmbiguousChargeError);
+    expect(erro).toBeInstanceOf(Error);
+  });
+
+  it("5xx (erro NO LADO do gateway) É ambíguo — pode ter criado mesmo assim", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(WEBHOOKS_OK), { status: 200 }))
+        .mockResolvedValueOnce(new Response("erro", { status: 500 }))
+    );
+    const p = new AsaasProvider();
     await expect(p.createCharge({ ...CHARGE_BASE, currency: "BRL" })).rejects.toBeInstanceOf(
       AmbiguousChargeError
     );

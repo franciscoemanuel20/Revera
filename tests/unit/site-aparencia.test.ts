@@ -29,6 +29,10 @@ describe("configuração pública do site", () => {
     seguro.instagramUrl = "https://www.instagram.com/revera/";
     expect(validarAparenciaDoSite(seguro).ok).toBe(true);
 
+    const comBarraInvertida = aparenciaValida();
+    comBarraInvertida.instagramUrl = "https://www.instagram.com/revera/\\";
+    expect(validarAparenciaDoSite(comBarraInvertida).ok).toBe(false);
+
     const inseguro = aparenciaValida();
     inseguro.instagramUrl = "javascript:alert(1)";
     expect(validarAparenciaDoSite(inseguro).ok).toBe(false);

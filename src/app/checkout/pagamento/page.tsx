@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
-import { providerParaMoeda } from "@/lib/payments";
+import { getStripeProvider } from "@/lib/payments";
+import { getReveraProviderForCurrency } from "@/lib/payments/revera";
 import { AmbiguousChargeError } from "@/lib/payments/provider";
 import { confirmarPagamento } from "@/lib/payments/confirmar";
 import { urlDoWebhook } from "@/lib/payments/webhook-url";
@@ -10,6 +11,8 @@ import { baseUrl } from "@/lib/config/urls";
 import { idiomaDoPais } from "@/lib/internacional/paises";
 import { pedidoInternacionalPagavel } from "@/lib/internacional/mercado";
 import { urlCheckoutStripeSegura } from "@/lib/payments/stripe-provider";
+import { montarItensDoPagamento } from "@/lib/payments/itens";
+import { AutoRetryPagamento } from "./AutoRetryPagamento";
 
 /**
  * Quanto tempo uma reserva `pending` sem URL em lugar nenhum (nem
@@ -65,7 +68,7 @@ export default async function PagamentoPage({
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, payment_status, total_cents, shipping_cents, discount_cents, currency, access_token, customer_id, address_id, intl_shipping_quote_id"
+      "id, order_number, status, payment_status, total_cents, shipping_cents, discount_cents, currency, payment_preference, access_token, customer_id, address_id, intl_shipping_quote_id"
     )
     .eq("access_token", accessToken)
     .maybeSingle();
@@ -115,7 +118,7 @@ export default async function PagamentoPage({
   }
   const linkPermitido = (url: string) => pedido.currency === "BRL" || urlCheckoutStripeSegura(url);
 
-  const [{ data: itens }, { data: cliente }] = await Promise.all([
+  const [{ data: itens }, { data: cliente }, { data: endereco }] = await Promise.all([
     supabase
       .from("order_items")
       .select("product_name_snapshot, variant_label_snapshot, quantity, unit_price_cents")
@@ -123,8 +126,15 @@ export default async function PagamentoPage({
     pedido.customer_id
       ? supabase
           .from("customers")
-          .select("full_name, email, phone")
+          .select("full_name, email, phone, cpf")
           .eq("id", pedido.customer_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    pedido.address_id
+      ? supabase
+          .from("addresses")
+          .select("street, number, complement, neighborhood, city, state, cep")
+          .eq("id", pedido.address_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
@@ -251,7 +261,10 @@ export default async function PagamentoPage({
   // de configuração, pois não cria cobrança nova.
   let provider;
   try {
-    provider = providerParaMoeda(pedido.currency as string);
+    provider =
+      pedido.currency === "BRL" && pedido.payment_preference === "apple_pay"
+        ? getStripeProvider()
+        : getReveraProviderForCurrency(pedido.currency as string);
   } catch (erro) {
     console.error("[pagamento] pagamento não configurado", erro);
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
@@ -327,6 +340,13 @@ export default async function PagamentoPage({
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
   }
 
+  const itensDoPagamento = montarItensDoPagamento({
+    itens: itens ?? [],
+    shippingCents: pedido.shipping_cents as number,
+    discountCents: pedido.discount_cents as number,
+    idiomaPagamento,
+  });
+
   let checkoutUrl: string;
   let cobrancaCriada = false;
   try {
@@ -347,10 +367,23 @@ export default async function PagamentoPage({
       orderNumber: pedido.order_number,
       amountCents: pedido.total_cents,
       currency: pedido.currency as string,
+      preferredMethod: pedido.payment_preference === "apple_pay" ? "apple_pay" : undefined,
       locale: idiomaPagamento,
       customerName: cliente?.full_name ?? undefined,
       customerEmail: cliente?.email ?? undefined,
       customerPhone: cliente?.phone ?? undefined,
+      customerDocument: cliente?.cpf ?? undefined,
+      customerAddress: endereco
+        ? {
+            street: endereco.street,
+            number: endereco.number,
+            complement: endereco.complement,
+            neighborhood: endereco.neighborhood,
+            city: endereco.city,
+            state: endereco.state,
+            postalCode: endereco.cep,
+          }
+        : undefined,
       // PORTA 2 da confirmação: o cliente volta para cá depois de pagar, e
       // essa página confirma com o gateway. Ver src/lib/payments/confirmar.ts.
       // O retorno é apenas um sinal de navegação para abrir o WhatsApp. A
@@ -367,24 +400,7 @@ export default async function PagamentoPage({
       // (Desconto, quando houver, ainda não tem linha aqui: hoje nenhum
       // pedido nasce com desconto. No dia em que nascer, esta soma volta a
       // divergir e o lugar de corrigir é este.)
-      items: [
-        ...(itens ?? []).map((item) => ({
-          description: [item.product_name_snapshot, item.variant_label_snapshot]
-            .filter(Boolean)
-            .join(" — "),
-          quantity: item.quantity as number,
-          priceCents: item.unit_price_cents as number,
-        })),
-        ...(pedido.shipping_cents > 0
-          ? [
-              {
-                description: idiomaPagamento === "en" ? "DHL shipping" : idiomaPagamento === "es" ? "Envío DHL" : "Frete",
-                quantity: 1,
-                priceCents: pedido.shipping_cents as number,
-              },
-            ]
-          : []),
-      ],
+      items: itensDoPagamento,
     });
     checkoutUrl = resultado.checkoutUrl;
     cobrancaCriada = true;
@@ -639,6 +655,7 @@ function telaDePagamentoIndisponivel(
             ? "Seu pedido está guardado. Aguarde um instante e tente novamente; para sua segurança, não criamos uma segunda cobrança."
             : "Seu pedido está guardado com o número acima e nada foi cobrado. Tente novamente em instantes — se continuar, guarde este número."}
       </p>
+      <AutoRetryPagamento ativo={cobrancaEmAnalise && !estagnada} />
       <a
         href={`/checkout/pagamento?pedido=${accessToken}`}
         className="text-ink underline decoration-gold decoration-2 underline-offset-4"

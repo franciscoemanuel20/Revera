@@ -41,11 +41,15 @@ function ehLogoSegura(valor: string): boolean {
   } catch { return false; }
 }
 
+function normalizarInstagram(valor: string): string {
+  return valor.trim().replace(/\\+$/g, "");
+}
+
 function ehInstagramSeguro(valor: string): boolean {
   if (!valor) return true;
   try {
     const url = new URL(valor);
-    return url.protocol === "https:" && ["instagram.com", "www.instagram.com"].includes(url.hostname.toLowerCase());
+    return url.protocol === "https:" && ["instagram.com", "www.instagram.com"].includes(url.hostname.toLowerCase()) && !url.pathname.includes("\\");
   } catch { return false; }
 }
 
@@ -61,7 +65,7 @@ function links(valor: unknown, padrao: LinkDoSite[]) {
 
 function normalizar(valor: Record<string, unknown>): AparenciaDoSite {
   const logo = texto(valor.logoUrl, APARENCIA_PADRAO.logoUrl, 500);
-  const instagram = typeof valor.instagramUrl === "string" ? valor.instagramUrl.trim() : "";
+  const instagram = typeof valor.instagramUrl === "string" ? normalizarInstagram(valor.instagramUrl) : "";
   return {
     brandName: texto(valor.brandName, APARENCIA_PADRAO.brandName, 80),
     logoUrl: ehLogoSegura(logo) ? logo : APARENCIA_PADRAO.logoUrl,

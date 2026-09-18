@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Manrope } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import { ConsentimentoCookies } from "@/components/privacy/ConsentimentoCookies";
 import { rastreamentoAtivoNesteAmbiente } from "@/lib/tracking/permissao";
 import { CartProvider } from "@/components/cart/CartProvider";
@@ -9,20 +9,13 @@ import { baseUrl } from "@/lib/config/urls";
 import { aparenciaDoSite } from "@/lib/site/aparencia";
 import "./globals.css";
 
-// Fraunces: display serifado com itálico óptico, para headline e nome de
-// produto. Manrope: corpo. Carregadas via next/font (self-hosted pelo
-// build do Next, sem <link> externo) e expostas como CSS var para bater
-// com --font-display/--font-body de src/styles/tokens.css — assim o
-// tailwind.config.ts não precisa saber o nome real da fonte, só a var.
-const fraunces = Fraunces({
+// Tipografia inspirada no sistema da Hotmart: sans moderna, comercial e
+// arredondada. A Hotmart usa fontes proprietárias; aqui usamos uma família
+// web segura via next/font, sem copiar arquivo licenciado, e aplicamos a
+// MESMA família para display e corpo para o site não misturar vozes.
+const hotmartLike = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-body",
+  variable: "--font-hotmart-like",
   display: "swap",
 });
 
@@ -91,7 +84,7 @@ export default async function RootLayout({
 }) {
   const site = await aparenciaDoSite();
   return (
-    <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
+    <html lang="pt-BR" className={hotmartLike.variable}>
       <body className="flex min-h-screen flex-col">
         {/* Os pixels só entram após escolha explícita por cookies opcionais.
             A atribuição de compra continua local, sem envio a terceiros. */}

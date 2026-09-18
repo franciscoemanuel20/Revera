@@ -162,7 +162,7 @@ describe("parseWebhookHint — semântica dos eventos", () => {
 });
 
 describe("createCharge — o que nunca sai daqui", () => {
-  it("BRL é recusado: cartão brasileiro não pertence à Stripe desta loja", async () => {
+  it("BRL é recusado por padrão: cartão brasileiro comum não pertence à Stripe desta loja", async () => {
     const p = await provider();
     await expect(
       p.createCharge({
@@ -175,6 +175,38 @@ describe("createCharge — o que nunca sai daqui", () => {
         items: [{ description: "a", quantity: 1, priceCents: 1000 }],
       })
     ).rejects.toThrow(/BRL/);
+  });
+
+  it("BRL é aceito quando a escolha explicita é carteira digital ou cartão pela Stripe", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ id: "cs_test_apple", url: "https://checkout.stripe.com/c/pay/apple" }), {
+        status: 200,
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const p = await provider();
+    const r = await p.createCharge({
+      orderId: ORDER,
+      orderNumber: "REV-X",
+      amountCents: 1000,
+      currency: "BRL",
+      preferredMethod: "apple_pay",
+      redirectUrl: "https://x/pedido/t",
+      webhookUrl: "https://x/wh",
+      items: [{ description: "a", quantity: 1, priceCents: 1000 }],
+    });
+
+    expect(r).toEqual({
+      providerPaymentId: "cs_test_apple",
+      checkoutUrl: "https://checkout.stripe.com/c/pay/apple",
+    });
+    const chamadas = fetchMock.mock.calls as unknown as Array<[string, RequestInit?]>;
+    const body = new URLSearchParams(String(chamadas[0]?.[1]?.body ?? ""));
+    expect(body.get("payment_method_types[0]")).toBe("card");
+    expect(body.get("line_items[0][price_data][currency]")).toBe("brl");
+    expect(body.get("metadata[payment_preference]")).toBe("apple_pay");
+    expect(body.get("payment_intent_data[metadata][payment_preference]")).toBe("apple_pay");
   });
 
   it("linhas que não somam o total abortam a cobrança", async () => {

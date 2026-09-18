@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { pagamentoInternacionalDisponivel } from "@/lib/payments";
+import { reveraInternationalPaymentAvailable } from "@/lib/payments/revera";
 import { paisesDoCheckout, nomeDoPais, bandeira, PAISES } from "@/lib/internacional/paises";
 import { PrecosInternacionais } from "./PrecosInternacionais";
 import { CotacoesFrete } from "./CotacoesFrete";
@@ -33,7 +33,7 @@ export default async function InternacionalPage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  const stripeOk = pagamentoInternacionalDisponivel();
+  const stripeOk = reveraInternationalPaymentAvailable();
   const paisesAbertos = paisesDoCheckout().filter((p) => p !== "BR");
   const paisesConhecidos = Object.keys(PAISES).filter((p) => p !== "BR");
 

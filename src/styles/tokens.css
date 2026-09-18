@@ -69,12 +69,11 @@
   --sand-rgb: 230 224 214;
 
   /* Tipografia — ver tailwind.config.ts para o mapeamento em fontFamily.
-     Fraunces (display, serifada) para headline e nome de produto;
-     Manrope (corpo) para o resto. Explicitamente NÃO Inter, NÃO Space
-     Grotesk — são a fonte-padrão de todo produto que parece "feito por
-     IA" e a marca pediu para fugir disso. */
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
-  --font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
+     Inspirada na direção da Hotmart: uma sans moderna, arredondada e
+     comercial em todo o site. A Hotmart usa fontes proprietárias; a
+     Reverá usa uma alternativa web segura carregada em src/app/layout.tsx. */
+  --font-display: var(--font-hotmart-like), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-hotmart-like), ui-sans-serif, system-ui, sans-serif;
 }
 
 /*

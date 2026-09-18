@@ -131,6 +131,9 @@ beforeEach(() => {
           shipping_status: "not_ready",
           total_cents: TOTAL,
           currency: "USD",
+          customers: { full_name: "Cliente Teste" },
+          addresses: { city: "Miami", state: "FL", country: "US" },
+          order_items: [{ product_name_snapshot: "Prótese Reverá", quantity: 1 }],
         },
       ],
       payments: [],
@@ -159,6 +162,43 @@ describe("o caminho feliz, uma vez", () => {
     expect(fake.tabela("payment_events")).toHaveLength(1);
     expect(fake.tabela("payment_events")[0]?.processed_at).toBeTruthy();
     expect(despachar).toHaveBeenCalledTimes(1);
+  });
+
+  it("mesmo com WhatsApp desligado, envia e-mail operacional da venda paga", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_xxx");
+    vi.stubEnv("REVERA_ALERT_EMAIL_TO", "equipe@example.com");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://revera.test");
+    const fetchMock = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+      const destino = String(url);
+      if (destino === "https://api.resend.com/emails") {
+        return new Response(JSON.stringify({ id: "email_venda" }));
+      }
+      return new Response(
+        JSON.stringify({
+          id: "cs_test_e2e",
+          client_reference_id: ORDER,
+          payment_status: "paid",
+          amount_total: TOTAL,
+          currency: "usd",
+        }),
+        { status: 200 }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const post = await rota();
+
+    const resposta = await post(eventoPagamento());
+
+    expect(resposta.status).toBe(200);
+    const chamadaEmail = fetchMock.mock.calls.find(([url]) => String(url) === "https://api.resend.com/emails");
+    expect(chamadaEmail).toBeTruthy();
+    const body = JSON.parse(String(chamadaEmail?.[1]?.body));
+    expect(body.subject).toBe("Nova venda Reverá — REV-E2E");
+    expect(body.text).toContain("NOVA VENDA REVERÁ");
+    expect(fake.tabela("order_notifications")[0]).toMatchObject({
+      kind: "venda_paga",
+      last_error: "WHATSAPP_PROVIDER desligado",
+    });
   });
 });
 

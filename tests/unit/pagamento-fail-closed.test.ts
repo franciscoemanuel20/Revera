@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ambienteAtual, ehProducao, permiteSimulacao } from "@/lib/config/ambiente";
 import { getPaymentProvider, pagamentoEstaDisponivel, PagamentoIndisponivel } from "@/lib/payments";
+import { getReveraNationalProvider } from "@/lib/payments/revera";
 
 /**
  * P0-2 — o sistema caía em MOCK quando PAYMENT_PROVIDER estava ausente, e o
@@ -15,7 +16,7 @@ import { getPaymentProvider, pagamentoEstaDisponivel, PagamentoIndisponivel } fr
 const ORIGINAL = { ...process.env };
 
 function ambiente(vars: Record<string, string | undefined>) {
-  for (const k of ["PAYMENT_PROVIDER", "NODE_ENV", "VERCEL_ENV"]) {
+  for (const k of ["PAYMENT_PROVIDER", "REVERA_PAYMENT_PROVIDER", "NODE_ENV", "VERCEL_ENV"]) {
     delete (process.env as Record<string, string | undefined>)[k];
   }
   for (const [k, v] of Object.entries(vars)) {
@@ -103,6 +104,11 @@ describe("getPaymentProvider — nunca existe padrão", () => {
     expect(getPaymentProvider().name).toBe("infinitepay");
   });
 
+  it("asaas é aceito em produção", () => {
+    ambiente({ PAYMENT_PROVIDER: "asaas", VERCEL_ENV: "production" });
+    expect(getPaymentProvider().name).toBe("asaas");
+  });
+
   it("valor desconhecido não vira mock nem real — lança", () => {
     ambiente({ PAYMENT_PROVIDER: "stripe", NODE_ENV: "development" });
     expect(() => getPaymentProvider()).toThrow(/desconhecido/);
@@ -113,5 +119,34 @@ describe("getPaymentProvider — nunca existe padrão", () => {
     expect(pagamentoEstaDisponivel()).toBe(false);
     ambiente({ PAYMENT_PROVIDER: "infinitepay", VERCEL_ENV: "production" });
     expect(pagamentoEstaDisponivel()).toBe(true);
+  });
+
+  it("Revera usa REVERA_PAYMENT_PROVIDER antes do provider generico", () => {
+    ambiente({
+      PAYMENT_PROVIDER: "infinitepay",
+      REVERA_PAYMENT_PROVIDER: "asaas",
+      VERCEL_ENV: "production",
+    });
+    expect(getPaymentProvider().name).toBe("infinitepay");
+    expect(getReveraNationalProvider().name).toBe("asaas");
+  });
+
+  it("Revera pode isolar o checkout nacional na InfinitePay", () => {
+    ambiente({
+      PAYMENT_PROVIDER: "asaas",
+      REVERA_PAYMENT_PROVIDER: "infinitepay",
+      VERCEL_ENV: "production",
+    });
+    expect(getPaymentProvider().name).toBe("asaas");
+    expect(getReveraNationalProvider().name).toBe("infinitepay");
+  });
+
+  it("Revera falha fechada quando o provider isolado tem valor invalido", () => {
+    ambiente({
+      PAYMENT_PROVIDER: "asaas",
+      REVERA_PAYMENT_PROVIDER: "stripe",
+      VERCEL_ENV: "production",
+    });
+    expect(() => getReveraNationalProvider()).toThrow(/Provider nacional da Revera inválido/);
   });
 });

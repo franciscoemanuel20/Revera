@@ -88,6 +88,11 @@ class Consulta {
     return this;
   }
 
+  is(coluna: string, valor: unknown) {
+    this.filtros.push({ coluna, valor });
+    return this;
+  }
+
   order(_coluna: string, _opcoes?: unknown) {
     return this;
   }

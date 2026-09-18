@@ -23,6 +23,7 @@ const textoCurto = z.string().max(500).nullable().optional().catch(null);
 // regra de formato ficar mais específica).
 export const checkoutSchema = z.object({
   trackingConsent: z.boolean().optional().default(false),
+  paymentPreference: z.enum(["default", "apple_pay"]).optional().default("default"),
   /**
    * País de entrega. Default 'BR' — e hoje esse é o único valor que o
    * checkout público oferece, porque não há como cobrar cliente

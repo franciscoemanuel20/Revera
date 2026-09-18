@@ -1,7 +1,49 @@
 "use client";
 
+import { useEffect } from "react";
 import Script from "next/script";
 import { GOOGLE_TAG_ID, META_PIXEL_ID } from "@/lib/tracking/config";
+
+declare global {
+  interface Window {
+    _fbq?: Window["fbq"];
+  }
+}
+
+type MetaFbqQueue = {
+  (...args: unknown[]): void;
+  callMethod?: (...args: unknown[]) => void;
+  push: unknown;
+  loaded: boolean;
+  version: string;
+  queue: unknown[][];
+};
+
+export function garantirFilaMetaPixel() {
+  if (!META_PIXEL_ID) return;
+  if (window.fbq) return;
+
+  const fbq = function (...args: unknown[]) {
+    if (fbq.callMethod) {
+      fbq.callMethod(...args);
+    } else {
+      fbq.queue.push(args);
+    }
+  } as MetaFbqQueue;
+
+  fbq.push = fbq;
+  fbq.loaded = true;
+  fbq.version = "2.0";
+  fbq.queue = [];
+  window.fbq = fbq;
+  window._fbq = fbq;
+
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = "https://connect.facebook.net/en_US/fbevents.js";
+  document.head.appendChild(script);
+  window.fbq("init", META_PIXEL_ID);
+}
 
 /**
  * Carrega as bases do Meta Pixel e do Google, uma vez por sessão.
@@ -36,24 +78,15 @@ export function Pixels({ ativo }: { ativo: boolean }) {
   // funil com tráfego de quem está programando. Quem decide é o servidor
   // (ver src/lib/tracking/permissao.ts): este componente é client e só
   // enxergaria variáveis NEXT_PUBLIC_, que não distinguem ambiente.
+  useEffect(() => {
+    if (!ativo) return;
+    garantirFilaMetaPixel();
+  }, [ativo]);
+
   if (!ativo) return null;
 
   return (
     <>
-      {META_PIXEL_ID ? (
-        <Script id="meta-pixel-base" strategy="afterInteractive">
-          {`
-!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;
-s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init','${META_PIXEL_ID}');
-          `}
-        </Script>
-      ) : null}
-
       {GOOGLE_TAG_ID ? (
         <>
           <Script
@@ -64,12 +97,12 @@ fbq('init','${META_PIXEL_ID}');
           <Script id="google-tag-base" strategy="afterInteractive">
             {`
 window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
-gtag('js', new Date());
+window.gtag = window.gtag || function(){dataLayer.push(arguments);}
+window.gtag('js', new Date());
 // send_page_view:false porque quem manda page_view é o PageViewTracker, na
 // troca de rota também. Deixar o padrão ligado contaria a primeira página
 // duas vezes.
-gtag('config','${GOOGLE_TAG_ID}',{send_page_view:false});
+window.gtag('config','${GOOGLE_TAG_ID}',{send_page_view:false});
             `}
           </Script>
         </>

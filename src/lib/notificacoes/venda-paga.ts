@@ -39,6 +39,7 @@ import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
 import { nomeDoPais } from "@/lib/internacional/paises";
 import { WHATSAPP_REVERA } from "@/lib/config/whatsapp";
 import { baseUrl } from "@/lib/config/urls";
+import { enviarEmailOperacional } from "./email-operacional";
 import { enviarWhatsApp, modoWhatsApp } from "./whatsapp";
 
 /**
@@ -96,18 +97,6 @@ export async function avisarVendaPaga(
       return { estado: "erro", motivo: "não foi possível reservar o aviso" };
     }
 
-    if (modoWhatsApp() === "desligado") {
-      // A reserva FICA, com sent_at nulo. O painel mostra "aviso não
-      // enviado" e a responsável entende o porquê, em vez de achar que a
-      // mensagem se perdeu.
-      await supabase
-        .from("order_notifications")
-        .update({ last_error: "WHATSAPP_PROVIDER desligado" })
-        .eq("order_id", orderId)
-        .eq("kind", "venda_paga");
-      return { estado: "desligado" };
-    }
-
     const dados = await lerResumo(supabase, orderId);
     if (!dados) {
       await registrarFalha(supabase, orderId, "pedido não encontrado para montar o aviso");
@@ -116,6 +105,26 @@ export async function avisarVendaPaga(
 
     const destino = destinoDoAviso(process.env.WHATSAPP_DESTINO);
     const { texto, parametros } = montarAvisoVendaPaga(dados);
+    const envioEmail = await enviarEmailOperacional({
+      assunto: `Nova venda Reverá — ${dados.numero}`,
+      texto,
+      idempotencyKey: `revera-venda-paga:${orderId}`,
+    });
+    if (envioEmail.estado === "erro") {
+      console.error("[aviso-venda-email] falha ao enviar", envioEmail.motivo);
+    }
+
+    if (modoWhatsApp() === "desligado") {
+      // A reserva FICA, com sent_at nulo. O e-mail operacional acima vira a
+      // redundância mínima quando o canal principal está desligado.
+      await supabase
+        .from("order_notifications")
+        .update({ last_error: "WHATSAPP_PROVIDER desligado" })
+        .eq("order_id", orderId)
+        .eq("kind", "venda_paga");
+      return { estado: "desligado" };
+    }
+
     const envio = await enviarWhatsApp({ para: destino, texto, parametros });
 
     if (envio.estado === "erro") {

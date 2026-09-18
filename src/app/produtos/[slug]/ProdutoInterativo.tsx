@@ -125,6 +125,7 @@ export function ProdutoInterativo({
   const router = useRouter();
   const { adicionarItem, abrirDrawer, pendente } = useCart();
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
+  const [adicionando, setAdicionando] = useState(false);
 
   const fotos = useMemo(
     () => fotosDoProduto(name, fotosDoBanco, fotosFallback),
@@ -529,40 +530,46 @@ export function ProdutoInterativo({
               {varianteExibicao ? (
                 <Button
                   size="lg"
-                  disabled={pendente || !podeComprar || varianteExibicao.stockQty <= 0}
+                  disabled={pendente || adicionando || !podeComprar || varianteExibicao.stockQty <= 0}
                   onClick={async () => {
+                    if (adicionando) return;
                     setMensagemErro(null);
                     if (!varianteSelecionada || faltaEscolherCor) {
                       setMensagemErro("Escolha a cor da prótese antes de continuar.");
                       return;
                     }
-                    const { erro } = await adicionarItem(varianteSelecionada.id, quantidade);
-                    if (erro) {
-                      setMensagemErro(erro);
-                      return;
+                    setAdicionando(true);
+                    try {
+                      const { erro } = await adicionarItem(varianteSelecionada.id, quantidade);
+                      if (erro) {
+                        setMensagemErro(erro);
+                        return;
+                      }
+                      // AddToCart só DEPOIS de o servidor confirmar (P1,
+                      // 27/08/2026). Medir no clique contaria estoque esgotado e
+                      // erro de rede como intenção de compra, e o público de
+                      // remarketing nasceria com gente que nunca conseguiu
+                      // colocar nada na sacola.
+                      medirAdicionarAoCarrinho({
+                        variantId: varianteSelecionada.id,
+                        nome: name,
+                        quantidade,
+                        precoUnitarioCents: resultadoDesconto?.unitPriceCents ?? varianteSelecionada.priceCents,
+                      });
+                      setConfirmacao({
+                        texto: "Produto adicionado ao carrinho",
+                        chave: Date.now(),
+                      });
+                    } finally {
+                      setAdicionando(false);
                     }
-                    // AddToCart só DEPOIS de o servidor confirmar (P1,
-                    // 27/08/2026). Medir no clique contaria estoque esgotado e
-                    // erro de rede como intenção de compra, e o público de
-                    // remarketing nasceria com gente que nunca conseguiu
-                    // colocar nada na sacola.
-                    medirAdicionarAoCarrinho({
-                      variantId: varianteSelecionada.id,
-                      nome: name,
-                      quantidade,
-                      precoUnitarioCents: resultadoDesconto?.unitPriceCents ?? varianteSelecionada.priceCents,
-                    });
-                    setConfirmacao({
-                      texto: "Produto adicionado ao carrinho",
-                      chave: Date.now(),
-                    });
                   }}
                 >
                   {varianteExibicao.stockQty <= 0
                     ? "Fora de estoque"
                     : faltaEscolherCor
                       ? "Escolha uma cor"
-                      : pendente
+                      : pendente || adicionando
                         ? "Adicionando…"
                         : "Adicionar ao carrinho"}
                 </Button>

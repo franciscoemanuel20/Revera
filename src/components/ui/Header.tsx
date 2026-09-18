@@ -116,6 +116,12 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
   // única rota com hero escuro logo atrás do header. Em qualquer outra
   // página, ou depois de rolar na própria home, o header é sólido.
   const flutuante = pathname === "/" && !scrolled;
+  const linksDesktopPrincipais = menuPrincipal.slice(0, 2);
+  const linksDesktopConheca = [
+    ...menuPrincipal.slice(2),
+    ...menuConheca,
+    linkProfissionais,
+  ];
   const linksMobile = [...menuPrincipal, ...menuConheca, linkProfissionais];
 
   return (
@@ -127,7 +133,7 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
       }`}
       style={{ height: HEADER_HEIGHT_PX }}
     >
-      <div className="mx-auto flex h-full w-full max-w-5xl items-center justify-between px-6">
+      <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-6">
         <Link href="/" className="shrink-0" aria-label={`${brandName} — início`}>
           {/* logo-revera.png é a versão com alfa para fundo escuro (ver
               comentário em src/app/page.tsx) — o header nunca fica sobre
@@ -139,7 +145,7 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
             width={1500}
             height={920}
             priority
-            className="h-8 w-auto sm:h-9"
+            className="h-10 w-auto sm:h-12"
           /> : null}
         </Link>
 
@@ -148,8 +154,8 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
             filhos (logo | resto); um terceiro filho sempre visível (a
             sacola) quebraria esse espaçamento se ficasse solto aqui. */}
         <div className="flex items-center gap-4">
-        <nav className="hidden items-center gap-8 sm:flex">
-          {menuPrincipal.map((link) => (
+        <nav className="hidden items-center gap-7 sm:flex">
+          {linksDesktopPrincipais.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -159,11 +165,10 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
             </Link>
           ))}
 
-          {/* Dropdown "Conheça" — mesmo padrão <details>/<summary> do menu
-              mobile logo abaixo, só que inline. Sem JS extra: <details>
-              fecha ao clicar fora sozinho no Safari/Chrome recentes; onde
-              não fecha, navegar por um dos links já desmonta o menu de
-              qualquer forma. */}
+          {/* Dropdown "Conheça" — segura os links institucionais e de
+              confiança para o topo respirar melhor. Na primeira dobra da
+              home, o que precisa ficar solto é o caminho de compra
+              (Próteses/Cores), não a lista inteira de conteúdo. */}
           <details className="relative">
             <summary
               className="flex cursor-pointer list-none items-center gap-1 text-sm text-paper/85 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold [&::-webkit-details-marker]:hidden"
@@ -171,8 +176,8 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
               Conheça
               <span aria-hidden="true" className="text-xs">▾</span>
             </summary>
-            <nav className="surface-elevada absolute left-1/2 top-full mt-2 flex w-56 -translate-x-1/2 flex-col gap-1 rounded-md p-2 shadow-glow-gold">
-              {menuConheca.map((link) => (
+            <nav className="surface-elevada absolute left-1/2 top-full mt-2 flex w-60 -translate-x-1/2 flex-col gap-1 rounded-md p-2 shadow-glow-gold">
+              {linksDesktopConheca.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -183,13 +188,6 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
               ))}
             </nav>
           </details>
-
-          <Link
-            href={linkProfissionais.href}
-            className="text-sm text-paper/85 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
-          >
-            {linkProfissionais.label}
-          </Link>
         </nav>
 
         <CartTriggerButton className="text-paper/85 hover:text-gold" />

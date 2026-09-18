@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
-import { providerParaMoeda } from "@/lib/payments";
+import { getReveraProviderByName, getReveraProviderForCurrency } from "@/lib/payments/revera";
 import type { WebhookHint } from "@/lib/payments/provider";
 import { registrarPurchasePendente } from "@/lib/tracking/purchase";
 import { despacharPurchase } from "@/lib/tracking/despachar";
@@ -90,17 +90,36 @@ export async function confirmarPagamento(
   }
 
   /**
-   * O provider é decidido pela MOEDA DO PEDIDO, nunca pela rota que chamou
-   * (multi-gateway, 28/08/2026): BRL → nacional, resto → Stripe. Por isso o
-   * pedido é lido ANTES do provider — a leitura acima é o que diz qual
-   * gateway tem autoridade para confirmar este pagamento. Um webhook da
-   * Stripe apontando para um pedido BRL vai perguntar à InfinitePay (que
-   * dirá "não pago"), e vice-versa: gateway nenhum confirma pedido que não
-   * é dele.
+   * O provider sai primeiro da tentativa de pagamento real. Isso permite
+   * Apple Pay nacional: pedido BRL, mas linha `payments.provider = stripe`.
+   * Sem linha pendente ainda, cai na regra histórica por moeda.
    */
   let provider;
   try {
-    provider = providerParaMoeda(pedido.currency as string);
+    const { data: pagamentoDoEvento } = pistas?.transactionId
+      ? await supabase
+          .from("payments")
+          .select("provider")
+          .eq("order_id", pedido.id)
+          .eq("provider_payment_id", pistas.transactionId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null };
+    const { data: pagamentoPendente } = pagamentoDoEvento
+      ? { data: null }
+      : await supabase
+          .from("payments")
+          .select("provider")
+          .eq("order_id", pedido.id)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+    const providerRegistrado = (pagamentoDoEvento?.provider ?? pagamentoPendente?.provider) as string | undefined;
+    provider = providerRegistrado
+      ? getReveraProviderByName(providerRegistrado)
+      : getReveraProviderForCurrency(pedido.currency as string);
   } catch (erro) {
     console.error("[confirmar] pagamento não configurado", erro);
     return { estado: "indisponivel", motivo: "pagamento não configurado" };
@@ -272,14 +291,36 @@ async function registrarTentativa(
   confirmacao: { paidAmountCents: number | null; method: string | null; raw: unknown },
   status: "approved" | "failed"
 ) {
-  const { error } = await supabase.from("payments").insert({
-    order_id: pedido.id,
-    provider: providerName,
-    provider_payment_id: pistas?.transactionId ?? null,
+  const payload = {
     method: confirmacao.method,
     status,
     amount_cents: confirmacao.paidAmountCents ?? pedido.total_cents,
     raw_response: confirmacao.raw as never,
+  };
+
+  if (status === "approved" && pistas?.transactionId) {
+    const { data: atualizada, error: erroAtualizar } = await supabase
+      .from("payments")
+      .update(payload)
+      .eq("order_id", pedido.id)
+      .eq("provider", providerName)
+      .eq("provider_payment_id", pistas.transactionId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+
+    if (erroAtualizar) {
+      console.error("[confirmar] falha ao atualizar payment pendente", erroAtualizar);
+    } else if (atualizada) {
+      return;
+    }
+  }
+
+  const { error } = await supabase.from("payments").insert({
+    order_id: pedido.id,
+    provider: providerName,
+    provider_payment_id: pistas?.transactionId ?? null,
+    ...payload,
   });
   if (error) console.error("[confirmar] falha ao registrar payment", error);
 }

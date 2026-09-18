@@ -12,8 +12,10 @@ import { Toast } from "@/components/ui/Toast";
 import { formatarCPF } from "@/lib/format/cpf";
 import { criarPedidoAction } from "./actions";
 import type { CheckoutInput } from "./schema";
+import type { CartView } from "@/lib/cart/types";
 
 const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink";
+const FRETE_TIMEOUT_MS = 12_000;
 
 interface FormState {
   name: string;
@@ -65,14 +67,28 @@ interface RespostaViaCep {
 // dígito verificador de CPF, ver schema.ts). Nenhuma etapa de pagamento
 // aqui — o botão final só cria o pedido e redireciona para o placeholder
 // em /checkout/pagamento.
-export function CheckoutForm() {
-  const { cart } = useCart();
+export function CheckoutForm({
+  carrinhoInicial,
+  applePayDisponivel,
+}: {
+  carrinhoInicial?: CartView;
+  applePayDisponivel?: boolean;
+}) {
+  const { cart, carregando } = useCart();
+  const cartCheckout = carregando && carrinhoInicial ? carrinhoInicial : cart;
   const [campos, setCampos] = useState<FormState>(ESTADO_INICIAL);
   const [erros, setErros] = useState<Record<string, string>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [avisoCep, setAvisoCep] = useState<string | null>(null);
+  const [paymentPreference, setPaymentPreference] = useState<"default" | "apple_pay">("default");
+
+  useEffect(() => {
+    if (!applePayDisponivel && paymentPreference === "apple_pay") {
+      setPaymentPreference("default");
+    }
+  }, [applePayDisponivel, paymentPreference]);
 
   /**
    * InitiateCheckout — uma vez por visita a esta tela.
@@ -90,19 +106,19 @@ export function CheckoutForm() {
   const iniciouCheckout = useRef(false);
   useEffect(() => {
     if (iniciouCheckout.current) return;
-    if (cart.items.length === 0) return;
+    if (cartCheckout.items.length === 0) return;
     iniciouCheckout.current = true;
 
     medirIniciarCheckout({
-      itens: cart.items.map((i) => ({
+      itens: cartCheckout.items.map((i) => ({
         variantId: i.variantId,
         nome: i.productName,
         quantidade: i.quantity,
         precoUnitarioCents: i.unitPriceCents,
       })),
-      totalCents: cart.totalCents,
+      totalCents: cartCheckout.totalCents,
     });
-  }, [cart.items, cart.totalCents]);
+  }, [cartCheckout.items, cartCheckout.totalCents]);
   // null = ainda não cotado (ou cotação falhou). NÃO é 0 — mostrar R$ 0,00
   // pareceria frete grátis, que é promessa que ninguém fez.
   const [frete, setFrete] = useState<{
@@ -112,6 +128,7 @@ export function CheckoutForm() {
   } | null>(null);
   const [cotandoFrete, setCotandoFrete] = useState(false);
   const [avisoFrete, setAvisoFrete] = useState<string | null>(null);
+  const ultimoCepCotado = useRef("");
 
   function atualizarCampo<K extends keyof FormState>(campo: K, valor: string) {
     setCampos((atual) => ({ ...atual, [campo]: valor }));
@@ -200,18 +217,27 @@ export function CheckoutForm() {
    */
   async function cotarFrete(cepDigitado: string) {
     const digitos = cepDigitado.replace(/\D/g, "");
-    if (digitos.length !== 8 || cart.items.length === 0) {
+    if (digitos.length !== 8 || cartCheckout.items.length === 0) {
       setFrete(null);
+      ultimoCepCotado.current = "";
       return;
     }
 
+    const quantidade = cartCheckout.items.reduce((soma, item) => soma + item.quantity, 0);
+    const chaveCotacao = `${digitos}:${quantidade}:${cartCheckout.subtotalSemDescontoCents}`;
+    if (ultimoCepCotado.current === chaveCotacao) return;
+    ultimoCepCotado.current = chaveCotacao;
+
     setCotandoFrete(true);
     setAvisoFrete(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), FRETE_TIMEOUT_MS);
     try {
       const r = await fetch("/api/frete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cep: digitos }),
+        signal: controller.signal,
       });
       const dados = (await r.json()) as {
         disponivel?: boolean;
@@ -221,10 +247,11 @@ export function CheckoutForm() {
       };
 
       if (!r.ok || !dados.disponivel || typeof dados.priceCents !== "number") {
+        ultimoCepCotado.current = "";
         setFrete(null);
         setAvisoFrete(
-          "Não conseguimos calcular o frete para este CEP agora. O pedido não pode ser " +
-          "fechado sem o frete real — confira o CEP e tente de novo em alguns minutos."
+          "Não conseguimos mostrar o frete agora. Você ainda pode finalizar; o frete " +
+            "será recalculado com segurança antes do pagamento."
         );
         return;
       }
@@ -235,21 +262,42 @@ export function CheckoutForm() {
         etaDays: dados.etaDays ?? 0,
       });
     } catch {
+      ultimoCepCotado.current = "";
       setFrete(null);
       setAvisoFrete(
-        "Não conseguimos calcular o frete para este CEP agora. O pedido não pode ser " +
-          "fechado sem o frete real — confira o CEP e tente de novo em alguns minutos."
+        "Não conseguimos mostrar o frete agora. Você ainda pode finalizar; o frete " +
+          "será recalculado com segurança antes do pagamento."
       );
     } finally {
+      window.clearTimeout(timeout);
       setCotandoFrete(false);
     }
   }
+
+  useEffect(() => {
+    const digitos = campos.cep.replace(/\D/g, "");
+    if (digitos.length !== 8) {
+      setFrete(null);
+      setAvisoFrete(null);
+      ultimoCepCotado.current = "";
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void buscarEndereco(campos.cep);
+      void cotarFrete(campos.cep);
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+    // O CEP completo e o carrinho atual decidem a cotacao exibida.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campos.cep, cartCheckout.items.length, cartCheckout.subtotalSemDescontoCents]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErroGeral(null);
 
-    if (cart.items.length === 0) {
+    if (cartCheckout.items.length === 0) {
       setErroGeral("Sua sacola está vazia — volte e adicione algo antes de finalizar.");
       return;
     }
@@ -258,6 +306,7 @@ export function CheckoutForm() {
     const payload: CheckoutInput = {
       ...campos,
       complement: complementoLimpo === "" ? null : complementoLimpo,
+      paymentPreference: applePayDisponivel ? paymentPreference : "default",
       // Lido AQUI, no envio, e não na montagem da tela: os cookies do pixel
       // podem só existir depois que os scripts carregaram, e no submit já
       // carregaram com folga.
@@ -347,34 +396,46 @@ export function CheckoutForm() {
       <section className="flex flex-col gap-4">
         <h2 className="font-display text-xl text-ink">Endereço de entrega</h2>
 
-        <FormField
-          label="CEP"
-          hint={
-            buscandoCep
-              ? "Buscando endereço…"
-              : cotandoFrete
-                ? "Calculando o frete…"
-                : avisoCep ?? "Preenche rua, bairro, cidade e UF — e calcula o frete."
-          }
-          error={erros.cep}
-        >
-          {(props) => (
-            <input
-              {...props}
-              required
-              value={campos.cep}
-              onChange={(e) => atualizarCampo("cep", formatarCEP(e.target.value))}
-              onBlur={(e) => {
-                void buscarEndereco(e.target.value);
-                void cotarFrete(e.target.value);
-              }}
-              className={inputClass}
-              inputMode="numeric"
-              maxLength={9}
-              autoComplete="postal-code"
-            />
-          )}
-        </FormField>
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <FormField
+            label="CEP"
+            hint={
+              buscandoCep
+                ? "Buscando endereço…"
+                : cotandoFrete
+                  ? "Calculando o frete…"
+                  : avisoCep ?? "Preenche rua, bairro, cidade e UF — e calcula o frete."
+            }
+            error={erros.cep}
+          >
+            {(props) => (
+              <input
+                {...props}
+                required
+                value={campos.cep}
+                onChange={(e) => atualizarCampo("cep", formatarCEP(e.target.value))}
+                className={inputClass}
+                inputMode="numeric"
+                maxLength={9}
+                autoComplete="postal-code"
+              />
+            )}
+          </FormField>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            className="w-full whitespace-nowrap sm:w-auto"
+            disabled={buscandoCep || cotandoFrete || campos.cep.replace(/\D/g, "").length !== 8}
+            onClick={() => {
+              void buscarEndereco(campos.cep);
+              void cotarFrete(campos.cep);
+            }}
+          >
+            {cotandoFrete ? "Calculando…" : "Calcular frete"}
+          </Button>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
           <FormField label="Rua" error={erros.street}>
@@ -457,18 +518,54 @@ export function CheckoutForm() {
         </div>
       </section>
 
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-xl text-ink">Forma de pagamento</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex min-h-toque cursor-pointer items-start gap-3 rounded-xl border border-sand bg-paper p-4 text-sm text-ink shadow-sm transition hover:border-gold">
+            <input
+              type="radio"
+              name="paymentPreference"
+              className="mt-1"
+              checked={paymentPreference === "default"}
+              onChange={() => setPaymentPreference("default")}
+            />
+            <span>
+              <strong className="block">Pix ou cartão</strong>
+              <span className="mt-1 block text-ink/65">Opções nacionais no checkout seguro.</span>
+            </span>
+          </label>
+          {applePayDisponivel ? (
+            <label className="flex min-h-toque cursor-pointer items-start gap-3 rounded-xl border border-sand bg-paper p-4 text-sm text-ink shadow-sm transition hover:border-gold">
+              <input
+                type="radio"
+                name="paymentPreference"
+                className="mt-1"
+                checked={paymentPreference === "apple_pay"}
+                onChange={() => setPaymentPreference("apple_pay")}
+              />
+              <span>
+                <strong className="block">Apple Pay, Google Pay ou cartão pela Stripe</strong>
+                <span className="mt-1 block text-ink/65">
+                  A carteira disponível aparece em dispositivos compatíveis; cartão fica como alternativa.
+                </span>
+              </span>
+            </label>
+          ) : null}
+        </div>
+      </section>
+
       {/* O QUE ESTÁ SENDO COMPRADO (29/08/2026).
           Até aqui o checkout mostrava só os totais: a pessoa preenchia CPF e
           endereço sem rever o que ia levar. Com a cor virando variante, três
           linhas podem se chamar "Micropele 0,08mm" e diferir só na cor — é
           exatamente antes de pagar que esse conferido tem que caber.
           Lista SÓ DE LEITURA: os mesmos números que o resumo abaixo já usa
-          (cart.items), sem recalcular nada. Para mudar quantidade ou remover,
+          (cartCheckout.items), sem recalcular nada. Para mudar quantidade ou remover,
           a pessoa volta à sacola. */}
       <section className="flex flex-col gap-3">
         <h2 className="font-display text-lg text-ink">Seu pedido</h2>
         <ul className="flex flex-col divide-y divide-sand rounded-lg border border-sand">
-          {cart.items.map((item) => (
+          {cartCheckout.items.map((item) => (
             <li key={item.cartItemId} className="flex items-center gap-3 p-3">
               {item.colorPhotoUrl ? (
                 <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-sand">
@@ -515,10 +612,10 @@ export function CheckoutForm() {
           existir, o resumo mostra "calculado ao preencher o CEP" — nunca
           R$ 0,00, que o cliente leria como frete grátis. */}
       <CheckoutSummary
-        subtotalCents={cart.subtotalSemDescontoCents}
-        discountCents={cart.discountCents}
+        subtotalCents={cartCheckout.subtotalSemDescontoCents}
+        discountCents={cartCheckout.discountCents}
         shippingCents={frete?.priceCents ?? null}
-        totalCents={cart.totalCents + (frete?.priceCents ?? 0)}
+        totalCents={cartCheckout.totalCents + (frete?.priceCents ?? 0)}
         shippingHint={cotandoFrete ? "calculando…" : "preencha o CEP acima"}
       />
 
@@ -537,22 +634,23 @@ export function CheckoutForm() {
         </p>
       ) : null}
 
-      {/* Sem frete calculado não há total real — e desde 29/08/2026 o
-          servidor recusa o pedido nesse estado. O botão passa a dizer isso
-          na tela, em vez de deixar a pessoa preencher tudo e levar um erro
-          no fim. */}
+      {/* A cotação no navegador é só informativa. O frete real é recalculado
+          no servidor dentro de criarPedidoAction; se falhar ali, o pedido não
+          nasce e nada é cobrado. O botão não pode depender do preview de frete,
+          senão uma falha momentânea da SuperFrete mata a venda antes mesmo do
+          servidor tentar a cotação confiável. */}
       <Button
         type="submit"
         size="lg"
-        disabled={enviando || cart.items.length === 0 || cotandoFrete || !frete}
+        disabled={enviando || cartCheckout.items.length === 0 || cotandoFrete}
       >
         {enviando
           ? "Enviando…"
-          : cotandoFrete
+          : cartCheckout.items.length === 0
+            ? "Sua sacola está vazia"
+            : cotandoFrete
             ? "Calculando frete…"
-            : !frete
-              ? "Informe o CEP para calcular o frete"
-              : "Finalizar pedido"}
+            : "Finalizar pedido"}
       </Button>
     </form>
   );

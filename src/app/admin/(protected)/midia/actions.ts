@@ -202,11 +202,12 @@ export async function substituirFotoDoSite(id: string, formData: FormData): Prom
 }
 
 /**
- * A administradora pode excluir qualquer mídia, inclusive uma que esteja em
- * uso. A confirmação visual lista os usos; ao confirmar, estes vínculos são
- * retirados antes do arquivo. Se uma seção tiver conteúdo original, ela volta
- * para ele; produto sem mídia própria usa a galeria padrão. Assim a dona tem
- * controle total sem deixar uma URL quebrada exposta ao comprador.
+ * A exclusão física só é segura quando nada no site referencia a mídia. A
+ * alternativa anterior tentava desvincular tudo e depois apagar o Storage,
+ * mas Storage + PostgREST não formam uma transação única: se o arquivo não
+ * fosse removido, o rollback dos vínculos também poderia falhar. Por isso a
+ * regra aqui é conservadora: mídia em uso precisa ser trocada no local de uso
+ * antes de sair da biblioteca.
  */
 export async function excluirFotoDoSite(id: string): Promise<ResultadoFotoDoSite> {
   const supabase = await createClient();
@@ -220,24 +221,26 @@ export async function excluirFotoDoSite(id: string): Promise<ResultadoFotoDoSite
     supabase.from("site_texts").select("chave").in("valor", valores),
   ]);
   if (cores.error || produtos.error || banners.error || textos.error) return { error: "Não foi possível confirmar onde esta mídia está sendo usada. Tente de novo em instantes." };
-  const desvincular = await Promise.all([
-    supabase.from("colors").update({ photo_url: null }).in("photo_url", valores),
-    supabase.from("product_media").delete().in("url", valores),
-    supabase.from("banners").update({ imagem_url: null }).in("imagem_url", valores),
-    // Sem a edição, textosDaPagina() volta automaticamente para o original
-    // que veio com o site, em vez de guardar uma URL apagada.
-    supabase.from("site_texts").delete().in("valor", valores),
-  ]);
-  if (desvincular.some((resultado) => resultado.error)) {
-    return { error: "Não foi possível retirar esta mídia de todos os locais. Nenhum arquivo foi apagado." };
+  const totalUsos = (cores.data?.length ?? 0) + (produtos.data?.length ?? 0) + (banners.data?.length ?? 0) + (textos.data?.length ?? 0);
+  if (totalUsos > 0) {
+    return { error: "Esta mídia ainda está em uso no site. Troque a imagem nos locais onde ela aparece antes de excluir." };
   }
-  const desativar = await supabase.from("site_media_assets").update({ ativo: false, updated_at: new Date().toISOString(), updated_by: await usuario(supabase) }).eq("id", id);
-  if (desativar.error) return { error: "Não foi possível atualizar a Biblioteca antes de excluir o arquivo." };
+  const updatedAt = new Date().toISOString();
+  const updatedBy = await usuario(supabase);
+  const desativar = await supabase
+    .from("site_media_assets")
+    .update({ ativo: false, updated_at: updatedAt, updated_by: updatedBy })
+    .eq("id", id);
+  if (desativar.error) {
+    return { error: "Não foi possível atualizar a Biblioteca. Nenhuma mudança foi publicada." };
+  }
+
   const removido = await supabase.storage.from(BUCKET_MIDIA).remove([foto.storage_path]);
   if (removido.error) {
-    // O arquivo continua acessível; desfaz a desativação para a biblioteca e
-    // o site não passarem a apontar para estados diferentes.
-    await supabase.from("site_media_assets").update({ ativo: true, updated_at: new Date().toISOString(), updated_by: await usuario(supabase) }).eq("id", id);
+    await supabase
+      .from("site_media_assets")
+      .update({ ativo: true, updated_at: new Date().toISOString(), updated_by: updatedBy })
+      .eq("id", id);
     return { error: "Não foi possível excluir o arquivo agora. Nenhuma mudança foi publicada." };
   }
   await registrarAuditoria(supabase, { action: "midia.excluirSite", entityType: "site_media_assets", entityId: id, diff: { sourcePath: foto.source_path } });

@@ -211,6 +211,7 @@ export const TETO_SEGURO_CENTS: Record<number, number> = {
  * prótese estoura, e cotá-lo só produziria uma linha de erro em todo pedido.
  */
 const SERVICOS_PADRAO = [SERVICO.PAC, SERVICO.SEDEX, SERVICO.LOGGI];
+const SUPERFRETE_TIMEOUT_MS = 10_000;
 
 function token(): string {
   const t = process.env.SUPERFRETE_TOKEN ?? "";
@@ -247,28 +248,38 @@ async function interpretar(r: Response, caminho: string): Promise<unknown> {
 
 async function postar(caminho: string, corpo: unknown): Promise<unknown> {
   let r: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SUPERFRETE_TIMEOUT_MS);
   try {
     r = await fetch(`${baseSuperFrete()}/api/v0${caminho}`, {
       method: "POST",
       headers: cabecalhos(),
       body: JSON.stringify(corpo),
       cache: "no-store",
+      signal: controller.signal,
     });
   } catch (e) {
     throw new ShippingUnavailable(`SuperFrete não respondeu em ${caminho}: ${e}`);
+  } finally {
+    clearTimeout(timeout);
   }
   return interpretar(r, caminho);
 }
 
 async function buscar(caminho: string): Promise<unknown> {
   let r: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SUPERFRETE_TIMEOUT_MS);
   try {
     r = await fetch(`${baseSuperFrete()}/api/v0${caminho}`, {
       headers: cabecalhos(),
       cache: "no-store",
+      signal: controller.signal,
     });
   } catch (e) {
     throw new ShippingUnavailable(`SuperFrete não respondeu em ${caminho}: ${e}`);
+  } finally {
+    clearTimeout(timeout);
   }
   return interpretar(r, caminho);
 }

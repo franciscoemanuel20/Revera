@@ -2,6 +2,7 @@ import "server-only";
 import type { PaymentProvider } from "./provider";
 import { MockPaymentProvider } from "./mock-provider";
 import { InfinitePayProvider } from "./infinitepay-provider";
+import { AsaasProvider } from "./asaas-provider";
 import { StripeProvider } from "./stripe-provider";
 import { descricaoDoAmbiente, permiteSimulacao } from "@/lib/config/ambiente";
 
@@ -63,7 +64,7 @@ export function getPaymentProvider(): PaymentProvider {
     throw new PagamentoIndisponivel(
       "PAYMENT_PROVIDER não está definida. O pagamento fica indisponível de " +
         "propósito: sem essa variável não existe padrão, para nunca aprovar " +
-        `uma compra sem cobrar. Defina 'infinitepay' em produção. ${descricaoDoAmbiente()}`
+        `uma compra sem cobrar. Defina 'asaas' ou 'infinitepay' em produção. ${descricaoDoAmbiente()}`
     );
   }
 
@@ -73,7 +74,7 @@ export function getPaymentProvider(): PaymentProvider {
         throw new PagamentoIndisponivel(
           "PAYMENT_PROVIDER=mock foi recusado: o provedor simulado aprova " +
             "qualquer pagamento sem cobrar, e só pode rodar em " +
-            `desenvolvimento. ${descricaoDoAmbiente()}. Use 'infinitepay'.`
+            `desenvolvimento. ${descricaoDoAmbiente()}. Use 'asaas' ou 'infinitepay'.`
         );
       }
       return new MockPaymentProvider();
@@ -81,10 +82,13 @@ export function getPaymentProvider(): PaymentProvider {
     case "infinitepay":
       return new InfinitePayProvider();
 
+    case "asaas":
+      return new AsaasProvider();
+
     default:
       throw new PagamentoIndisponivel(
         `PAYMENT_PROVIDER desconhecido: "${configurado}". Valores aceitos: ` +
-          "'infinitepay' (real) ou 'mock' (só em desenvolvimento)."
+          "'asaas' ou 'infinitepay' (reais), ou 'mock' (só em desenvolvimento)."
       );
   }
 }
@@ -106,6 +110,26 @@ export function getStripeProvider(): PaymentProvider {
     );
   }
   return new StripeProvider();
+}
+
+export function providerPorNome(nome: string): PaymentProvider {
+  switch (nome) {
+    case "stripe":
+      return getStripeProvider();
+    case "infinitepay":
+      return new InfinitePayProvider();
+    case "asaas":
+      return new AsaasProvider();
+    case "mock":
+      if (!permiteSimulacao()) {
+        throw new PagamentoIndisponivel(
+          "provider mock recusado fora de desenvolvimento. Use 'asaas' ou 'infinitepay'."
+        );
+      }
+      return new MockPaymentProvider();
+    default:
+      throw new PagamentoIndisponivel(`provider desconhecido na linha de pagamento: "${nome}".`);
+  }
 }
 
 /**
@@ -141,6 +165,11 @@ export function pagamentoInternacionalDisponivel(): boolean {
   } catch {
     return false;
   }
+}
+
+export async function stripeCheckoutDisponivel(): Promise<boolean> {
+  if (!pagamentoInternacionalDisponivel()) return false;
+  return new StripeProvider().disponivel();
 }
 
 export type { PaymentProvider } from "./provider";

@@ -105,7 +105,13 @@ export function formEncode(obj: Record<string, unknown>, prefixo = ""): string[]
     const nome = prefixo ? `${prefixo}[${chave}]` : chave;
     if (Array.isArray(valor)) {
       valor.forEach((item, i) => {
-        pares.push(...formEncode(item as Record<string, unknown>, `${nome}[${i}]`));
+        const itemNome = `${nome}[${i}]`;
+        if (item === undefined || item === null) return;
+        if (typeof item === "object") {
+          pares.push(...formEncode(item as Record<string, unknown>, itemNome));
+        } else {
+          pares.push(`${encodeURIComponent(itemNome)}=${encodeURIComponent(String(item))}`);
+        }
       });
     } else if (typeof valor === "object") {
       pares.push(...formEncode(valor as Record<string, unknown>, nome));
@@ -223,9 +229,13 @@ export class StripeProvider implements PaymentProvider {
   }
 
   async createCharge(charge: PaymentCharge): Promise<PaymentResult> {
-    if (!MOEDAS_STRIPE.has(charge.currency)) {
-      // BRL incluído: cartão brasileiro é obrigado a processar em BRL e o
-      // caminho dele é a InfinitePay. Chegar aqui com BRL é erro de rota.
+    const carteiraDigitalNacional =
+      charge.currency === "BRL" && charge.preferredMethod === "apple_pay";
+    if (!MOEDAS_STRIPE.has(charge.currency) && !carteiraDigitalNacional) {
+      // BRL incluído: o caminho padrão nacional continua no provider nacional.
+      // A exceção explícita é a opção de carteiras digitais pela Stripe:
+      // Checkout hospedado mostra Apple Pay ou Google Pay quando o dispositivo
+      // permite e mantém cartão como alternativa.
       throw new Error(`Stripe não é o provider para ${charge.currency} nesta loja.`);
     }
 
@@ -262,10 +272,19 @@ export class StripeProvider implements PaymentProvider {
       success_url: `${charge.redirectUrl}${charge.redirectUrl.includes("?") ? "&" : "?"}cs={CHECKOUT_SESSION_ID}`,
       cancel_url: charge.redirectUrl,
       customer_email: charge.customerEmail,
-      metadata: { order_id: charge.orderId, order_number: charge.orderNumber },
+      metadata: {
+        order_id: charge.orderId,
+        order_number: charge.orderNumber,
+        payment_preference: charge.preferredMethod ?? "default",
+      },
       // O PaymentIntent herda a referência: é por ela que um evento de
       // refund (que só conhece o PaymentIntent) reencontra o pedido.
-      payment_intent_data: { metadata: { order_id: charge.orderId } },
+      payment_intent_data: {
+        metadata: {
+          order_id: charge.orderId,
+          payment_preference: charge.preferredMethod ?? "default",
+        },
+      },
       line_items: charge.items.map((item) => ({
         quantity: item.quantity,
         price_data: {

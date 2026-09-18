@@ -37,6 +37,15 @@ const hostDoSupabase = (() => {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        source: "/produto/:slug",
+        destination: "/produtos/:slug",
+        permanent: true,
+      },
+    ];
+  },
   images: {
     remotePatterns: hostDoSupabase
       ? [

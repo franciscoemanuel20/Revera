@@ -54,6 +54,8 @@ import {
 import { limparTokenDoCookie } from "@/lib/cart/token";
 import { createAdminClient } from "@/lib/supabase/server";
 import { cotarFrete } from "@/lib/shipping/cotar";
+import { avisarPedidoPendentePorEmail } from "@/lib/notificacoes/email-operacional";
+import { reveraApplePayDisponivel } from "@/lib/payments/revera";
 import { checkoutSchema } from "./schema";
 
 export interface CheckoutResult {
@@ -219,6 +221,10 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
 
   const shippingCents = cotacao.escolhida.priceCents;
   const totalCents = subtotalCents - discountCents + shippingCents;
+  const paymentPreference =
+    dados.paymentPreference === "apple_pay" && (await reveraApplePayDisponivel())
+      ? "apple_pay"
+      : "default";
 
   const orderId = randomUUID();
   const accessToken = randomUUID();
@@ -272,6 +278,7 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
       discount_cents: discountCents,
       shipping_cents: shippingCents,
       total_cents: totalCents,
+      payment_preference: paymentPreference,
       tracking_consent: dados.trackingConsent,
       ...atribuicao,
     });
@@ -348,6 +355,23 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
   });
   if (erroCotacao) {
     console.error("[checkout] cotação não gravada para", orderNumber, erroCotacao);
+  }
+
+  const avisoEmail = await avisarPedidoPendentePorEmail({
+    orderId,
+    orderNumber,
+    cliente: dados.name,
+    totalCents,
+    moeda: "BRL",
+    origem: "checkout nacional",
+    cidade: dados.city,
+    pais: "BR",
+  });
+  if (avisoEmail.estado === "erro") {
+    console.error("[checkout-email] falha ao avisar pedido pendente", {
+      orderId,
+      motivo: avisoEmail.motivo,
+    });
   }
 
   // O carrinho já foi convertido na reivindicação, no topo desta função.

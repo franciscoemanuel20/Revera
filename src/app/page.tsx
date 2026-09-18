@@ -83,10 +83,21 @@ export default async function HomePage() {
   );
   const linkProduto = linkDoProdutoVitrine(produtoVitrine);
   const temProduto = produtoVitrine !== null;
+  const heroFoto = "/media/hero/revera-hero-profissional.png";
+  const heroFotoAlt = "Prótese capilar Reverá em micropele em fotografia de produto premium";
 
   return (
     <main className="flex flex-col">
-      {/* Hero escuro. A arte oficial (logo-revera-original.jpeg, 2048px)
+      {/* Hero com produto real na primeira dobra.
+
+          A auditoria de conversão de 12/09/2026 pegou um problema de
+          percepção: no mobile a home abria praticamente só com marca e texto,
+          e no desktop a peça aparecia como card lateral. Para uma compra cara
+          e sensível, isso não passa confiança suficiente. A imagem agora é
+          full-bleed, profissionalizada por composição/overlay, e continua
+          usando foto real da peça — não ilustração nem textura genérica.
+
+          A arte oficial (logo-revera-original.jpeg, 2048px)
           traz as duas versões da marca — dourado sobre preto e sobre
           branco — mas ambas em JPEG, sem canal alfa. logo-revera.png é
           derivado da versão escura: recortado na marca e com alfa
@@ -101,51 +112,65 @@ export default async function HomePage() {
           padding é o que garante que logo/headline não nasçam escondidos
           atrás dele. */}
       <section
-        className="relative isolate w-full overflow-hidden bg-ink px-6 pb-16 sm:pb-20"
+        className="relative isolate flex min-h-[calc(100svh-24px)] w-full overflow-hidden bg-ink px-6 pb-16 sm:min-h-[760px] sm:pb-20 lg:min-h-[820px]"
         style={{ paddingTop: HEADER_HEIGHT_PX + 24 }}
       >
-        {/* Profundidade discreta no hero: a marca continua sendo a heroína,
-            mas deixa de repousar sobre um preto completamente plano. São
-            gradientes CSS, não uma imagem nova nem uma promessa visual que
-            concorra com a peça real mostrada logo abaixo. */}
+        <Image
+          src={heroFoto}
+          alt={heroFotoAlt}
+          fill
+          priority
+          sizes="100vw"
+          className="absolute inset-0 -z-30 object-cover object-[62%_46%] sm:object-[64%_44%] lg:object-center"
+        />
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_70%_55%_at_84%_14%,rgba(201,180,95,.18),transparent_60%),radial-gradient(ellipse_50%_45%_at_12%_88%,rgba(255,255,255,.055),transparent_68%)]"
+          className="absolute inset-0 -z-20 bg-[linear-gradient(90deg,rgba(10,10,10,.88)_0%,rgba(10,10,10,.76)_34%,rgba(10,10,10,.42)_64%,rgba(10,10,10,.18)_100%)]"
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-20 bg-[linear-gradient(180deg,rgba(10,10,10,.68)_0%,rgba(10,10,10,.12)_38%,rgba(10,10,10,.72)_100%)]"
+        />
+        {/* Profundidade discreta para dar acabamento editorial sem esconder a
+            textura da peça real. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_42%_at_18%_34%,rgba(201,180,95,.22),transparent_66%)]"
         />
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-px bg-[linear-gradient(90deg,transparent,rgba(201,180,95,.72),transparent)]"
         />
-        <Reveal className="relative mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.78fr)] lg:gap-14">
-          <div className="flex flex-col items-center gap-6 text-center lg:items-start lg:text-left">
+        <div className="relative mx-auto flex w-full max-w-6xl items-center justify-center lg:justify-start">
+          <div className="flex w-full max-w-[680px] flex-col items-center gap-7 text-center">
             {logo ? <Image
               src={logo}
               alt="Reverá — Prótese Capilar"
               width={1500}
               height={920}
               priority
-              className="h-auto w-[210px] sm:w-[270px]"
+              className="h-auto w-[250px] sm:w-[330px]"
             /> : null}
 
             <span className="eyebrow">{t("home.hero.eyebrow")}</span>
-            <h1 className="max-w-2xl text-balance font-display text-4xl leading-[1.05] text-paper sm:text-[clamp(2.75rem,5vw,4rem)]">
+            <h1 className="max-w-3xl text-balance font-display text-[3rem] font-extrabold leading-[0.98] text-paper sm:text-[clamp(4rem,7vw,6.25rem)]">
               {t("home.hero.titulo")}
             </h1>
-            <p className="max-w-xl text-balance text-paper/70">{t("home.hero.subtitulo")}</p>
+            <p className="max-w-xl text-balance text-lg font-medium text-paper/80 sm:text-xl">{t("home.hero.subtitulo")}</p>
 
-            <div className="flex w-full flex-col items-center gap-3 sm:flex-row lg:justify-start">
+            <div className="flex w-full max-w-[560px] flex-col items-center justify-center gap-3 sm:flex-row">
             {/* "Comprar agora" só aparece quando existe algo comprável. Um
                 botão de compra que leva a 404 custa mais caro que a ausência
                 dele: a pessoa clica com intenção de compra e recebe um erro.
                 Ver src/lib/catalog/vitrine.ts (P0-1). */}
             {temProduto ? (
-              <Link href={linkProduto} className="w-full sm:w-auto">
-                <Button size="lg" className="w-full">
+              <Link href={linkProduto} className="w-full sm:w-1/2">
+                <Button size="lg" className="w-full justify-center">
                   {t("home.hero.botaoComprar")}
                 </Button>
               </Link>
             ) : null}
-            <Link href={linkProduto} className="w-full sm:w-auto">
+            <Link href={linkProduto} className="w-full sm:w-1/2">
               {/* secondary do Button é pensado para fundo claro (borda e
                   texto em --ink); sobre o preto do hero ficaria invisível,
                   então este usa borda/texto em --paper via className. */}
@@ -154,7 +179,7 @@ export default async function HomePage() {
                 size="lg"
                 className={
                   temProduto
-                    ? "w-full border-paper/40 text-paper hover:bg-paper/10"
+                    ? "w-full justify-center border-paper/40 text-paper hover:bg-paper/10"
                     : "w-full"
                 }
               >
@@ -163,31 +188,7 @@ export default async function HomePage() {
             </Link>
             </div>
           </div>
-
-          {t("home.micropele.foto") ? <div className="relative hidden lg:block">
-            <div aria-hidden className="absolute -inset-3 rounded-[2rem] border border-gold/20" />
-            <div className="relative overflow-hidden rounded-[1.65rem] border border-white/[0.12] bg-ink-soft p-2 shadow-[0_26px_60px_-32px_rgb(0_0_0_/_0.9)]">
-              <div className="relative aspect-[4/5] overflow-hidden rounded-[1.2rem]">
-                <Image
-                  src={t("home.micropele.foto")}
-                  alt={t("home.micropele.fotoAlt")}
-                  fill
-                  priority
-                  sizes="(min-width: 1024px) 40vw, 0px"
-                  className="object-cover"
-                />
-                <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,transparent_46%,rgba(10,10,10,.82))]" />
-                <div className="absolute inset-x-5 bottom-5 flex items-end justify-between gap-3 text-paper">
-                  <div>
-                    <span className="block text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-gold-light">Linha Micropele</span>
-                    <strong className="mt-1 block font-display text-xl">0,08 mm e 0,06 mm</strong>
-                  </div>
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-paper/30 bg-ink/45 text-lg">→</span>
-                </div>
-              </div>
-            </div>
-          </div> : null}
-        </Reveal>
+        </div>
       </section>
 
       <div className="divider-gold w-full bg-ink" />

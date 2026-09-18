@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
-import { pagamentoInternacionalDisponivel } from "@/lib/payments";
+import { reveraInternationalPaymentAvailable } from "@/lib/payments/revera";
 import { StripeProvider } from "@/lib/payments/stripe-provider";
 import { ehMoedaSuportada, type Moeda } from "./moeda";
 import { paisesDoCheckout, regraDoPais } from "./paises";
@@ -109,7 +109,7 @@ export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado
   if (!ehMoedaSuportada(regra.moedaPadrao)) {
     return { aberto: false, motivo: "Moeda do mercado não suportada." };
   }
-  if (!pagamentoInternacionalDisponivel() || !(await new StripeProvider().disponivel())) {
+  if (!reveraInternationalPaymentAvailable() || !(await new StripeProvider().disponivel())) {
     return { aberto: false, motivo: "Pagamento internacional indisponível.", codigo: "pagamento" };
   }
 
@@ -129,12 +129,26 @@ export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado
   return { aberto: true, moeda: regra.moedaPadrao, frete };
 }
 
-/** Uma variante ausente bloqueia TODO o mercado, inclusive carrinhos de outros produtos. */
+/**
+ * Uma variante vendável ausente bloqueia TODO o mercado, inclusive carrinhos
+ * de outros produtos. Variante ativa sem preço nacional ou sem estoque não
+ * bloqueia: ela já não pode ser comprada no Brasil nem adicionada ao carrinho.
+ *
+ * É a mesma fronteira usada pela vitrine (`is_active && price_cents > 0 &&
+ * stock_qty > 0`). Assim o internacional continua fail-closed para tudo que
+ * alguém consegue comprar, mas não fica travado por uma variante administrativa
+ * ou de mídia com `price_cents = 0` / `stock_qty = 0`.
+ */
 export async function catalogoCompletoNoMercado(moeda: Moeda): Promise<boolean> {
   const db = createAdminClient();
   const [variantes, precos] = await Promise.all([
-    db.from("product_variants").select("id, products!inner(status)", { count: "exact" })
-      .eq("is_active", true).eq("products.status", "active"),
+    db
+      .from("product_variants")
+      .select("id, price_cents, stock_qty, products!inner(status)", { count: "exact" })
+      .eq("is_active", true)
+      .eq("products.status", "active")
+      .gt("price_cents", 0)
+      .gt("stock_qty", 0),
     db.from("variant_prices").select("variant_id", { count: "exact" })
       .eq("currency", moeda).eq("is_active", true).gt("price_cents", 0),
   ]);

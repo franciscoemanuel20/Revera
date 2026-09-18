@@ -62,6 +62,13 @@ export interface ResultadoRodada {
     Record<
       | MotivoPulo
       | "reserva_recusada"
+      // Config ausente (sem template aprovado na Clint) — nunca chegou a
+      // tentar enviar. Ver achado de 11/09/2026 acima de onde é usado.
+      | "sem_template"
+      // Tentou enviar mas o recurso está desligado (sem WHATSAPP_PROVIDER
+      // em produção) — também não é uma recusa do provedor.
+      | "whatsapp_desligado"
+      // Só a recusa DE VERDADE: a Meta ou a Clint responderam com erro.
       | "envio_recusado"
       | "mudou_de_estado"
       | "comprou_em_outro_pedido"
@@ -308,8 +315,15 @@ export async function rodadaDeCarrinhoAbandonado(
       // Reserva é idempotência de um envio que pode custar dinheiro; criá-la
       // sem poder enviar bloquearia este pedido para sempre, mesmo depois de
       // a Meta aprovar o modelo.
+      //
+      // Achado (11/09/2026, causa real do "envio recusado"): isto contava
+      // como `envio_recusado`, junto com recusa de verdade vinda da Meta ou
+      // da Clint. Template ausente é "não avisamos" (falta configurar), não
+      // "tentamos e recusaram" — exatamente a distinção que o comentário no
+      // topo deste arquivo promete. Contador próprio para a causa real não
+      // ficar escondida atrás de uma recusa que nunca chegou a acontecer.
       if (modo === "clint" && !template) {
-        conta("envio_recusado");
+        conta("sem_template");
         continue;
       }
 
@@ -383,14 +397,23 @@ export async function rodadaDeCarrinhoAbandonado(
       // A reserva FICA, com sent_at nulo e o motivo gravado. Não se tenta de
       // novo: um template recusado hoje é recusado daqui a uma hora, e
       // retentar em laço é como se paga duas vezes pelo mesmo erro.
-      const motivo = envio.estado === "erro" ? envio.motivo : "whatsapp desligado";
+      //
+      // Achado (11/09/2026, causa real do "envio recusado"): "desligado" e
+      // "erro" caíam no MESMO contador `envio_recusado`, escondendo a causa
+      // real — a maior parte das "recusas" no painel era só o WhatsApp
+      // estar desligado (sem WHATSAPP_PROVIDER configurado em produção),
+      // não a Meta ou a Clint rejeitando a mensagem. Separar os dois é a
+      // mesma distinção que o topo deste arquivo já promete ("não avisamos"
+      // x "tentaram e recusaram").
+      const desligado = envio.estado === "desligado";
+      const motivo = desligado ? "whatsapp desligado" : envio.motivo;
       await supabase
         .from("order_notifications")
         .update({ last_error: motivo })
         .eq("order_id", pedido.id)
         .eq("kind", kindDaEtapa(etapa));
-        conta("envio_recusado");
-      }
+      conta(desligado ? "whatsapp_desligado" : "envio_recusado");
+    }
 
       if (leitura.fim) break;
     }
@@ -426,16 +449,12 @@ async function comprouPorOutroPedido(
   if (!telefone && !email) return false;
 
   try {
-    for (const [coluna, valor] of [
-      ["phone", telefone],
-      ["email", email],
-    ] as const) {
-      if (!valor) continue;
+    for (const valor of variantesTelefoneBrasileiro(telefone)) {
       const { data, error } = await supabase
         .from("orders")
         .select("id, customers!inner ( id )")
         .eq("payment_status", "paid")
-        .eq(`customers.${coluna}`, valor)
+        .eq("customers.phone", valor)
         // `updated_at`, e não `created_at`: é ele que a confirmação de
         // pagamento carimba (payments/confirmar.ts:202). Comparar pela
         // CRIAÇÃO do pedido pago erra o caso em que a pessoa abre o checkout
@@ -451,10 +470,28 @@ async function comprouPorOutroPedido(
       if (error) return true;
       if ((data ?? []).length > 0) return true;
     }
+    if (email) {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, customers!inner ( id )")
+        .eq("payment_status", "paid")
+        .eq("customers.email", email)
+        .gte("updated_at", pedido.criadoEm)
+        .limit(1);
+      if (error) return true;
+      if ((data ?? []).length > 0) return true;
+    }
     return false;
   } catch {
     return true;
   }
+}
+
+function variantesTelefoneBrasileiro(telefone: string): string[] {
+  if (!telefone) return [];
+  const sem55 = telefone.startsWith("55") && telefone.length > 11 ? telefone.slice(2) : telefone;
+  const com55 = sem55.length >= 10 ? `55${sem55}` : "";
+  return [...new Set([telefone, sem55, com55, com55 ? `+${com55}` : ""].filter(Boolean))];
 }
 
 /**

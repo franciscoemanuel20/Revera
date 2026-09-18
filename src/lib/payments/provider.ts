@@ -50,6 +50,16 @@ export interface PaymentCharge {
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
+  customerDocument?: string;
+  customerAddress?: {
+    street?: string | null;
+    number?: string | null;
+    complement?: string | null;
+    neighborhood?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postalCode?: string | null;
+  };
   /** para onde o gateway devolve o cliente depois de pagar */
   redirectUrl: string;
   /** para onde o gateway avisa que algo aconteceu */
@@ -67,6 +77,13 @@ export interface PaymentCharge {
    * brasileira e não recebe idioma.
    */
   locale?: string;
+  /**
+   * Preferencia explicita da tela. Hoje só "apple_pay": nome histórico do
+   * pedido BRL que deve abrir Stripe Checkout para exibir carteiras digitais
+   * quando disponíveis. No Checkout hospedado, a Stripe mostra Apple Pay,
+   * Google Pay ou cartão conforme dispositivo/navegador e conta habilitada.
+   */
+  preferredMethod?: "apple_pay";
 }
 
 export interface PaymentResult {
@@ -89,7 +106,7 @@ export interface PaymentResult {
  * "ignorar" registra o evento (auditoria + idempotência) e para — para os
  * muitos eventos que um gateway manda e não mudam pedido nenhum.
  */
-export type TipoDeAviso = "pagamento" | "reembolso" | "ignorar";
+export type TipoDeAviso = "pagamento" | "reembolso" | "ignorar" | "checkout_expirado";
 
 /** Superfície mínima dos cabeçalhos HTTP que um adapter pode precisar ler. */
 export interface CabecalhosWebhook {
@@ -200,4 +217,11 @@ export interface PaymentProvider {
    * É a ÚNICA coisa que autoriza marcar um pedido como pago.
    */
   confirmPayment(hint: WebhookHint): Promise<ConfirmedPayment>;
+
+  /**
+   * Alguns gateways avisam que uma sessão de checkout expirou/cancelou. Como
+   * webhook sem assinatura continua sendo só pista, a rota só pode liberar a
+   * reserva pendente depois de uma consulta ativa ao gateway confirmar isso.
+   */
+  confirmCheckoutExpired?(hint: WebhookHint): Promise<boolean>;
 }

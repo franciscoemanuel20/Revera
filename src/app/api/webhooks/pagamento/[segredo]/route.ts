@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { getPaymentProvider } from "@/lib/payments";
-import { confirmarPagamento } from "@/lib/payments/confirmar";
+import { getStripeProvider } from "@/lib/payments";
+import { getReveraNationalProvider, getReveraProviderByName } from "@/lib/payments/revera";
+import { confirmarPagamento, registrarReembolso } from "@/lib/payments/confirmar";
+import type { PaymentProvider, WebhookHint } from "@/lib/payments/provider";
 import { segredoConfere } from "@/lib/payments/webhook-url";
+import { enviarEmailOperacional } from "@/lib/notificacoes/email-operacional";
 
 /**
  * PORTA 1 de confirmação de pagamento: o aviso do gateway.
@@ -46,9 +49,9 @@ export async function POST(
    * webhook que chegar durante uma janela de má configuração não se perde.
    * O pedido continua 'new' e a porta 2 (retorno do cliente) ainda cobre.
    */
-  let provider;
+  let roteado: { provider: PaymentProvider; hint: WebhookHint } | null = null;
   try {
-    provider = getPaymentProvider();
+    roteado = rotearWebhook(rawBody, request.headers);
   } catch (erro) {
     console.error("[webhook] pagamento não configurado — recusando aviso", erro);
     return NextResponse.json(
@@ -57,10 +60,10 @@ export async function POST(
     );
   }
 
-  const hint = provider.parseWebhookHint(rawBody);
-  if (!hint) {
+  if (!roteado) {
     return NextResponse.json({ erro: "corpo inválido" }, { status: 400 });
   }
+  const { provider, hint } = roteado;
 
   const supabase = createAdminClient();
 
@@ -82,6 +85,141 @@ export async function POST(
     return NextResponse.json({ erro: "erro interno" }, { status: 500 });
   }
 
+  if (hint.kind === "ignorar") {
+    await supabase
+      .from("payment_events")
+      .update({ processed_at: new Date().toISOString() })
+      .eq("provider", provider.name)
+      .eq("provider_event_id", hint.eventId);
+    return NextResponse.json({ ok: true, ignorado: true });
+  }
+
+  if (hint.kind === "reembolso") {
+    const resultado = await registrarReembolso(hint.orderId, {
+      provider: provider.name,
+      transactionId: hint.transactionId,
+      eventId: hint.eventId,
+    });
+    await supabase
+      .from("payment_events")
+      .update({ processed_at: new Date().toISOString() })
+      .eq("provider", provider.name)
+      .eq("provider_event_id", hint.eventId);
+    return NextResponse.json({ ok: true, reembolso: resultado });
+  }
+
+  if (hint.kind === "checkout_expirado") {
+    let confirmado = false;
+    try {
+      confirmado = (await provider.confirmCheckoutExpired?.(hint)) === true;
+    } catch (erro) {
+      console.error("[webhook] não foi possível confirmar expiração do checkout", erro);
+    }
+
+    if (!confirmado) {
+      await supabase
+        .from("payment_events")
+        .delete()
+        .eq("provider", provider.name)
+        .eq("provider_event_id", hint.eventId);
+      return NextResponse.json(
+        { erro: "expiração não confirmada pelo gateway" },
+        { status: 400 }
+      );
+    }
+
+    let { data: reservaLiberada, error: erroLiberarReserva } = await supabase
+      .from("payments")
+      .update({
+        status: "failed",
+        raw_response: {
+          checkout_expirado: true,
+          transaction_id: hint.transactionId,
+          event_id: hint.eventId,
+        },
+      })
+      .eq("order_id", hint.orderId)
+      .eq("provider", provider.name)
+      .eq("provider_payment_id", hint.transactionId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+
+    if (!erroLiberarReserva && !reservaLiberada) {
+      const resultadoSemId = await supabase
+        .from("payments")
+        .update({
+          status: "failed",
+          provider_payment_id: hint.transactionId,
+          raw_response: {
+            checkout_expirado: true,
+            transaction_id: hint.transactionId,
+            event_id: hint.eventId,
+            provider_payment_id_recuperado: true,
+          },
+        })
+        .eq("order_id", hint.orderId)
+        .eq("provider", provider.name)
+        .is("provider_payment_id", null)
+        .eq("status", "pending")
+        .select("id")
+        .maybeSingle();
+      reservaLiberada = resultadoSemId.data;
+      erroLiberarReserva = resultadoSemId.error;
+    }
+
+    if (erroLiberarReserva || !reservaLiberada) {
+      const { data: jaEncerrada } = await supabase
+        .from("payments")
+        .select("id, status")
+        .eq("order_id", hint.orderId)
+        .eq("provider", provider.name)
+        .eq("provider_payment_id", hint.transactionId)
+        .limit(1)
+        .maybeSingle();
+
+      if (erroLiberarReserva || !jaEncerrada || jaEncerrada.status === "pending") {
+        if (erroLiberarReserva) {
+          console.error("[webhook] falha ao liberar reserva de checkout expirado", erroLiberarReserva);
+        }
+        await supabase
+          .from("payment_events")
+          .delete()
+          .eq("provider", provider.name)
+          .eq("provider_event_id", hint.eventId);
+        return NextResponse.json(
+          { erro: "não foi possível liberar a reserva expirada" },
+          { status: 500 }
+        );
+      }
+    }
+
+    await supabase
+      .from("payment_events")
+      .update({ processed_at: new Date().toISOString() })
+      .eq("provider", provider.name)
+      .eq("provider_event_id", hint.eventId);
+    const envioEmail = await enviarEmailOperacional({
+      assunto: `Checkout Reverá encerrado — ${hint.orderId}`,
+      texto: [
+        "CHECKOUT REVERÁ ENCERRADO",
+        "",
+        `Pedido: ${hint.orderId}`,
+        `Gateway: ${provider.name}`,
+        `Transação: ${hint.transactionId ?? "—"}`,
+        `Evento: ${hint.eventId}`,
+        "",
+        "Status: checkout cancelado ou expirado no gateway.",
+        "Ação: se for cliente real, conferir no painel antes de abordar manualmente.",
+      ].join("\n"),
+      idempotencyKey: `revera-checkout-expirado:${provider.name}:${hint.eventId}`,
+    });
+    if (envioEmail.estado === "erro") {
+      console.error("[webhook-email] falha ao avisar checkout encerrado", envioEmail.motivo);
+    }
+    return NextResponse.json({ ok: true, checkout_expirado: true });
+  }
+
   const resultado = await confirmarPagamento(hint.orderId, {
     transactionId: hint.transactionId,
     invoiceSlug: hint.invoiceSlug,
@@ -89,14 +227,17 @@ export async function POST(
   });
 
   if (resultado.estado === "indisponivel") {
-    // Não conseguimos verificar. Apaga o evento para permitir o reenvio, e
-    // responde 400 — a InfinitePay reenvia quando recebe 400.
+    // Não conseguimos verificar. Apaga o evento para permitir o reenvio.
+    // InfinitePay reenvia em 400; Stripe só reenvia quando recebe 5xx.
     await supabase
       .from("payment_events")
       .delete()
       .eq("provider", provider.name)
       .eq("provider_event_id", hint.eventId);
-    return NextResponse.json({ erro: resultado.motivo }, { status: 400 });
+    return NextResponse.json(
+      { erro: resultado.motivo },
+      { status: provider.name === "stripe" ? 503 : 400 }
+    );
   }
 
   // Marca o evento como processado, para auditoria.
@@ -115,4 +256,28 @@ function parseSeguro(raw: string): unknown {
   } catch {
     return { _naoParseavel: raw.slice(0, 2000) };
   }
+}
+
+function rotearWebhook(
+  rawBody: string,
+  headers: Headers
+): { provider: PaymentProvider; hint: WebhookHint } | null {
+  if (headers.get("stripe-signature")) {
+    const provider = getStripeProvider();
+    const hint = provider.parseWebhookHint(rawBody, headers);
+    return hint ? { provider, hint } : null;
+  }
+
+  const candidatos: PaymentProvider[] = [];
+  candidatos.push(getReveraNationalProvider());
+  for (const nome of ["asaas", "infinitepay"] as const) {
+    if (candidatos.some((p) => p.name === nome)) continue;
+    candidatos.push(getReveraProviderByName(nome));
+  }
+
+  for (const provider of candidatos) {
+    const hint = provider.parseWebhookHint(rawBody, headers);
+    if (hint) return { provider, hint };
+  }
+  return null;
 }

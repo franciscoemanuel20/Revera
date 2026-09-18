@@ -26,6 +26,8 @@ let reservas = 0;
 let contagemDoDia = 0;
 /** Simula "esta pessoa já pagou por outro checkout". */
 let jaComprouPorOutro = false;
+let telefonesPagos = new Set<string>();
+let emailsPagos = new Set<string>();
 /** Simula histórico de avisos ilegível (erro de consulta). */
 let historicoQuebrado = false;
 let pagamentoAtual: "pending" | "paid" = "pending";
@@ -38,7 +40,7 @@ let pedidoCancelado = false;
  */
 vi.mock("@/lib/supabase/server", () => {
   const construir = (tabela: string) => {
-    const estado = { tabela, op: "select", contando: false, single: false, buscaPagos: false };
+    const estado = { tabela, op: "select", contando: false, single: false, buscaPagos: false, valorPago: "" };
     const alvo: Record<string, unknown> = {};
     const encadeia = new Proxy(alvo, {
       get(_t, prop: string) {
@@ -59,7 +61,8 @@ vi.mock("@/lib/supabase/server", () => {
             }
             // A consulta de "pagou por outro pedido" filtra por paid.
             if (estado.buscaPagos) {
-              return resolver({ data: jaComprouPorOutro ? [{ id: "outro" }] : [], error: null });
+              const achou = jaComprouPorOutro || telefonesPagos.has(estado.valorPago) || emailsPagos.has(estado.valorPago);
+              return resolver({ data: achou ? [{ id: "outro" }] : [], error: null });
             }
             return resolver({ data: pedidos, error: null });
           };
@@ -70,6 +73,9 @@ vi.mock("@/lib/supabase/server", () => {
           if (prop === "maybeSingle") estado.single = true;
           if (prop === "eq" && args[0] === "payment_status" && args[1] === "paid") {
             estado.buscaPagos = true;
+          }
+          if (prop === "eq" && (args[0] === "customers.phone" || args[0] === "customers.email")) {
+            estado.valorPago = String(args[1]);
           }
           if (prop === "select" && typeof args[1] === "object" && args[1] !== null) {
             estado.contando = true;
@@ -92,6 +98,8 @@ beforeEach(() => {
   reservas = 0;
   contagemDoDia = 0;
   jaComprouPorOutro = false;
+  telefonesPagos = new Set();
+  emailsPagos = new Set();
   historicoQuebrado = false;
   pagamentoAtual = "pending";
   pedidoCancelado = false;
@@ -162,6 +170,27 @@ describe("rodada com a Clint recusando tudo", () => {
     const r = await rodadaDeCarrinhoAbandonado(AGORA);
 
     expect(r.pulados.comprou_em_outro_pedido).toBe(10);
+    expect(reservas).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("quem pagou com o mesmo telefone salvo com DDI não recebe recuperação", async () => {
+    pedidos = [
+      {
+        id: "pendente",
+        access_token: "token-pendente",
+        created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+        currency: "BRL",
+        customers: { phone: "11999990000", email: "maria@exemplo.com", full_name: "Maria Souza" },
+      },
+    ];
+    telefonesPagos = new Set(["5511999990000"]);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.pulados.comprou_em_outro_pedido).toBe(1);
     expect(reservas).toBe(0);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -319,7 +348,11 @@ describe("rodada com a Clint recusando tudo", () => {
     const resultado = await rodadaDeCarrinhoAbandonado(AGORA);
 
     expect(resultado.enviados).toBe(0);
-    expect(resultado.pulados.envio_recusado).toBe(10);
+    // Falta de template é config ausente, não recusa do provedor — nunca
+    // chegou a tentar falar com a Clint. Ver achado de 11/09/2026 em
+    // carrinho-abandonado.ts (a causa real do "envio recusado").
+    expect(resultado.pulados.sem_template).toBe(10);
+    expect(resultado.pulados.envio_recusado).toBeUndefined();
     expect(reservas).toBe(0);
     expect(fetchSpy).not.toHaveBeenCalled();
   });

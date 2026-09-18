@@ -38,6 +38,7 @@ import {
 import { ACEITE_INTERNACIONAL_VERSAO } from "@/lib/internacional/aceite";
 import { idiomaDoPais } from "@/lib/internacional/paises";
 import { textos, type Idioma } from "@/lib/internacional/idioma";
+import { avisarPedidoPendentePorEmail } from "@/lib/notificacoes/email-operacional";
 import type { CheckoutResult } from "./actions";
 
 const textoCurto = z.string().max(500).nullable().optional().catch(null);
@@ -328,6 +329,23 @@ export async function criarPedidoInternacionalAction(
   const { error: erroItens } = await admin.from("order_items").insert(itensPayload);
   if (erroItens) {
     return falhar("Não foi possível registrar os itens do pedido. Tente novamente.");
+  }
+
+  const avisoEmail = await avisarPedidoPendentePorEmail({
+    orderId,
+    orderNumber,
+    cliente: dados.name,
+    totalCents,
+    moeda: mercado.moeda,
+    origem: "checkout internacional",
+    cidade: dados.cidade,
+    pais: endereco.endereco.pais,
+  });
+  if (avisoEmail.estado === "erro") {
+    console.error("[checkout-intl-email] falha ao avisar pedido pendente", {
+      orderId,
+      motivo: avisoEmail.motivo,
+    });
   }
 
   await limparTokenDoCookie();

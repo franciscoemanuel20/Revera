@@ -99,10 +99,18 @@ levar mais. A conta está pronta quando `charges_enabled` virar `true`.
 Ainda no Dashboard, **em modo LIVE** (não em teste), Developers → Webhooks →
 Add endpoint.
 
-A URL tem um segredo no caminho — imprima a sua com:
+A URL tem um segredo no caminho. Ela sempre tem o formato seguro abaixo; o
+valor real do hash vem do `PAYMENT_WEBHOOK_SECRET` local e não deve ser
+colado em chat, Markdown ou commit:
+
+```text
+https://www.reveraprotesecapilar.com/api/webhooks/stripe/<WEBHOOK_HASH>
+```
+
+Para imprimir a URL completa na sua máquina, rode:
 
 ```bash
-cd ~/Claude/revera && node -e "const c=require('crypto');const fs=require('fs');const m=fs.readFileSync('.env.local','utf8').match(/^PAYMENT_WEBHOOK_SECRET=(.+)$/m);console.log('https://www.reveraprotesecapilar.com/api/webhooks/stripe/'+c.createHash('sha256').update(m[1].trim()).digest('hex'))"
+cd ~/Claude/revera && node -e "const c=require('crypto');const fs=require('fs');const base='https://www.reveraprotesecapilar.com';const m=fs.readFileSync('.env.local','utf8').match(/^PAYMENT_WEBHOOK_SECRET=(.+)$/m);const hash=c.createHash('sha256').update(m[1].trim()).digest('hex');console.log(new URL('/api/webhooks/stripe/'+hash, base).toString())"
 ```
 
 Eventos a assinar, exatamente estes cinco:

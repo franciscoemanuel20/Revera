@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { GOOGLE_TAG_ID, META_PIXEL_ID } from "@/lib/tracking/config";
 import { guardarAtribuicaoDaUrl } from "@/lib/tracking/atribuicao";
+import { garantirFilaMetaPixel } from "./Pixels";
 
 /**
  * Dispara PageView a cada página vista — inclusive nas trocas de rota.
@@ -22,14 +23,12 @@ import { guardarAtribuicaoDaUrl } from "@/lib/tracking/atribuicao";
 export function PageViewTracker({ ativo }: { ativo: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const ultimaUrl = useRef<string | null>(null);
+  const ultimaAtribuicaoUrl = useRef<string | null>(null);
+  const ultimaUrlMedida = useRef<string | null>(null);
 
   useEffect(() => {
     const query = searchParams.toString();
     const url = query ? `${pathname}?${query}` : pathname;
-
-    if (ultimaUrl.current === url) return;
-    ultimaUrl.current = url;
 
     /**
      * Guarda a origem da campanha ANTES de qualquer outra coisa.
@@ -41,7 +40,10 @@ export function PageViewTracker({ ativo }: { ativo: boolean }) {
      * Fica aqui, e não num efeito só da home, porque a pessoa pode entrar por
      * qualquer página: um anúncio pode apontar direto para o produto.
      */
-    guardarAtribuicaoDaUrl();
+    if (ultimaAtribuicaoUrl.current !== url) {
+      ultimaAtribuicaoUrl.current = url;
+      guardarAtribuicaoDaUrl();
+    }
 
     /**
      * A atribuição acima roda SEMPRE, inclusive com rastreamento desligado:
@@ -50,8 +52,11 @@ export function PageViewTracker({ ativo }: { ativo: boolean }) {
      * isso obedece ao ambiente (P0-3, 27/08/2026).
      */
     if (!ativo) return;
+    if (ultimaUrlMedida.current === url) return;
+    ultimaUrlMedida.current = url;
 
     if (META_PIXEL_ID) {
+      garantirFilaMetaPixel();
       window.fbq?.("track", "PageView");
     }
     if (GOOGLE_TAG_ID) {
