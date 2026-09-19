@@ -62,6 +62,13 @@ describe("escolherDestinatarios", () => {
     expect(fora[0]?.motivo).toBe("ja_recebeu");
   });
 
+  it("tira pedido feito com o e-mail de um administrador, com qualquer nome", () => {
+    const pedido = { ...linha("a", "Francisco Estética Capilar", "12996790105"), email: "Dono@Loja.com " };
+    const { escolhidos, fora } = escolherDestinatarios([pedido], new Set(), new Set(["dono@loja.com"]));
+    expect(escolhidos).toEqual([]);
+    expect(fora[0]?.motivo).toBe("teste");
+  });
+
   it("tira teste e telefone inválido", () => {
     const { escolhidos, fora } = escolherDestinatarios(
       [linha("a", "TESTE Claude", "11954887743"), linha("b", "Inácio", "351928150157"), linha("c", "Sem", null)],

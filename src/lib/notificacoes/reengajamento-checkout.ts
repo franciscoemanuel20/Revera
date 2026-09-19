@@ -83,7 +83,8 @@ export type MotivoFora = "teste" | "sem_telefone" | "outro_pedido_da_mesma_pesso
  */
 export function escolherDestinatarios(
   linhas: LinhaReengajamento[],
-  telefonesJaAvisados: Set<string>
+  telefonesJaAvisados: Set<string>,
+  emailsDaCasa: Set<string> = new Set()
 ): {
   escolhidos: Array<LinhaReengajamento & { destino: string }>;
   fora: Array<{ linha: LinhaReengajamento; motivo: MotivoFora }>;
@@ -93,7 +94,10 @@ export function escolherDestinatarios(
   const vistos = new Set<string>();
 
   for (const linha of linhas) {
-    if (pareceTeste(linha.nome, linha.telefone)) {
+    if (
+      pareceTeste(linha.nome, linha.telefone) ||
+      emailsDaCasa.has((linha.email ?? "").trim().toLowerCase())
+    ) {
       fora.push({ linha, motivo: "teste" });
       continue;
     }
@@ -176,7 +180,26 @@ export async function lerFilaDeReengajamento(supabase: Supabase, agora: Date): P
     };
   });
 
-  return escolherDestinatarios(linhas, telefonesJaAvisados);
+  // Os administradores da loja fazem checkout de teste com o próprio
+  // e-mail (o Francisco tinha 5 pedidos assim na fila de 18/09, com nomes
+  // diferentes). Lido de admin_users + auth, e não escrito aqui.
+  const emailsDaCasa = await emailsDosAdministradores(supabase);
+  if (!emailsDaCasa) return { erro: "não deu para ler os administradores" };
+
+  return escolherDestinatarios(linhas, telefonesJaAvisados, emailsDaCasa);
+}
+
+async function emailsDosAdministradores(supabase: Supabase): Promise<Set<string> | null> {
+  const { data, error } = await supabase.from("admin_users").select("id");
+  if (error || !data) return null;
+  const emails = new Set<string>();
+  for (const { id } of data as Array<{ id: string }>) {
+    const { data: u, error: erroUser } = await supabase.auth.admin.getUserById(id);
+    if (erroUser) return null;
+    const email = (u.user?.email ?? "").trim().toLowerCase();
+    if (email) emails.add(email);
+  }
+  return emails;
 }
 
 function clienteDe(
