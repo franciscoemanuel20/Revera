@@ -120,6 +120,15 @@ const provider = providerIsoladoRevera || providerGenerico;
 const nomeProvider = providerIsoladoRevera ? "REVERA_PAYMENT_PROVIDER" : "PAYMENT_PROVIDER";
 
 if (podeReceberComprador) {
+  if (providerIsoladoRevera !== "infinitepay") {
+    problemas.push(
+      "TRAVA FRANCISCO: produção da Revera está congelada em " +
+        "REVERA_PAYMENT_PROVIDER=infinitepay. Não use PAYMENT_PROVIDER como " +
+        "fallback e não troque para Asaas/mock sem validar a senha de mudança " +
+        "do sistema antes de alterar esta trava."
+    );
+  }
+
   if (!provider) {
     problemas.push(
       "REVERA_PAYMENT_PROVIDER/PAYMENT_PROVIDER ausente. Neste ambiente existe comprador real e não " +
