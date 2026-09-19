@@ -129,7 +129,7 @@ export async function lerFilaDeReengajamento(supabase: Supabase, agora: Date): P
 
   const { data, error } = await supabase
     .from("orders")
-    .select("id, code, created_at, customers ( phone, email, full_name )")
+    .select("id, order_number, created_at, customers ( phone, email, full_name )")
     .eq("payment_status", "pending")
     .is("canceled_at", null)
     .gte("created_at", desde)
@@ -161,14 +161,14 @@ export async function lerFilaDeReengajamento(supabase: Supabase, agora: Date): P
 
   const linhas: LinhaReengajamento[] = (data as Array<{
     id: string;
-    code: string | null;
+    order_number: string | null;
     created_at: string;
     customers: unknown;
   }>).map((l) => {
     const c = clienteDe(l.customers);
     return {
       id: l.id,
-      codigo: l.code ?? l.id.slice(0, 8),
+      codigo: l.order_number ?? l.id.slice(0, 8),
       criadoEm: l.created_at,
       nome: c?.full_name ?? null,
       telefone: c?.phone ?? null,
