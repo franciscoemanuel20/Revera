@@ -61,11 +61,33 @@ export async function POST(
   }
 
   if (!roteado) {
+    // A conta Asaas é UMA só para Reverá, Prótese, One Buy e OneMark: todo
+    // aviso da conta chega aqui. Aviso autenticado da Asaas que não é de
+    // checkout (PAYMENT_* etc.) não é nosso. Responder 4xx penaliza a
+    // configuração e, com 15 falhas, a Asaas INTERROMPE a fila inteira — foi
+    // o que parou esta fila em 18/09/2026. Responde 200 e ignora.
+    if (avisoAutenticadoDaAsaas(request.headers)) {
+      return NextResponse.json({ ok: true, ignorado: "aviso asaas sem checkout" });
+    }
     return NextResponse.json({ erro: "corpo inválido" }, { status: 400 });
   }
   const { provider, hint } = roteado;
 
   const supabase = createAdminClient();
+
+  // Checkout da Asaas de OUTRO produto da mesma conta: a referência não é um
+  // pedido da Reverá. Sem este corte, o id alheio (nem sempre uuid) quebrava a
+  // leitura do pedido (400) ou a liberação da reserva (500), e cada resposta
+  // de erro penalizava a fila. Só a falha real do banco pede reenvio.
+  if (provider.name === "asaas") {
+    const deste = await pedidoExisteNaRevera(supabase, hint.orderId);
+    if (deste === "erro") {
+      return NextResponse.json({ erro: "falha ao conferir o pedido" }, { status: 500 });
+    }
+    if (deste === "nao") {
+      return NextResponse.json({ ok: true, ignorado: "pedido de outro produto" });
+    }
+  }
 
   // Idempotência decidida pelo BANCO (unique em provider + provider_event_id),
   // não por um if — dois avisos simultâneos não podem ambos passar.
@@ -248,6 +270,30 @@ export async function POST(
     .eq("provider_event_id", hint.eventId);
 
   return NextResponse.json({ ok: true, pago: resultado.estado === "pago" });
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function pedidoExisteNaRevera(
+  supabase: ReturnType<typeof createAdminClient>,
+  orderId: string
+): Promise<"sim" | "nao" | "erro"> {
+  if (!UUID.test(orderId)) return "nao";
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error) {
+    console.error("[webhook] falha ao conferir pedido do aviso asaas", error);
+    return "erro";
+  }
+  return data ? "sim" : "nao";
+}
+
+function avisoAutenticadoDaAsaas(headers: Headers): boolean {
+  const esperado = process.env.ASAAS_WEBHOOK_AUTH_TOKEN?.trim();
+  return Boolean(esperado) && headers.get("asaas-access-token") === esperado;
 }
 
 function parseSeguro(raw: string): unknown {

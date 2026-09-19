@@ -367,3 +367,68 @@ describe("webhook nacional Asaas", () => {
     expect(fake.tabela("payment_events")[0]).toMatchObject({ provider: "infinitepay" });
   });
 });
+
+describe("webhook nacional Asaas — avisos de outros produtos da mesma conta (19/09/2026)", () => {
+  it("aviso autenticado da Asaas sem checkout responde 200 e não grava nada", async () => {
+    const post = await rota();
+    const resposta = await post(
+      JSON.stringify({ event: "PAYMENT_RECEIVED", payment: { id: "pay_x", value: 10 } })
+    );
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({ ok: true });
+    expect(fake.tabela("payment_events")).toHaveLength(0);
+  });
+
+  it("aviso sem o token da Asaas e sem formato conhecido continua 400", async () => {
+    const { POST } = await import("@/app/api/webhooks/pagamento/[segredo]/route");
+    const resposta = await POST(
+      new Request("http://local/api/webhooks/pagamento/x", {
+        method: "POST",
+        body: JSON.stringify({ qualquer: "coisa" }),
+      }),
+      { params: Promise.resolve({ segredo: caminho() }) }
+    );
+    expect(resposta.status).toBe(400);
+  });
+
+  it("checkout pago de outro produto (referência não-uuid) responde 200 sem mexer em pedido", async () => {
+    const post = await rota();
+    const resposta = await post(
+      JSON.stringify({
+        event: "CHECKOUT_PAID",
+        checkout: { id: "chk_alheio", externalReference: "PED-2026-000063" },
+      })
+    );
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({ ok: true, ignorado: "pedido de outro produto" });
+    expect(fake.tabela("orders")[0]?.payment_status).toBe("pending");
+    expect(fake.tabela("payment_events")).toHaveLength(0);
+    expect(despachar).not.toHaveBeenCalled();
+  });
+
+  it("checkout expirado de outro produto (uuid que não existe aqui) responde 200 e não libera reserva", async () => {
+    const post = await rota();
+    const resposta = await post(
+      JSON.stringify({
+        event: "CHECKOUT_EXPIRED",
+        checkout: { id: "chk_alheio", externalReference: "11111111-1111-4111-8111-111111111111" },
+      })
+    );
+    expect(resposta.status).toBe(200);
+    expect(fake.tabela("payments")[0]?.status).toBe("pending");
+    expect(fake.tabela("payment_events")).toHaveLength(0);
+  });
+
+  it("checkout expirado da própria Reverá continua sendo processado", async () => {
+    const post = await rota();
+    const resposta = await post(
+      JSON.stringify({
+        event: "CHECKOUT_EXPIRED",
+        checkout: { id: "chk_123", externalReference: ORDER },
+      })
+    );
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({ checkout_expirado: true });
+    expect(fake.tabela("payments")[0]?.status).toBe("failed");
+  });
+});
