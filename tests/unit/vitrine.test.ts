@@ -159,4 +159,18 @@ describe("prioridadeCatalogoProduto", () => {
       prioridadeCatalogoProduto("removedor-de-cola")
     );
   });
+
+  it("nao joga protese nova para baixo da cola so porque o slug nao esta na lista antiga", () => {
+    expect(prioridadeCatalogoProduto("protese-premium", "Protese premium")).toBe(0);
+    expect(prioridadeCatalogoProduto("cola-ultra-hold", "Cola Ultra Hold")).toBe(1);
+  });
+
+  it("reconhece produtos de manutencao pelo nome quando o slug nao ajuda", () => {
+    expect(prioridadeCatalogoProduto("produto-123", "Removedor de cola")).toBe(1);
+    expect(prioridadeCatalogoProduto("produto-456", "Fita adesiva")).toBe(1);
+    expect(prioridadeCatalogoProduto("produto-789", "Fitas adesivas")).toBe(1);
+    expect(prioridadeCatalogoProduto("produto-101", "Cuidados para manutencao")).toBe(1);
+    expect(prioridadeCatalogoProduto("produto-202", "Condicionador sem sal")).toBe(1);
+    expect(prioridadeCatalogoProduto("produto-303", "Limpador de base")).toBe(1);
+  });
 });

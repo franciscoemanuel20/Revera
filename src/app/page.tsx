@@ -14,7 +14,9 @@ import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
 import {
   escolherProdutoVitrine,
   linkDoProdutoVitrine,
+  produtoEstaVendavel,
 } from "@/lib/catalog/vitrine";
+import { prioridadeCatalogoProduto } from "@/lib/catalog/apresentacao";
 
 // Home de vitrine — substitui o placeholder da fase 1 (ver git log). Sem
 // grid de catálogo geral de propósito: só existe um produto publicável até
@@ -68,21 +70,28 @@ export default async function HomePage() {
     supabase.from("faq_items").select("id, question, answer").order("sort_order").limit(5),
   ]);
 
+  const produtosParaVitrine = (produtos ?? []).map((p) => ({
+    slug: p.slug as string,
+    name: p.name as string,
+    isFeatured: Boolean(p.is_featured),
+    sortOrder: (p.sort_order as number | null) ?? 0,
+    variants: (p.product_variants ?? []).map((v) => ({
+      isActive: Boolean(v.is_active),
+      priceCents: (v.price_cents as number | null) ?? 0,
+      stockQty: (v.stock_qty as number | null) ?? 0,
+    })),
+  }));
   const produtoVitrine = escolherProdutoVitrine(
-    (produtos ?? []).map((p) => ({
-      slug: p.slug as string,
-      name: p.name as string,
-      isFeatured: Boolean(p.is_featured),
-      sortOrder: (p.sort_order as number | null) ?? 0,
-      variants: (p.product_variants ?? []).map((v) => ({
-        isActive: Boolean(v.is_active),
-        priceCents: (v.price_cents as number | null) ?? 0,
-        stockQty: (v.stock_qty as number | null) ?? 0,
-      })),
-    }))
+    produtosParaVitrine.filter((p) => prioridadeCatalogoProduto(p.slug, p.name) === 0)
   );
   const linkProduto = linkDoProdutoVitrine(produtoVitrine);
   const temProduto = produtoVitrine !== null;
+  const temItemCompravel = produtosParaVitrine.some(produtoEstaVendavel);
+  // "Comprar agora" leva ao catálogo (todas as próteses primeiro, depois os
+  // produtos de manutenção — ver src/app/produtos/page.tsx), não a um único
+  // produto: pedido do Francisco em 21/09/2026. "Conhecer" só pode eleger
+  // uma prótese, para cola/fita/removedor não virarem o destaque da home.
+  const linkComprarAgora = "/produtos";
   const heroFoto = "/media/hero/revera-hero-profissional.png";
   const heroFotoAlt = "Prótese capilar Reverá em micropele em fotografia de produto premium";
 
@@ -163,8 +172,8 @@ export default async function HomePage() {
                 botão de compra que leva a 404 custa mais caro que a ausência
                 dele: a pessoa clica com intenção de compra e recebe um erro.
                 Ver src/lib/catalog/vitrine.ts (P0-1). */}
-            {temProduto ? (
-              <Link href={linkProduto} className="w-full sm:w-1/2">
+            {temItemCompravel ? (
+              <Link href={linkComprarAgora} className="w-full sm:w-1/2">
                 <Button size="lg" className="w-full justify-center">
                   {t("home.hero.botaoComprar")}
                 </Button>
@@ -385,15 +394,15 @@ export default async function HomePage() {
       ) : null}
 
       {/* CTA final (08/09/2026) — fecha a home no escuro, mesmo tom do
-          hero, antes do rodapé. Mesma lógica temProduto/linkProduto que a
-          seção Micropele já usa: nunca aponta para 404. */}
+          hero, antes do rodapé. Com item comprável, compra vai para o
+          catálogo; sem item comprável, usa o fallback institucional seguro. */}
       <section className="w-full bg-ink px-6 py-16 text-center sm:py-20">
         <Reveal className="mx-auto flex w-full max-w-2xl flex-col items-center gap-5">
           <h2 className="text-balance font-display text-2xl text-paper sm:text-3xl">
             {t("home.ctaFinal.titulo")}
           </h2>
           <p className="text-paper/70">{t("home.ctaFinal.texto")}</p>
-          <Link href={linkProduto}>
+          <Link href={temItemCompravel ? linkComprarAgora : linkProduto}>
             <Button size="lg">{t("home.ctaFinal.botao")}</Button>
           </Link>
         </Reveal>

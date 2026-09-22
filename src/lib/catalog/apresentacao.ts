@@ -57,8 +57,21 @@ const APRESENTACOES: Record<string, ApresentacaoProduto> = {
   },
 };
 
-export function prioridadeCatalogoProduto(slug: string): number {
-  return slug in APRESENTACOES ? 0 : 1;
+function normalizarCatalogo(valor: string): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function eProdutoDeManutencao(slug: string, nome: string): boolean {
+  const texto = normalizarCatalogo(`${slug} ${nome}`);
+  return /\b(colas?|removedor(?:es)?|fitas?|oleosidade|shampoos?|condicionador(?:es)?|adesivos?|solventes?|limpador(?:es)?|manutencao|cuidados?)\b/.test(texto);
+}
+
+export function prioridadeCatalogoProduto(slug: string, nome = ""): number {
+  if (eProdutoDeManutencao(slug, nome)) return 1;
+  return 0;
 }
 
 export function apresentacaoDoProduto(slug: string, nomeOriginal: string): ApresentacaoProduto {

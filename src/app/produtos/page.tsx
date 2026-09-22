@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { produtoEstaVendavel, type ProdutoVitrine } from "@/lib/catalog/vitrine";
 import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
 import { apresentacaoDoProduto, prioridadeCatalogoProduto } from "@/lib/catalog/apresentacao";
+import { ProductCard } from "@/components/ui/ProductCard";
 import { CatalogoGuiado } from "./CatalogoGuiado";
 
 export const metadata: Metadata = {
@@ -103,12 +104,19 @@ export default async function ProdutosPage() {
         imageAlt: (foto?.alt_text as string | undefined) ?? null,
       };
     })
-    .filter((p) => produtoEstaVendavel(p.paraVitrine))
-    .sort((a, b) => {
-      const prioridade = prioridadeCatalogoProduto(a.slug) - prioridadeCatalogoProduto(b.slug);
-      if (prioridade !== 0) return prioridade;
-      return a.paraVitrine.sortOrder - b.paraVitrine.sortOrder;
-    });
+    .filter((p) => produtoEstaVendavel(p.paraVitrine));
+
+  // Ordem pedida pelo Francisco em 21/09/2026: todas as próteses primeiro,
+  // produtos (manutenção etc.) só depois — nunca misturados na mesma lista.
+  // A regra não pode depender só dos slugs antigos de APRESENTACOES: produto
+  // novo de prótese precisa continuar no topo, enquanto cola/fita/removedor
+  // devem cair na seção "Produtos".
+  const proteses = vendaveis
+    .filter((p) => prioridadeCatalogoProduto(p.slug, p.name) === 0)
+    .sort((a, b) => a.paraVitrine.sortOrder - b.paraVitrine.sortOrder);
+  const produtosManutencao = vendaveis
+    .filter((p) => prioridadeCatalogoProduto(p.slug, p.name) === 1)
+    .sort((a, b) => a.paraVitrine.sortOrder - b.paraVitrine.sortOrder);
 
   return (
     <main
@@ -124,11 +132,34 @@ export default async function ProdutosPage() {
         </p>
       </header>
 
-      {vendaveis.length > 0 ? <CatalogoGuiado produtos={vendaveis} /> : (
+      {proteses.length > 0 ? <CatalogoGuiado produtos={proteses} /> : (
         <p className="text-ink/70">
           Nenhuma peça disponível para compra neste momento.
         </p>
       )}
+
+      {produtosManutencao.length > 0 ? (
+        <section aria-labelledby="produtos-titulo" className="flex flex-col gap-4 border-t border-sand pt-8">
+          <div>
+            <h2 id="produtos-titulo" className="font-display text-2xl text-ink">Produtos</h2>
+            <p className="text-sm text-ink/70">Itens de manutenção e cuidado para a sua peça.</p>
+          </div>
+          <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {produtosManutencao.map((produto) => (
+              <li key={produto.slug}>
+                <ProductCard
+                  slug={produto.slug}
+                  name={produto.name}
+                  imageUrl={produto.imageUrl}
+                  imageAlt={produto.imageAlt}
+                  priceCents={produto.priceCents}
+                  isFeatured={produto.isFeatured}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </main>
   );
 }
