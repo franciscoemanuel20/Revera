@@ -6,6 +6,10 @@ import { textosDaPagina } from "@/lib/conteudo/textos";
 import { urlsDasFotosDoSite } from "@/lib/conteudo/fotos-do-site";
 import { ProdutoInterativo } from "./ProdutoInterativo";
 
+function jsonLdSeguro(valor: unknown) {
+  return JSON.stringify(valor).replace(/</g, "\\u003c");
+}
+
 function produtoDeManutencao(nome: string) {
   const texto = nome
     .normalize("NFD")
@@ -78,6 +82,13 @@ export async function generateMetadata({
   return {
     title: titulo,
     description: descricao,
+    keywords: [
+      data.name as string,
+      "prótese capilar",
+      "prótese capilar natural",
+      "prótese capilar Reverá",
+      "comprar prótese capilar",
+    ],
     alternates: { canonical: `/produtos/${slug}` },
     openGraph: {
       type: "website",
@@ -299,9 +310,9 @@ export default async function ProdutoPage({
         <script
           type="application/ld+json"
           // O conteúdo é montado aqui a partir de dados do banco, não de
-          // entrada de usuário; ainda assim o JSON.stringify escapa o que
-          // precisa ser escapado.
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          // constantes; escapamos `<` para impedir fechamento acidental do
+          // script caso algum texto editável venha do banco.
+          dangerouslySetInnerHTML={{ __html: jsonLdSeguro(jsonLd) }}
         />
       ) : null}
     <ProdutoInterativo

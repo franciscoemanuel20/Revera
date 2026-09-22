@@ -48,14 +48,20 @@ import { textosDaPagina } from "@/lib/conteudo/textos";
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "Garantia",
+  title: "Garantia da prótese capilar",
   description:
-    "O teste que você faz ao receber, o que a garantia Reverá cobre e até quando dá para trocar. Sem letra miúda.",
+    "Entenda a garantia da prótese capilar Reverá: teste dos fios ao receber, prazos, cuidados e quando a troca ainda é possível.",
+  keywords: [
+    "garantia prótese capilar",
+    "troca de prótese capilar",
+    "cuidados com prótese capilar",
+    "Reverá garantia",
+  ],
   alternates: { canonical: "/garantia" },
   openGraph: {
-    title: "Garantia — Reverá",
+    title: "Garantia da prótese capilar — Reverá",
     description:
-      "O teste que você faz ao receber, o que a garantia Reverá cobre e até quando dá para trocar. Sem letra miúda.",
+      "Entenda a garantia da prótese capilar Reverá: teste dos fios ao receber, prazos, cuidados e quando a troca ainda é possível.",
     url: "/garantia",
   },
 };
@@ -68,9 +74,26 @@ export default async function GarantiaPage() {
       className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
-      <Reveal className="flex flex-col items-center gap-2 text-center">
+      <Reveal className="flex flex-col items-center gap-3 text-center">
         <span className="eyebrow-ink">{t("garantia.eyebrow")}</span>
-        <h1 className="font-display text-3xl text-ink">{t("garantia.titulo")}</h1>
+        <h1 className="text-balance font-display text-3xl text-ink">{t("garantia.titulo")}</h1>
+        <p className="max-w-2xl text-ink/70">
+          A regra principal é simples: confira a peça antes de cortar, moldar
+          ou aplicar cola. Esse cuidado preserva a possibilidade de troca.
+        </p>
+      </Reveal>
+
+      <Reveal className="grid gap-3 sm:grid-cols-3">
+        {[
+          ["Recebeu", "Faça o teste dos fios com a peça intacta."],
+          ["Percebeu defeito", "Pare o uso e fale com a Reverá antes de alterar a peça."],
+          ["Vai aplicar", "Depois de cortar, moldar ou colar, a peça não volta ao estado original."],
+        ].map(([titulo, texto]) => (
+          <div key={titulo} className="rounded-xl border border-sand bg-paper p-4">
+            <h2 className="font-display text-lg text-ink">{titulo}</h2>
+            <p className="mt-2 text-sm leading-5 text-ink/70">{texto}</p>
+          </div>
+        ))}
       </Reveal>
 
       <Reveal className="flex flex-col gap-6 text-ink/80">

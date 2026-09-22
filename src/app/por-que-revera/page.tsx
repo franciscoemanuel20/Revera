@@ -18,14 +18,20 @@ import { textosDaPagina } from "@/lib/conteudo/textos";
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "Por que Reverá",
+  title: "Por que comprar na Reverá",
   description:
-    "Teste de qualidade antes do envio, garantia de 7 dias úteis e acabamento na linha frontal. O que nos separa do genérico.",
+    "Entenda por que comprar prótese capilar na Reverá: acabamento natural, escolha de cor, teste de qualidade, envio para todo o Brasil e garantia.",
+  keywords: [
+    "comprar prótese capilar",
+    "prótese capilar Reverá",
+    "prótese capilar acabamento natural",
+    "prótese capilar online",
+  ],
   alternates: { canonical: "/por-que-revera" },
   openGraph: {
-    title: "Por que Reverá — Reverá",
+    title: "Por que comprar na Reverá — Reverá",
     description:
-      "Teste de qualidade antes do envio, garantia de 7 dias úteis e acabamento na linha frontal. O que nos separa do genérico.",
+      "Entenda por que comprar prótese capilar na Reverá: acabamento natural, escolha de cor, teste de qualidade, envio para todo o Brasil e garantia.",
     url: "/por-que-revera",
   },
 };
@@ -38,9 +44,26 @@ export default async function PorQueReveraPage() {
       className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
-      <Reveal className="flex flex-col items-center gap-2 text-center">
+      <Reveal className="flex flex-col items-center gap-3 text-center">
         <span className="eyebrow-ink">{t("porque.eyebrow")}</span>
-        <h1 className="font-display text-3xl text-ink">{t("porque.titulo")}</h1>
+        <h1 className="text-balance font-display text-3xl text-ink">{t("porque.titulo")}</h1>
+        <p className="max-w-2xl text-ink/70">
+          A Reverá organiza a compra para reduzir dúvida: peça clara, cor
+          comparável, teste antes do envio e política de garantia explicada.
+        </p>
+      </Reveal>
+
+      <Reveal className="grid gap-3 sm:grid-cols-3">
+        {[
+          ["Escolha", "Modelos separados por base, textura e indicação de uso."],
+          ["Confiança", "Garantia e teste dos fios explicados antes da compra."],
+          ["Pós-compra", "Orientação para cor, cuidados e conservação da peça."],
+        ].map(([titulo, texto]) => (
+          <div key={titulo} className="rounded-xl border border-sand bg-paper p-4">
+            <h2 className="font-display text-base text-ink">{titulo}</h2>
+            <p className="mt-2 text-sm leading-5 text-ink/70">{texto}</p>
+          </div>
+        ))}
       </Reveal>
 
       {/* Teste de qualidade — texto igual ao de /garantia, mesma fonte

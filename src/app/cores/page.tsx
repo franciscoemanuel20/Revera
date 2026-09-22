@@ -6,14 +6,20 @@ import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { ColorHelpForm } from "./ColorHelpForm";
 
 export const metadata: Metadata = {
-  title: "Cores disponíveis",
+  title: "Cores de prótese capilar",
   description:
-    "As cores reais da linha Reverá, fotografadas — incluindo a escala de grisalho. Não sabe qual é a sua? A gente ajuda a descobrir pela foto.",
+    "Veja a cartela de cores da prótese capilar Reverá, incluindo tons naturais e grisalhos. Compare as fotos e peça ajuda para escolher a cor certa.",
+  keywords: [
+    "cores de prótese capilar",
+    "cartela de cores prótese capilar",
+    "prótese capilar grisalha",
+    "cor de cabelo para prótese",
+  ],
   alternates: { canonical: "/cores" },
   openGraph: {
-    title: "Cores disponíveis — Reverá",
+    title: "Cores de prótese capilar — Reverá",
     description:
-      "As cores reais da linha Reverá, fotografadas — incluindo a escala de grisalho. Não sabe qual é a sua? A gente ajuda a descobrir pela foto.",
+      "Veja a cartela de cores da prótese capilar Reverá, incluindo tons naturais e grisalhos. Compare as fotos e peça ajuda para escolher a cor certa.",
     url: "/cores",
   },
 };
@@ -36,13 +42,27 @@ export default async function CoresPage() {
       className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
-      <Reveal className="flex flex-col items-center gap-2 text-center">
+      <Reveal className="flex flex-col items-center gap-3 text-center">
         <span className="eyebrow-ink">Linha micropele</span>
-        <h1 className="font-display text-3xl text-ink">Cores disponíveis</h1>
-        <p className="text-ink/70">
-          As opções de cor da linha Micropele 0,08mm.
+        <h1 className="text-balance font-display text-3xl text-ink">Cores de prótese capilar Reverá</h1>
+        <p className="max-w-2xl text-ink/70">
+          Compare as fotos da cartela antes de escolher. A cor selecionada na
+          página do produto define a peça que vai para o carrinho.
         </p>
       </Reveal>
+
+      <section aria-label="Como escolher a cor" className="grid gap-3 sm:grid-cols-3">
+        {[
+          ["Luz natural", "Compare sua referência em luz clara, sem filtro e sem sombra forte."],
+          ["Raiz e laterais", "Olhe o tom próximo da raiz e das laterais, não só a ponta do fio."],
+          ["Dúvida real", "Envie uma foto no formulário abaixo e peça indicação da equipe."],
+        ].map(([titulo, texto]) => (
+          <Reveal key={titulo} className="rounded-xl border border-sand bg-paper p-4">
+            <h2 className="font-display text-lg text-ink">{titulo}</h2>
+            <p className="mt-2 text-sm leading-5 text-ink/70">{texto}</p>
+          </Reveal>
+        ))}
+      </section>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {(colors ?? []).map((color, i) => (
@@ -88,7 +108,7 @@ export default async function CoresPage() {
         ))}
       </div>
 
-      <section id="ajuda" className="flex scroll-mt-8 flex-col gap-2 border-t border-sand pt-8 text-center">
+      <section id="ajuda" className="flex scroll-mt-8 flex-col gap-2 rounded-2xl border border-sand bg-sand/25 p-6 text-center">
         <span className="eyebrow-ink mx-auto">Precisa de ajuda?</span>
         <h2 className="font-display text-2xl text-ink">
           Não sabe qual cor escolher?
