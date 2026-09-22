@@ -6,6 +6,27 @@ import { textosDaPagina } from "@/lib/conteudo/textos";
 import { urlsDasFotosDoSite } from "@/lib/conteudo/fotos-do-site";
 import { ProdutoInterativo } from "./ProdutoInterativo";
 
+function produtoDeManutencao(nome: string) {
+  const texto = nome
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+  return [
+    "cola",
+    "removedor",
+    "fita",
+    "oleosidade",
+    "shampoo",
+    "condicionador",
+    "adesivo",
+    "solvente",
+    "limpador",
+    "manutencao",
+    "cuidado",
+  ].some((termo) => texto.includes(termo));
+}
+
 // Página pública de produto — client de servidor com a chave anon
 // (createClient, não createAdminClient): a policy "public read active
 // products" (supabase/migrations/00000000000001_init.sql) já resolve quem
@@ -189,7 +210,7 @@ export default async function ProdutoPage({
         vendavel: vendaveis.length > 0,
       };
     })
-    .filter((p) => p.vendavel);
+    .filter((p) => p.vendavel && !produtoDeManutencao(p.name));
 
   /**
    * A CARTELA SÓ MOSTRA O QUE ESTE PRODUTO TEM (29/08/2026).

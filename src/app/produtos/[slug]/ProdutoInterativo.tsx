@@ -100,6 +100,31 @@ function fotosDoProduto(name: string, doBanco: FotoProduto[], fallback?: FotoPro
   ];
 }
 
+function nomeComercial(nome: string) {
+  const normalizado = nome.toLowerCase();
+  if (normalizado.includes("micropele")) {
+    return `Prótese Capilar ${nome.replace(/\s+20x25$/i, "")}`;
+  }
+  if (normalizado.includes("prótese") || normalizado.includes("protese")) return nome;
+  if (
+    normalizado.includes("afro") ||
+    normalizado.includes("full lace") ||
+    normalizado.includes("austrália") ||
+    normalizado.includes("australia") ||
+    normalizado.includes("cacho")
+  ) {
+    return `Prótese Capilar ${nome.replace(/\s+20x25$/i, "")}`;
+  }
+  return nome;
+}
+
+const selosCompra = [
+  "Pagamento seguro",
+  "Frete calculado por CEP",
+  "7 dias úteis de garantia",
+  "Teste de qualidade antes do envio",
+];
+
 // Ilha de interatividade da página de produto — a página em si (page.tsx) é
 // server component (busca no Supabase); aqui só vive o estado de UI
 // (cor/quantidade/imagem selecionada), mesmo padrão do ProductForm do admin.
@@ -327,6 +352,53 @@ export function ProdutoInterativo({
     ? applyQuantityDiscount(varianteExibicao.priceCents, quantidade, discountRules)
     : null;
 
+  const tituloComercial = nomeComercial(name);
+  const rotuloBotao =
+    varianteExibicao && varianteExibicao.stockQty <= 0
+      ? "Fora de estoque"
+      : faltaEscolherCor
+        ? "Escolha uma cor"
+        : pendente || adicionando
+          ? "Adicionando..."
+          : "Adicionar ao carrinho";
+
+  const botaoDesabilitado =
+    pendente || adicionando || !podeComprar || !varianteExibicao || varianteExibicao.stockQty <= 0;
+
+  async function adicionarAoCarrinho() {
+    if (adicionando) return;
+    setMensagemErro(null);
+    if (!varianteSelecionada || faltaEscolherCor) {
+      setMensagemErro("Escolha a cor da prótese antes de continuar.");
+      return;
+    }
+    setAdicionando(true);
+    try {
+      const { erro } = await adicionarItem(varianteSelecionada.id, quantidade);
+      if (erro) {
+        setMensagemErro(erro);
+        return;
+      }
+      // AddToCart só DEPOIS de o servidor confirmar (P1,
+      // 27/08/2026). Medir no clique contaria estoque esgotado e
+      // erro de rede como intenção de compra, e o público de
+      // remarketing nasceria com gente que nunca conseguiu
+      // colocar nada na sacola.
+      medirAdicionarAoCarrinho({
+        variantId: varianteSelecionada.id,
+        nome: name,
+        quantidade,
+        precoUnitarioCents: resultadoDesconto?.unitPriceCents ?? varianteSelecionada.priceCents,
+      });
+      setConfirmacao({
+        texto: "Produto adicionado ao carrinho",
+        chave: Date.now(),
+      });
+    } finally {
+      setAdicionando(false);
+    }
+  }
+
   useEffect(() => {
     if (jaMediuVisualizacao.current) return;
     if (!varianteExibicao) return;
@@ -342,7 +414,7 @@ export function ProdutoInterativo({
 
   return (
     <main
-      className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 pb-16"
+      className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 pb-32 sm:pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
       <div className="grid gap-8 sm:grid-cols-2 lg:items-start">
@@ -473,7 +545,8 @@ export function ProdutoInterativo({
           <Reveal delayMs={100} className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
               <span className="eyebrow-ink">Reverá</span>
-              <h1 className="font-display text-3xl text-ink">{name}</h1>
+              <h1 className="font-display text-3xl text-ink">{tituloComercial}</h1>
+              {tituloComercial !== name ? <p className="text-sm text-ink/55">{name}</p> : null}
               {description ? <p className="text-ink/80">{description}</p> : null}
               {baseThicknessMm != null ? (
                 <p className="text-sm text-ink/60">
@@ -494,12 +567,17 @@ export function ProdutoInterativo({
             )}
 
             {colors.length > 0 ? (
-              <ColorSelector
-                colors={colors}
-                selectedId={corSelecionadaId}
-                onChange={escolherCor}
-                onNeedHelp={() => router.push("/cores#ajuda")}
-              />
+              <div className="flex flex-col gap-2">
+                <div className="rounded-lg border border-gold/45 bg-gold/10 px-4 py-3 text-sm text-ink/75">
+                  <span className="font-semibold text-ink">1. Escolha a cor</span> para liberar o botão de compra.
+                </div>
+                <ColorSelector
+                  colors={colors}
+                  selectedId={corSelecionadaId}
+                  onChange={escolherCor}
+                  onNeedHelp={() => router.push("/cores#ajuda")}
+                />
+              </div>
             ) : null}
 
             <QuantitySelector
@@ -530,48 +608,10 @@ export function ProdutoInterativo({
               {varianteExibicao ? (
                 <Button
                   size="lg"
-                  disabled={pendente || adicionando || !podeComprar || varianteExibicao.stockQty <= 0}
-                  onClick={async () => {
-                    if (adicionando) return;
-                    setMensagemErro(null);
-                    if (!varianteSelecionada || faltaEscolherCor) {
-                      setMensagemErro("Escolha a cor da prótese antes de continuar.");
-                      return;
-                    }
-                    setAdicionando(true);
-                    try {
-                      const { erro } = await adicionarItem(varianteSelecionada.id, quantidade);
-                      if (erro) {
-                        setMensagemErro(erro);
-                        return;
-                      }
-                      // AddToCart só DEPOIS de o servidor confirmar (P1,
-                      // 27/08/2026). Medir no clique contaria estoque esgotado e
-                      // erro de rede como intenção de compra, e o público de
-                      // remarketing nasceria com gente que nunca conseguiu
-                      // colocar nada na sacola.
-                      medirAdicionarAoCarrinho({
-                        variantId: varianteSelecionada.id,
-                        nome: name,
-                        quantidade,
-                        precoUnitarioCents: resultadoDesconto?.unitPriceCents ?? varianteSelecionada.priceCents,
-                      });
-                      setConfirmacao({
-                        texto: "Produto adicionado ao carrinho",
-                        chave: Date.now(),
-                      });
-                    } finally {
-                      setAdicionando(false);
-                    }
-                  }}
+                  disabled={botaoDesabilitado}
+                  onClick={() => void adicionarAoCarrinho()}
                 >
-                  {varianteExibicao.stockQty <= 0
-                    ? "Fora de estoque"
-                    : faltaEscolherCor
-                      ? "Escolha uma cor"
-                      : pendente || adicionando
-                        ? "Adicionando…"
-                        : "Adicionar ao carrinho"}
+                  {rotuloBotao}
                 </Button>
               ) : (
                 <Button size="lg" disabled title="Em breve">
@@ -599,6 +639,14 @@ export function ProdutoInterativo({
                 Frete calculado na próxima etapa, pelo CEP de entrega.
               </p>
             </div>
+
+            <ul className="grid grid-cols-2 gap-2 text-xs text-ink/65">
+              {selosCompra.map((selo) => (
+                <li key={selo} className="rounded-md border border-sand bg-paper/70 px-3 py-2">
+                  {selo}
+                </li>
+              ))}
+            </ul>
 
             <TrustBar items={trustItems} />
           </Reveal>
@@ -651,6 +699,28 @@ export function ProdutoInterativo({
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {varianteExibicao ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-sand bg-paper/95 px-4 py-3 shadow-[0_-10px_30px_-24px_rgb(0_0_0_/_0.45)] backdrop-blur sm:hidden">
+          <div className="mx-auto flex max-w-5xl items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-ink">{tituloComercial}</p>
+              <Price
+                cents={resultadoDesconto!.unitPriceCents}
+                compareAtCents={varianteExibicao.compareAtPriceCents}
+              />
+            </div>
+            <Button
+              size="sm"
+              disabled={botaoDesabilitado}
+              onClick={() => void adicionarAoCarrinho()}
+              className="shrink-0"
+            >
+              {rotuloBotao}
+            </Button>
+          </div>
+        </div>
       ) : null}
     </main>
   );
