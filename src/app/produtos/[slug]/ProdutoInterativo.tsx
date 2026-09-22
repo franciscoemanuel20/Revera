@@ -125,6 +125,12 @@ const selosCompra = [
   "Teste de qualidade antes do envio",
 ];
 
+const passosCompraSegura = [
+  "Você escolhe a cor nesta página",
+  "Confere quantidade e preço antes de avançar",
+  "Frete e pagamento ficam na próxima etapa",
+];
+
 function beneficiosDoProduto(nome: string, baseThicknessMm: number | null) {
   const normalizado = nome.toLowerCase();
   const espessura = baseThicknessMm != null ? `${baseThicknessMm.toLocaleString("pt-BR")} mm` : null;
@@ -684,6 +690,18 @@ export function ProdutoInterativo({
               </p>
             </div>
 
+            <div className="rounded-xl border border-sand bg-sand/35 p-4">
+              <p className="text-sm font-semibold text-ink">Compra sem surpresa</p>
+              <ul className="mt-3 grid gap-2 text-xs text-ink/65">
+                {passosCompraSegura.map((passo) => (
+                  <li key={passo} className="flex gap-2">
+                    <span aria-hidden="true" className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gold-deep" />
+                    <span>{passo}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             <ul className="grid grid-cols-2 gap-2 text-xs text-ink/65">
               {selosCompra.map((selo) => (
                 <li key={selo} className="rounded-md border border-sand bg-paper/70 px-3 py-2">
@@ -703,6 +721,11 @@ export function ProdutoInterativo({
           <h2 id="valor-produto-titulo" className="mt-1 font-display text-2xl text-ink">
             Pensada para comprar com segurança.
           </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/65">
+            A página mostra base, cor, preço e disponibilidade antes de você ir
+            para o carrinho. Assim a decisão acontece com mais contexto e menos
+            dúvida.
+          </p>
         </div>
         {[
           ["Para quem é indicada", beneficios.indicado],

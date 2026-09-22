@@ -241,12 +241,18 @@ export default async function HomePage() {
               resultado. Por isso a Reverá apresenta cada modelo com clareza e
               confere a peça antes do envio.
             </p>
+            <Link
+              href="/produtos"
+              className="mt-2 self-start rounded-full border border-gold/60 px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-gold/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+            >
+              Ver próteses disponíveis
+            </Link>
           </Reveal>
           <Reveal delayMs={120} className="grid gap-3 sm:grid-cols-3">
             {[
-              ["Base", "Espessuras e construções para diferentes níveis de discrição."],
-              ["Cor", "Cartela visual para comparar antes de finalizar a compra."],
-              ["Envio", "Pedido revisado e enviado com orientação clara de garantia."],
+              ["Base", "Espessuras e construções apresentadas com linguagem simples."],
+              ["Cor", "Cartela visual e suporte para comparar antes de finalizar."],
+              ["Envio", "Pedido revisado antes de sair para transporte."],
             ].map(([titulo, texto]) => (
               <div key={titulo} className="rounded-xl border border-sand bg-paper p-4 shadow-[0_1px_0_rgb(255_255_255_/_0.8)]">
                 <h3 className="font-display text-lg text-ink">{titulo}</h3>

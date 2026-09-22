@@ -37,7 +37,7 @@ export function ProductCard({
       href={`/produtos/${slug}`}
       className="group flex h-full flex-col gap-4 rounded-2xl border border-sand/90 bg-paper p-3.5 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] transition-all duration-300 hover:-translate-y-1 hover:border-gold/70 hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
     >
-      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-sand">
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-sand ring-1 ring-ink/5">
         {imageUrl ? (
           <Image
             src={imageUrl}
@@ -63,9 +63,11 @@ export function ProductCard({
         {summary ? <p className="text-sm leading-5 text-ink/70">{summary}</p> : null}
       </div>
       {priceCents != null ? (
-        <div className="mt-auto flex items-center justify-between border-t border-sand/70 px-0.5 pt-3">
+        <div className="mt-auto flex items-center justify-between gap-3 border-t border-sand/70 px-0.5 pt-3">
           <Price cents={priceCents} compareAtCents={compareAtCents} />
-          <span aria-hidden="true" className="text-lg text-gold-deep transition-transform duration-300 group-hover:translate-x-0.5">→</span>
+          <span className="rounded-full border border-gold/50 px-3 py-1 text-xs font-semibold text-ink transition-colors group-hover:bg-gold/15">
+            Ver detalhes
+          </span>
         </div>
       ) : (
         <span className="text-sm text-ink/60">Em breve</span>

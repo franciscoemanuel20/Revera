@@ -26,16 +26,23 @@ const ROTULOS_VALOR: Record<string, string> = {
 const COMPARATIVO_PROTESES = [
   {
     titulo: "Naturalidade",
-    texto: "Bases pensadas para frente discreta e acabamento limpo.",
+    texto: "Bases, fios e texturas apresentados com clareza para uma escolha mais segura.",
   },
   {
     titulo: "Escolha assistida",
-    texto: "A cartela de cores ajuda a comparar antes de fechar o pedido.",
+    texto: "Cartela de cores e atendimento para reduzir dúvida antes da compra.",
   },
   {
     titulo: "Conferência",
-    texto: "Cada peça sai com teste de qualidade antes do envio.",
+    texto: "Peça revisada antes do envio e garantia explicada sem letra miúda.",
   },
+];
+
+const ETAPAS_COMPRA = [
+  "Escolha a peça",
+  "Compare a cor",
+  "Revise no carrinho",
+  "Receba com orientação",
 ];
 
 /**
@@ -157,6 +164,13 @@ export default async function ProdutosPage() {
             por conferência antes do envio; a cor é definida na página de cada
             modelo.
           </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {["Micropele", "Full lace", "Cacheadas", "Afro"].map((item) => (
+              <span key={item} className="rounded-full border border-sand bg-sand/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="grid gap-2 text-sm text-ink/70">
           <div className="rounded-lg bg-sand/70 px-4 py-3">
@@ -177,6 +191,19 @@ export default async function ProdutosPage() {
         ))}
       </section>
 
+      <section aria-label="Etapas da compra" className="rounded-2xl border border-sand bg-ink px-5 py-4 text-paper shadow-soft">
+        <ol className="grid gap-3 text-sm sm:grid-cols-4">
+          {ETAPAS_COMPRA.map((etapa, index) => (
+            <li key={etapa} className="flex items-center gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold-metal text-xs font-semibold text-ink">
+                {index + 1}
+              </span>
+              <span className="text-paper/85">{etapa}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
       {proteses.length > 0 ? <CatalogoGuiado produtos={proteses} /> : (
         <p className="text-ink/70">
           Nenhuma peça disponível para compra neste momento.
@@ -186,8 +213,9 @@ export default async function ProdutosPage() {
       {produtosManutencao.length > 0 ? (
         <section aria-labelledby="produtos-titulo" className="flex flex-col gap-4 border-t border-sand pt-8">
           <div>
+            <span className="eyebrow-ink">Depois da prótese</span>
             <h2 id="produtos-titulo" className="font-display text-2xl text-ink">Produtos</h2>
-            <p className="text-sm text-ink/70">Itens de manutenção e cuidado para a sua peça.</p>
+            <p className="text-sm text-ink/70">Itens de manutenção e cuidado para preservar a peça no uso diário.</p>
           </div>
           <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {produtosManutencao.map((produto) => (
