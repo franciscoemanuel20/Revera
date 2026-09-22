@@ -155,7 +155,7 @@ export default async function ProdutosPage() {
       className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 pb-20"
       style={{ paddingTop: HEADER_HEIGHT_PX + 48 }}
     >
-      <header className="grid gap-6 rounded-2xl border border-sand bg-paper p-6 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] sm:p-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+      <header className="rounded-2xl border border-sand bg-paper p-6 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] sm:p-8">
         <div className="flex flex-col gap-3">
           <span className="eyebrow-ink">Nossas peças</span>
           <h1 className="text-balance font-display text-4xl text-ink">Próteses Reverá</h1>
@@ -172,37 +172,7 @@ export default async function ProdutosPage() {
             ))}
           </div>
         </div>
-        <div className="grid gap-2 text-sm text-ink/70">
-          <div className="rounded-lg bg-sand/70 px-4 py-3">
-            Compra segura, envio para todo o Brasil.
-          </div>
-          <div className="rounded-lg bg-sand/70 px-4 py-3">
-            Atendimento para ajudar na escolha da cor.
-          </div>
-        </div>
       </header>
-
-      <section aria-label="Diferenciais Reverá" className="grid gap-3 sm:grid-cols-3">
-        {COMPARATIVO_PROTESES.map((item) => (
-          <div key={item.titulo} className="rounded-xl border border-sand bg-paper/70 p-4">
-            <h2 className="font-display text-base text-ink">{item.titulo}</h2>
-            <p className="mt-1 text-sm leading-5 text-ink/65">{item.texto}</p>
-          </div>
-        ))}
-      </section>
-
-      <section aria-label="Etapas da compra" className="rounded-2xl border border-sand bg-ink px-5 py-4 text-paper shadow-soft">
-        <ol className="grid gap-3 text-sm sm:grid-cols-4">
-          {ETAPAS_COMPRA.map((etapa, index) => (
-            <li key={etapa} className="flex items-center gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold-metal text-xs font-semibold text-ink">
-                {index + 1}
-              </span>
-              <span className="text-paper/85">{etapa}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
 
       {proteses.length > 0 ? <CatalogoGuiado produtos={proteses} /> : (
         <p className="text-ink/70">
@@ -234,6 +204,37 @@ export default async function ProdutosPage() {
           </ul>
         </section>
       ) : null}
+
+      <section aria-label="Diferenciais Reverá" className="grid gap-3 border-t border-sand pt-8 sm:grid-cols-3">
+        {COMPARATIVO_PROTESES.map((item) => (
+          <div key={item.titulo} className="rounded-xl border border-sand bg-paper/70 p-4">
+            <h2 className="font-display text-base text-ink">{item.titulo}</h2>
+            <p className="mt-1 text-sm leading-5 text-ink/65">{item.texto}</p>
+          </div>
+        ))}
+      </section>
+
+      <section aria-label="Orientações de compra" className="grid gap-3 text-sm text-ink/70 sm:grid-cols-2">
+        <div className="rounded-lg bg-sand/70 px-4 py-3">
+          Compra segura, envio para todo o Brasil.
+        </div>
+        <div className="rounded-lg bg-sand/70 px-4 py-3">
+          Atendimento para ajudar na escolha da cor.
+        </div>
+      </section>
+
+      <section aria-label="Etapas da compra" className="rounded-2xl border border-sand bg-ink px-5 py-4 text-paper shadow-soft">
+        <ol className="grid gap-3 text-sm sm:grid-cols-4">
+          {ETAPAS_COMPRA.map((etapa, index) => (
+            <li key={etapa} className="flex items-center gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold-metal text-xs font-semibold text-ink">
+                {index + 1}
+              </span>
+              <span className="text-paper/85">{etapa}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
     </main>
   );
 }
