@@ -12,6 +12,8 @@ export interface ProductCardProps {
   isFeatured?: boolean;
   summary?: string | null;
   textureLabel?: string | null;
+  badge?: string | null;
+  valueLabel?: string | null;
 }
 
 // Card de vitrine — priceCents/imageUrl são opcionais porque o produto seed
@@ -27,11 +29,13 @@ export function ProductCard({
   isFeatured,
   summary,
   textureLabel,
+  badge,
+  valueLabel,
 }: ProductCardProps) {
   return (
     <Link
       href={`/produtos/${slug}`}
-      className="group flex flex-col gap-4 rounded-2xl border border-sand/90 bg-paper p-3.5 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] transition-all duration-300 hover:-translate-y-1 hover:border-gold/70 hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+      className="group flex h-full flex-col gap-4 rounded-2xl border border-sand/90 bg-paper p-3.5 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] transition-all duration-300 hover:-translate-y-1 hover:border-gold/70 hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
     >
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-sand">
         {imageUrl ? (
@@ -42,9 +46,14 @@ export function ProductCard({
             className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
           />
         ) : null}
-        {isFeatured ? (
+        {badge || isFeatured ? (
           <span className="absolute left-2.5 top-2.5 rounded-full bg-gold-metal px-2.5 py-1 text-xs font-semibold text-ink shadow-sm">
-            Destaque
+            {badge || "Destaque"}
+          </span>
+        ) : null}
+        {valueLabel ? (
+          <span className="absolute bottom-2.5 left-2.5 rounded-full bg-ink/80 px-2.5 py-1 text-xs font-semibold text-paper backdrop-blur">
+            {valueLabel}
           </span>
         ) : null}
       </div>

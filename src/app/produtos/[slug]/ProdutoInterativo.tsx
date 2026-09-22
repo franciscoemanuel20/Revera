@@ -125,6 +125,49 @@ const selosCompra = [
   "Teste de qualidade antes do envio",
 ];
 
+function beneficiosDoProduto(nome: string, baseThicknessMm: number | null) {
+  const normalizado = nome.toLowerCase();
+  const espessura = baseThicknessMm != null ? `${baseThicknessMm.toLocaleString("pt-BR")} mm` : null;
+
+  if (normalizado.includes("0,06") || normalizado.includes("0.06")) {
+    return {
+      indicado: "Para quem prioriza uma frente ainda mais discreta e leve.",
+      recebe: "Peça selecionada na cor escolhida, com conferência antes do envio.",
+      qualidade: `Base ultrafina${espessura ? ` de ${espessura}` : ""}, pensada para naturalidade em uso diário.`,
+    };
+  }
+
+  if (normalizado.includes("cacho") || normalizado.includes("afro")) {
+    return {
+      indicado: "Para quem busca textura, volume e movimento mais próximos do próprio cabelo.",
+      recebe: "Peça na textura escolhida, enviada com revisão visual antes de sair.",
+      qualidade: "Modelo próprio para textura, sem tratar cachos e afro como simples variação da peça lisa.",
+    };
+  }
+
+  if (normalizado.includes("full lace")) {
+    return {
+      indicado: "Para quem busca leveza e acabamento natural em toda a construção da peça.",
+      recebe: "Peça em renda, com cor escolhida e conferência antes do envio.",
+      qualidade: "Construção voltada para conforto, respirabilidade e acabamento discreto.",
+    };
+  }
+
+  if (normalizado.includes("austr")) {
+    return {
+      indicado: "Para quem quer equilíbrio entre naturalidade nas áreas visíveis e fixação mais segura.",
+      recebe: "Peça com renda onde aparece e película onde a fixação precisa de mais firmeza.",
+      qualidade: "Combinação de materiais para sustentar rotina, acabamento e segurança.",
+    };
+  }
+
+  return {
+    indicado: "Para quem quer naturalidade, praticidade e uma base equilibrada para o dia a dia.",
+    recebe: "Peça na cor escolhida, enviada com teste de qualidade antes de sair.",
+    qualidade: `Base micropele${espessura ? ` de ${espessura}` : ""}, com foco em frente discreta e acabamento limpo.`,
+  };
+}
+
 // Ilha de interatividade da página de produto — a página em si (page.tsx) é
 // server component (busca no Supabase); aqui só vive o estado de UI
 // (cor/quantidade/imagem selecionada), mesmo padrão do ProductForm do admin.
@@ -353,6 +396,7 @@ export function ProdutoInterativo({
     : null;
 
   const tituloComercial = nomeComercial(name);
+  const beneficios = beneficiosDoProduto(name, baseThicknessMm);
   const rotuloBotao =
     varianteExibicao && varianteExibicao.stockQty <= 0
       ? "Fora de estoque"
@@ -652,6 +696,25 @@ export function ProdutoInterativo({
           </Reveal>
         </div>
       </div>
+
+      <section aria-labelledby="valor-produto-titulo" className="grid gap-4 border-t border-sand pt-8 sm:grid-cols-3">
+        <div className="sm:col-span-3">
+          <span className="eyebrow-ink">Detalhes da peça</span>
+          <h2 id="valor-produto-titulo" className="mt-1 font-display text-2xl text-ink">
+            Pensada para comprar com segurança.
+          </h2>
+        </div>
+        {[
+          ["Para quem é indicada", beneficios.indicado],
+          ["O que você recebe", beneficios.recebe],
+          ["Qualidade Reverá", beneficios.qualidade],
+        ].map(([titulo, texto]) => (
+          <article key={titulo} className="rounded-xl border border-sand bg-paper p-4">
+            <h3 className="font-display text-lg text-ink">{titulo}</h3>
+            <p className="mt-2 text-sm leading-5 text-ink/70">{texto}</p>
+          </article>
+        ))}
+      </section>
 
       {/* OUTRAS TEXTURAS — cacheado, crespo e afro são produtos próprios, com
           preço próprio, e até 29/08/2026 não eram linkados de lugar nenhum.

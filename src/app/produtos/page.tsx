@@ -13,6 +13,31 @@ export const metadata: Metadata = {
     "Todas as próteses capilares da Reverá: Micropele 0,08mm e 0,06mm, Cacho Aberto, Cacho Fechado e Afro.",
 };
 
+const ROTULOS_VALOR: Record<string, string> = {
+  "micropele-008": "Mais vendida",
+  "micropele-006": "Mais discreta",
+  "cacho-aberto": "Movimento natural",
+  "cacho-fechado": "Cachos definidos",
+  afro: "Volume e identidade",
+  "full-lace": "Leveza total",
+  australia: "Fixação segura",
+};
+
+const COMPARATIVO_PROTESES = [
+  {
+    titulo: "Naturalidade",
+    texto: "Bases pensadas para frente discreta e acabamento limpo.",
+  },
+  {
+    titulo: "Escolha assistida",
+    texto: "A cartela de cores ajuda a comparar antes de fechar o pedido.",
+  },
+  {
+    titulo: "Conferência",
+    texto: "Cada peça sai com teste de qualidade antes do envio.",
+  },
+];
+
 /**
  * O CATÁLOGO — a página que faltava (29/08/2026).
  *
@@ -123,14 +148,34 @@ export default async function ProdutosPage() {
       className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 pb-20"
       style={{ paddingTop: HEADER_HEIGHT_PX + 48 }}
     >
-      <header className="flex flex-col gap-3">
-        <span className="eyebrow-ink">Nossas peças</span>
-        <h1 className="font-display text-4xl text-ink">Próteses Reverá</h1>
-        <p className="max-w-2xl text-ink/70">
-          Todas feitas sob encomenda, testadas antes do envio e com sete dias
-          úteis de garantia. A cor é escolhida na página de cada peça.
-        </p>
+      <header className="grid gap-6 rounded-2xl border border-sand bg-paper p-6 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] sm:p-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+        <div className="flex flex-col gap-3">
+          <span className="eyebrow-ink">Nossas peças</span>
+          <h1 className="text-balance font-display text-4xl text-ink">Próteses Reverá</h1>
+          <p className="max-w-2xl text-ink/70">
+            Escolha por naturalidade, textura e base. Todas as peças passam
+            por conferência antes do envio; a cor é definida na página de cada
+            modelo.
+          </p>
+        </div>
+        <div className="grid gap-2 text-sm text-ink/70">
+          <div className="rounded-lg bg-sand/70 px-4 py-3">
+            Compra segura, envio para todo o Brasil.
+          </div>
+          <div className="rounded-lg bg-sand/70 px-4 py-3">
+            Atendimento para ajudar na escolha da cor.
+          </div>
+        </div>
       </header>
+
+      <section aria-label="Diferenciais Reverá" className="grid gap-3 sm:grid-cols-3">
+        {COMPARATIVO_PROTESES.map((item) => (
+          <div key={item.titulo} className="rounded-xl border border-sand bg-paper/70 p-4">
+            <h2 className="font-display text-base text-ink">{item.titulo}</h2>
+            <p className="mt-1 text-sm leading-5 text-ink/65">{item.texto}</p>
+          </div>
+        ))}
+      </section>
 
       {proteses.length > 0 ? <CatalogoGuiado produtos={proteses} /> : (
         <p className="text-ink/70">
@@ -154,6 +199,7 @@ export default async function ProdutosPage() {
                   imageAlt={produto.imageAlt}
                   priceCents={produto.priceCents}
                   isFeatured={produto.isFeatured}
+                  badge={ROTULOS_VALOR[produto.slug] ?? null}
                 />
               </li>
             ))}

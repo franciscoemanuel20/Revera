@@ -229,6 +229,34 @@ export default async function HomePage() {
         </Reveal>
       </section>
 
+      <section className="w-full bg-paper px-6 py-16">
+        <div className="mx-auto grid w-full max-w-5xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <Reveal className="flex flex-col gap-3">
+            <span className="eyebrow-ink">Padrão Reverá</span>
+            <h2 className="text-balance font-display text-3xl text-ink">
+              Uma peça discreta começa antes da aplicação.
+            </h2>
+            <p className="text-ink/75">
+              A escolha da base, da cor e da textura define a naturalidade do
+              resultado. Por isso a Reverá apresenta cada modelo com clareza e
+              confere a peça antes do envio.
+            </p>
+          </Reveal>
+          <Reveal delayMs={120} className="grid gap-3 sm:grid-cols-3">
+            {[
+              ["Base", "Espessuras e construções para diferentes níveis de discrição."],
+              ["Cor", "Cartela visual para comparar antes de finalizar a compra."],
+              ["Envio", "Pedido revisado e enviado com orientação clara de garantia."],
+            ].map(([titulo, texto]) => (
+              <div key={titulo} className="rounded-xl border border-sand bg-paper p-4 shadow-[0_1px_0_rgb(255_255_255_/_0.8)]">
+                <h3 className="font-display text-lg text-ink">{titulo}</h3>
+                <p className="mt-2 text-sm leading-5 text-ink/65">{texto}</p>
+              </div>
+            ))}
+          </Reveal>
+        </div>
+      </section>
+
       <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-16 sm:flex-row sm:items-center">
         {t("home.micropele.foto") ? <Reveal className="group relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-sand sm:w-1/2">
           <Image

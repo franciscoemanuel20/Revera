@@ -37,6 +37,16 @@ const ROTULO_TEXTURA: Record<TexturaCatalogo, string> = {
   afro: "Afro",
 };
 
+const ROTULO_VALOR: Record<string, string> = {
+  "micropele-008": "Mais vendida",
+  "micropele-006": "Mais discreta",
+  "cacho-aberto": "Movimento natural",
+  "cacho-fechado": "Cachos definidos",
+  afro: "Volume e identidade",
+  "full-lace": "Leveza total",
+  australia: "Fixação segura",
+};
+
 export function CatalogoGuiado({ produtos }: { produtos: ProdutoGuiado[] }) {
   const [filtro, setFiltro] = useState<Filtro>("todas");
   const [guiaAberto, setGuiaAberto] = useState(false);
@@ -119,7 +129,22 @@ export function CatalogoGuiado({ produtos }: { produtos: ProdutoGuiado[] }) {
 
         {visiveis.length > 0 ? (
           <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {visiveis.map((produto) => <li key={produto.slug}><ProductCard slug={produto.slug} name={produto.titulo} summary={produto.resumo} textureLabel={ROTULO_TEXTURA[produto.textura]} imageUrl={produto.imageUrl} imageAlt={produto.imageAlt} priceCents={produto.priceCents} isFeatured={produto.isFeatured} /></li>)}
+            {visiveis.map((produto) => (
+              <li key={produto.slug}>
+                <ProductCard
+                  slug={produto.slug}
+                  name={produto.titulo}
+                  summary={produto.resumo}
+                  textureLabel={ROTULO_TEXTURA[produto.textura]}
+                  imageUrl={produto.imageUrl}
+                  imageAlt={produto.imageAlt}
+                  priceCents={produto.priceCents}
+                  isFeatured={produto.isFeatured}
+                  badge={ROTULO_VALOR[produto.slug] ?? null}
+                  valueLabel={produto.prioridade === "fixacao" ? "Fixação" : "Acabamento natural"}
+                />
+              </li>
+            ))}
           </ul>
         ) : <p className="rounded-md border border-sand px-4 py-3 text-sm text-ink/70">Ainda não temos uma peça publicada para esta textura.</p>}
       </section>
