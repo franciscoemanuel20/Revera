@@ -627,10 +627,43 @@ export function ProdutoInterativo({
             )}
 
             {colors.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <div className="rounded-lg border border-gold/45 bg-gold/10 px-4 py-3 text-sm text-ink/75">
-                  <span className="font-semibold text-ink">1. Escolha a cor</span> para liberar o botão de compra.
+              <div className="flex flex-col gap-3 rounded-xl border border-gold/45 bg-gold/10 p-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 text-sm text-ink/75">
+                    <p className="font-semibold text-ink">1. Escolha a cor</p>
+                    <p>Depois ajuste a quantidade para liberar a oferta.</p>
+                  </div>
+                  {varianteExibicao && resultadoDesconto ? (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
+                      <div className="min-w-0 sm:text-right">
+                        <p id="quantidade-produto-titulo" className="text-sm font-semibold text-ink">
+                          Quantidade
+                        </p>
+                        <p className="text-sm text-ink/65">
+                          {formatarBRL(resultadoDesconto.unitPriceCents)} por peça
+                        </p>
+                      </div>
+                      <QuantitySelector
+                        value={quantidade}
+                        onChange={setQuantidade}
+                        max={varianteExibicao.stockQty}
+                      />
+                    </div>
+                  ) : null}
                 </div>
+                {economiaAtualCents > 0 ? (
+                  <p className="rounded-md bg-paper/80 px-3 py-2 text-sm font-semibold text-moss">
+                    Oferta aplicada: você economiza {formatarBRL(economiaAtualCents)} neste pedido.
+                  </p>
+                ) : proximoDegrau ? (
+                  <p className="text-sm text-ink/70">
+                    Adicione mais {proximoDegrau.minQty - quantidade} peça(s) para ativar{" "}
+                    <span className="font-semibold text-ink">
+                      {proximoDegrau.label ?? `a oferta de ${proximoDegrau.minQty} peças`}
+                    </span>
+                    .
+                  </p>
+                ) : null}
                 <ColorSelector
                   colors={colors}
                   selectedId={corSelecionadaId}
@@ -638,9 +671,7 @@ export function ProdutoInterativo({
                   onNeedHelp={() => router.push("/cores#ajuda")}
                 />
               </div>
-            ) : null}
-
-            {varianteExibicao && resultadoDesconto ? (
+            ) : varianteExibicao && resultadoDesconto ? (
               <section
                 aria-labelledby="quantidade-produto-titulo"
                 className="rounded-xl border border-gold/45 bg-gold/10 p-4"
