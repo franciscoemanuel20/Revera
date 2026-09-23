@@ -116,3 +116,20 @@ describe("atribuição de campanha", () => {
     expect(mod.lerAtribuicao().utmSource).toBe("google");
   });
 });
+
+describe("fbc para Conversions API", () => {
+  it("reconstrói _fbc a partir do fbclid salvo no pedido", async () => {
+    const { fbcAPartirDeFbclid } = await import("@/lib/tracking/fbc");
+
+    expect(
+      fbcAPartirDeFbclid("IwAR-click-id", "2026-09-20T17:44:23.247Z")
+    ).toBe(`fb.1.${Date.parse("2026-09-20T17:44:23.247Z")}.IwAR-click-id`);
+  });
+
+  it("não inventa fbc quando falta clique ou data válida", async () => {
+    const { fbcAPartirDeFbclid } = await import("@/lib/tracking/fbc");
+
+    expect(fbcAPartirDeFbclid("", "2026-09-20T17:44:23.247Z")).toBeNull();
+    expect(fbcAPartirDeFbclid("IwAR-click-id", "data-invalida")).toBeNull();
+  });
+});

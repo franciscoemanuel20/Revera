@@ -4,6 +4,7 @@ import { baseUrl } from "@/lib/config/urls";
 import { enviarPurchaseMeta } from "./meta-capi";
 import { enviarPurchaseGa4 } from "./ga4";
 import { podeEnviarConversao } from "./permissao";
+import { fbcAPartirDeFbclid } from "./fbc";
 import type { ResultadoEnvio } from "./meta-capi";
 
 type Cliente = ReturnType<typeof createAdminClient>;
@@ -120,7 +121,7 @@ async function despachar(
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, total_cents, shipping_cents, customer_id, address_id, fbp, fbc, ga_client_id, client_ip, user_agent, tracking_consent"
+      "id, order_number, status, total_cents, shipping_cents, customer_id, address_id, fbp, fbc, fbclid, ga_client_id, client_ip, user_agent, tracking_consent, created_at"
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -216,7 +217,12 @@ async function despachar(
             city: endereco?.city ?? null,
             state: endereco?.state ?? null,
             fbp: pedido.fbp,
-            fbc: pedido.fbc,
+            fbc:
+              pedido.fbc ??
+              fbcAPartirDeFbclid(
+                (pedido.fbclid as string | null) ?? null,
+                (pedido.created_at as string | null) ?? null
+              ),
             clientIp: pedido.client_ip,
             userAgent: pedido.user_agent,
           },
