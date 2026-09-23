@@ -73,6 +73,39 @@ export function CatalogoGuiado({ produtos }: { produtos: ProdutoGuiado[] }) {
 
   return (
     <div className="flex flex-col gap-7">
+      <section aria-labelledby="catalogo-titulo" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 id="catalogo-titulo" className="font-display text-2xl text-ink">Compare por textura</h2>
+            <p className="text-sm text-ink/70">Cada peça mostra para quem ela é indicada antes de você abrir os detalhes.</p>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label="Filtrar produtos por textura">
+            {FILTROS.map((opcao) => <Button key={opcao.id} type="button" size="sm" variant={filtro === opcao.id ? "secondary" : "ghost"} onClick={() => setFiltro(opcao.id)}>{opcao.rotulo}</Button>)}
+          </div>
+        </div>
+
+        {visiveis.length > 0 ? (
+          <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {visiveis.map((produto) => (
+              <li key={produto.slug}>
+                <ProductCard
+                  slug={produto.slug}
+                  name={produto.titulo}
+                  summary={produto.resumo}
+                  textureLabel={ROTULO_TEXTURA[produto.textura]}
+                  imageUrl={produto.imageUrl}
+                  imageAlt={produto.imageAlt}
+                  priceCents={produto.priceCents}
+                  isFeatured={produto.isFeatured}
+                  badge={ROTULO_VALOR[produto.slug] ?? null}
+                  valueLabel={produto.prioridade === "fixacao" ? "Fixação" : "Acabamento natural"}
+                />
+              </li>
+            ))}
+          </ul>
+        ) : <p className="rounded-md border border-sand px-4 py-3 text-sm text-ink/70">Ainda não temos uma peça publicada para esta textura.</p>}
+      </section>
+
       <section className="rounded-lg border border-sand bg-sand/30 p-5 sm:p-6" aria-labelledby="guia-titulo">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -114,39 +147,6 @@ export function CatalogoGuiado({ produtos }: { produtos: ProdutoGuiado[] }) {
             </Pergunta>
           </div>
         ) : null}
-      </section>
-
-      <section aria-labelledby="catalogo-titulo" className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 id="catalogo-titulo" className="font-display text-2xl text-ink">Compare por textura</h2>
-            <p className="text-sm text-ink/70">Cada peça mostra para quem ela é indicada antes de você abrir os detalhes.</p>
-          </div>
-          <div className="flex flex-wrap gap-2" aria-label="Filtrar produtos por textura">
-            {FILTROS.map((opcao) => <Button key={opcao.id} type="button" size="sm" variant={filtro === opcao.id ? "secondary" : "ghost"} onClick={() => setFiltro(opcao.id)}>{opcao.rotulo}</Button>)}
-          </div>
-        </div>
-
-        {visiveis.length > 0 ? (
-          <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {visiveis.map((produto) => (
-              <li key={produto.slug}>
-                <ProductCard
-                  slug={produto.slug}
-                  name={produto.titulo}
-                  summary={produto.resumo}
-                  textureLabel={ROTULO_TEXTURA[produto.textura]}
-                  imageUrl={produto.imageUrl}
-                  imageAlt={produto.imageAlt}
-                  priceCents={produto.priceCents}
-                  isFeatured={produto.isFeatured}
-                  badge={ROTULO_VALOR[produto.slug] ?? null}
-                  valueLabel={produto.prioridade === "fixacao" ? "Fixação" : "Acabamento natural"}
-                />
-              </li>
-            ))}
-          </ul>
-        ) : <p className="rounded-md border border-sand px-4 py-3 text-sm text-ink/70">Ainda não temos uma peça publicada para esta textura.</p>}
       </section>
     </div>
   );
