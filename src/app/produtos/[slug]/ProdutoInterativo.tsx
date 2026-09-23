@@ -15,6 +15,7 @@ import { TrustBar, type TrustBarItem } from "@/components/ui/TrustBar";
 import { medirAdicionarAoCarrinho, medirVerProduto } from "@/lib/tracking/browser";
 import { useCart } from "@/components/cart/CartProvider";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+import { formatarBRL } from "@/lib/format/money";
 import { applyQuantityDiscount, type QuantityDiscountRule } from "@/lib/pricing/discount";
 
 interface VariantData {
@@ -400,6 +401,15 @@ export function ProdutoInterativo({
   const resultadoDesconto = varianteExibicao
     ? applyQuantityDiscount(varianteExibicao.priceCents, quantidade, discountRules)
     : null;
+  const proximoDegrau = varianteExibicao
+    ? discountRules
+        .filter((regra) => regra.isActive && regra.minQty > quantidade)
+        .sort((a, b) => a.minQty - b.minQty)[0] ?? null
+    : null;
+  const economiaAtualCents =
+    varianteExibicao && resultadoDesconto
+      ? (varianteExibicao.priceCents - resultadoDesconto.unitPriceCents) * quantidade
+      : 0;
 
   const tituloComercial = nomeComercial(name);
   const beneficios = beneficiosDoProduto(name, baseThicknessMm);
@@ -630,11 +640,41 @@ export function ProdutoInterativo({
               </div>
             ) : null}
 
-            <QuantitySelector
-              value={quantidade}
-              onChange={setQuantidade}
-              max={varianteExibicao?.stockQty}
-            />
+            {varianteExibicao && resultadoDesconto ? (
+              <section
+                aria-labelledby="quantidade-produto-titulo"
+                className="rounded-xl border border-gold/45 bg-gold/10 p-4"
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p id="quantidade-produto-titulo" className="text-sm font-semibold text-ink">
+                      Quantidade
+                    </p>
+                    <p className="mt-1 text-sm text-ink/65">
+                      {formatarBRL(resultadoDesconto.unitPriceCents)} por peça
+                    </p>
+                  </div>
+                  <QuantitySelector
+                    value={quantidade}
+                    onChange={setQuantidade}
+                    max={varianteExibicao.stockQty}
+                  />
+                </div>
+                {economiaAtualCents > 0 ? (
+                  <p className="mt-3 rounded-md bg-paper/80 px-3 py-2 text-sm font-semibold text-moss">
+                    Oferta aplicada: você economiza {formatarBRL(economiaAtualCents)} neste pedido.
+                  </p>
+                ) : proximoDegrau ? (
+                  <p className="mt-3 text-sm text-ink/70">
+                    Adicione mais {proximoDegrau.minQty - quantidade} peça(s) para ativar{" "}
+                    <span className="font-semibold text-ink">
+                      {proximoDegrau.label ?? `a oferta de ${proximoDegrau.minQty} peças`}
+                    </span>
+                    .
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
 
             {/* Degraus de desconto — só renderiza se existir regra
                 cadastrada de verdade (discountRules vem do banco, ver
