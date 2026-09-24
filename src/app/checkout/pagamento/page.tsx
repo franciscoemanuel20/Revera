@@ -112,7 +112,9 @@ export default async function PagamentoPage({
     // Revalida antes de criar OU reaproveitar uma sessão: um pedido antigo
     // não contorna país fechado, cotação vencida ou catálogo incompleto.
     if (!(await pedidoInternacionalPagavel(endereco?.country ?? "", pedido.currency, pedido.intl_shipping_quote_id, pedido.shipping_cents))) {
-      return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
+      return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+        motivo: "internacional_indisponivel",
+      });
     }
     idiomaPagamento = idiomaDoPais(endereco!.country);
   }
@@ -170,7 +172,11 @@ export default async function PagamentoPage({
   const urlGuardada = (pagamentoExistente?.raw_response as { checkout_url?: string } | null)
     ?.checkout_url;
   if (urlGuardada) {
-    if (!linkPermitido(urlGuardada)) return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
+    if (!linkPermitido(urlGuardada)) {
+      return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+        motivo: "link_bloqueado",
+      });
+    }
     redirect(urlGuardada);
   }
 
@@ -192,7 +198,11 @@ export default async function PagamentoPage({
     const urlRecuperada = dadosRecuperados?.checkout_url;
 
     if (urlRecuperada) {
-      if (!linkPermitido(urlRecuperada)) return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
+      if (!linkPermitido(urlRecuperada)) {
+        return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+          motivo: "link_bloqueado",
+        });
+      }
       const { error: erroRestaurar } = await supabase
         .from("payments")
         .update({
@@ -251,7 +261,9 @@ export default async function PagamentoPage({
      */
     const idadeMs = Date.now() - new Date(pagamentoExistente.created_at as string).getTime();
     const estagnada = idadeMs > IDADE_PARA_SUGERIR_CONTATO_MS;
-    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true, estagnada);
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+      motivo: estagnada ? "reserva_travada" : "em_preparacao",
+    });
   }
 
   // A escolha do provider também pode falhar (por exemplo, se uma variável
@@ -267,7 +279,9 @@ export default async function PagamentoPage({
         : getReveraProviderForCurrency(pedido.currency as string);
   } catch (erro) {
     console.error("[pagamento] pagamento não configurado", erro);
-    return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+      motivo: "metodo_indisponivel",
+    });
   }
 
   /**
@@ -346,7 +360,9 @@ export default async function PagamentoPage({
     // URL pode ser uma criação ainda em curso ou uma resposta do gateway que
     // chegou quando o banco estava indisponível. Nos dois casos criar outro
     // link pode cobrar duas vezes; preservar a reserva é a opção segura.
-    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, true);
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+      motivo: "em_preparacao",
+    });
   }
 
   const itensDoPagamento = montarItensDoPagamento({
@@ -564,13 +580,19 @@ export default async function PagamentoPage({
     // mesmo aviso de "estamos preparando" da reserva preservada — é
     // exatamente o que aconteceu: preservamos por segurança, não por já
     // termos o link.
-    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, cobrancaCriada || ambiguo);
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+      motivo: cobrancaCriada || ambiguo ? "em_preparacao" : "erro_tecnico",
+    });
   }
 
   // Fora do try: `redirect` funciona lançando uma exceção especial do Next,
   // que um catch por perto engoliria — e o cliente veria a tela de erro
   // depois de a cobrança ter sido criada com sucesso.
-  if (!linkPermitido(checkoutUrl)) return telaDePagamentoIndisponivel(pedido.order_number, accessToken);
+  if (!linkPermitido(checkoutUrl)) {
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+      motivo: "link_bloqueado",
+    });
+  }
   redirect(checkoutUrl);
 }
 
@@ -635,42 +657,101 @@ async function recriarReservaOuUsarVencedor(
   // Nem o vencedor guardou a URL dentro do prazo de espera. Não redireciona
   // para NENHUM link nosso (órfão) nem inventa um — mostra a tela segura, a
   // mesma de quando perdemos a corrida original.
-  return { ok: false, tela: telaDePagamentoIndisponivel(pedido.order_number, accessToken, true) };
+  return {
+    ok: false,
+    tela: telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+      motivo: "em_preparacao",
+    }),
+  };
 }
+
+type MotivoPagamentoIndisponivel =
+  | "erro_tecnico"
+  | "em_preparacao"
+  | "reserva_travada"
+  | "metodo_indisponivel"
+  | "internacional_indisponivel"
+  | "link_bloqueado";
 
 function telaDePagamentoIndisponivel(
   numeroPedido: string,
   accessToken: string,
-  cobrancaEmAnalise = false,
-  estagnada = false
+  opcoes: { motivo?: MotivoPagamentoIndisponivel } = {}
 ) {
+  const motivo = opcoes.motivo ?? "erro_tecnico";
+  const aguardando = motivo === "em_preparacao";
+  const precisaSuporte = motivo === "reserva_travada" || motivo === "metodo_indisponivel";
+  const conteudo: Record<MotivoPagamentoIndisponivel, { titulo: string; texto: string; detalhe: string }> = {
+    erro_tecnico: {
+      titulo: "Não conseguimos abrir o pagamento",
+      texto:
+        "Seu pedido está guardado com o número acima e nada foi cobrado. Tente novamente em instantes.",
+      detalhe: "Se o erro continuar, use o link do pedido para falar com a equipe sem criar outro pedido.",
+    },
+    em_preparacao: {
+      titulo: "Estamos preparando seu pagamento",
+      texto:
+        "Seu pedido está guardado. Aguarde um instante; para sua segurança, não criamos uma segunda cobrança.",
+      detalhe: "A página tenta novamente sozinha por alguns segundos. Você também pode tentar manualmente.",
+    },
+    reserva_travada: {
+      titulo: "Pagamento em análise pela equipe",
+      texto:
+        "Seu pedido está guardado, mas esta tentativa demorou mais que o esperado. Para sua segurança, não abrimos outra cobrança automaticamente.",
+      detalhe: "Fale com a equipe informando o número do pedido para liberarmos o pagamento com segurança.",
+    },
+    metodo_indisponivel: {
+      titulo: "Método de pagamento indisponível",
+      texto:
+        "Seu pedido está guardado e nada foi cobrado. O método de pagamento não está disponível neste momento.",
+      detalhe: "Tente novamente em instantes ou fale com a equipe pelo link do pedido.",
+    },
+    internacional_indisponivel: {
+      titulo: "Pagamento internacional indisponível",
+      texto:
+        "Seu pedido está guardado, mas ainda não conseguimos abrir pagamento para este destino com segurança.",
+      detalhe: "Preço, frete e país precisam estar ativos antes de cobrar um pedido internacional.",
+    },
+    link_bloqueado: {
+      titulo: "Link de pagamento bloqueado",
+      texto:
+        "Seu pedido está guardado e nada foi cobrado. O link retornado pelo gateway não passou pela validação de segurança.",
+      detalhe: "Tente novamente em instantes ou fale com a equipe pelo link do pedido.",
+    },
+  };
+  const estado = conteudo[motivo];
+
   return (
     <main
-      className="mx-auto flex w-full max-w-lg flex-col items-center gap-4 px-6 pb-16 text-center"
+      className="mx-auto flex w-full max-w-lg flex-col items-center gap-5 px-6 pb-16 text-center"
       style={{ paddingTop: HEADER_HEIGHT_PX + 64 }}
     >
       <span className="eyebrow-ink">Pedido {numeroPedido}</span>
-      <h1 className="font-display text-3xl text-ink">
-        {cobrancaEmAnalise ? "Estamos preparando seu pagamento" : "Não conseguimos abrir o pagamento"}
-      </h1>
-      <p className="text-ink/70">
-        {estagnada
-          ? // Passou da janela em que "tentar de novo" tem chance real de
-            // resolver sozinho (ver IDADE_PARA_SUGERIR_CONTATO_MS) — dizer só
-            // "aguarde" aqui seria falsa esperança. A liberação de verdade
-            // depende de alguém da equipe conferir no painel do gateway.
-            "Seu pedido está guardado com o número acima. Isto está demorando mais que o esperado — fale com o suporte informando o número do pedido para liberarmos o pagamento."
-          : cobrancaEmAnalise
-            ? "Seu pedido está guardado. Aguarde um instante e tente novamente; para sua segurança, não criamos uma segunda cobrança."
-            : "Seu pedido está guardado com o número acima e nada foi cobrado. Tente novamente em instantes — se continuar, guarde este número."}
+      <h1 className="font-display text-3xl text-ink">{estado.titulo}</h1>
+      <p className="text-ink/70">{estado.texto}</p>
+      <p className="rounded-lg border border-sand bg-paper/70 px-4 py-3 text-sm text-ink/65">
+        {estado.detalhe}
       </p>
-      <AutoRetryPagamento ativo={cobrancaEmAnalise && !estagnada} />
-      <a
-        href={`/checkout/pagamento?pedido=${accessToken}`}
-        className="text-ink underline decoration-gold decoration-2 underline-offset-4"
-      >
-        Tentar novamente
-      </a>
+      <AutoRetryPagamento ativo={aguardando} />
+      <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
+        <a
+          href={`/checkout/pagamento?pedido=${accessToken}`}
+          className="inline-flex min-h-toque items-center justify-center rounded-xl bg-gold-metal px-5 py-3 font-semibold text-ink shadow-[0_8px_20px_-10px_rgb(var(--gold-rgb)_/_0.9)] transition-all duration-300 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-glow-gold"
+        >
+          Tentar novamente
+        </a>
+        <a
+          href={`/pedido/${accessToken}`}
+          className="inline-flex min-h-toque items-center justify-center rounded-xl border border-ink/25 bg-paper/40 px-5 py-3 font-semibold text-ink shadow-[inset_0_1px_0_rgb(255_255_255_/_0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:border-gold-deep hover:bg-paper hover:shadow-soft"
+        >
+          Ver meu pedido
+        </a>
+      </div>
+      {precisaSuporte ? (
+        <p className="text-sm text-ink/60">
+          No link do pedido, use o atendimento com o número do pedido já identificado.
+        </p>
+      ) : null}
     </main>
   );
 }
