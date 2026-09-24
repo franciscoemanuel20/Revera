@@ -31,7 +31,7 @@ export const JANELA_HORAS_PADRAO = 48;
 export const HORA_INICIO_PADRAO = 9;
 export const HORA_FIM_PADRAO = 20;
 
-export const MAX_POR_RODADA_PADRAO = 3;
+export const MAX_POR_RODADA_PADRAO = 1;
 export const MAX_POR_DIA_PADRAO = 20;
 
 function inteiro(bruto: string | undefined, padrao: number): number {

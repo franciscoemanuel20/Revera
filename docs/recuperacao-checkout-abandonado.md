@@ -1,6 +1,6 @@
 # Recuperação de checkout abandonado
 
-O cron existente (`/api/cron/carrinho-abandonado`, a cada 15 minutos) agora
+O cron existente (`/api/cron/carrinho-abandonado`, a cada 20 minutos) agora
 recupera somente pedidos nacionais que ainda estejam com `payment_status =
 'pending'` e sem cancelamento.
 
@@ -40,6 +40,6 @@ Os padrões são `CARRINHO_ESPERA_MINUTOS=20` e
 `CARRINHO_SEGUNDO_LEMBRETE_HORAS=24`. Os demais tetos e o horário comercial
 continuam configuráveis pelas variáveis já existentes.
 
-O `vercel.json` já agenda a rota a cada 15 minutos. Esse intervalo exige um
+O `vercel.json` já agenda a rota a cada 20 minutos. Esse intervalo exige um
 plano Vercel que suporte crons subdiários; no Hobby, a Vercel limita crons a
 uma execução diária e não atende ao objetivo de 20 minutos.

@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Cron do carrinho abandonado. A Vercel chama de 15 em 15 minutos
+ * Cron do carrinho abandonado. A Vercel chama de 20 em 20 minutos
  * (`vercel.json`) mandando `Authorization: Bearer $CRON_SECRET`.
  *
  * ===========================================================================

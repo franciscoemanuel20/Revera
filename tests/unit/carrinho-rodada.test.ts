@@ -151,9 +151,9 @@ describe("rodada com a Clint recusando tudo", () => {
 
     expect(r.executou).toBe(true);
     expect(r.enviados).toBe(0);
-    // O que importa: 3 reservas (o teto), não 10 nem 20.
-    expect(reservas).toBe(3);
-    expect(r.pulados.envio_recusado).toBe(3);
+    // O que importa: 1 reserva (o teto), não 10 nem 20.
+    expect(reservas).toBe(1);
+    expect(r.pulados.envio_recusado).toBe(1);
   });
 
   /**
@@ -226,6 +226,7 @@ describe("rodada com a Clint recusando tudo", () => {
    * paga três vezes, possivelmente na mesma rodada.
    */
   it("três tentativas da mesma pessoa viram UM toque só", async () => {
+    process.env.CARRINHO_MAX_POR_RODADA = "3";
     pedidos = Array.from({ length: 3 }, (_, i) => ({
       id: `tentativa-${i}`,
       access_token: `token-tentativa-${i}`,

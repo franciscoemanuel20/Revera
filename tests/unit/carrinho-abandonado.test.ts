@@ -104,7 +104,7 @@ describe("limites do ambiente", () => {
       janelaHoras: 48,
       horaInicio: 9,
       horaFim: 20,
-      maxPorRodada: 3,
+      maxPorRodada: 1,
       maxPorDia: 20,
     });
   });
