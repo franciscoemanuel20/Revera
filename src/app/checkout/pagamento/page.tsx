@@ -13,6 +13,7 @@ import { pedidoInternacionalPagavel } from "@/lib/internacional/mercado";
 import { urlCheckoutStripeSegura } from "@/lib/payments/stripe-provider";
 import { montarItensDoPagamento } from "@/lib/payments/itens";
 import { AutoRetryPagamento } from "./AutoRetryPagamento";
+import { CopiarNumeroPedido } from "./CopiarNumeroPedido";
 
 /**
  * Quanto tempo uma reserva `pending` sem URL em lugar nenhum (nem
@@ -693,42 +694,57 @@ function telaDePagamentoIndisponivel(
     motivo === "metodo_indisponivel" ||
     motivo === "link_bloqueado" ||
     motivo === "internacional_indisponivel";
-  const conteudo: Record<MotivoPagamentoIndisponivel, { titulo: string; texto: string; detalhe: string }> = {
+  const conteudo: Record<
+    MotivoPagamentoIndisponivel,
+    { titulo: string; texto: string; detalhe: string; suporte: string }
+  > = {
     erro_tecnico: {
       titulo: "Não conseguimos abrir o pagamento",
       texto:
-        "Seu pedido está guardado com o número acima e nada foi cobrado. Tente novamente em instantes.",
-      detalhe: "Se o erro continuar, use o link do pedido para falar com a equipe sem criar outro pedido.",
+        "Seu pedido está salvo e nada foi cobrado. Tente abrir o pagamento novamente em instantes.",
+      detalhe:
+        "Se continuar acontecendo, veja seu pedido para acompanhar a compra ou falar com a equipe sem criar outro pedido.",
+      suporte: "Falha técnica antes de abrir o checkout.",
     },
     em_preparacao: {
       titulo: "Estamos preparando seu pagamento",
       texto:
-        "Seu pedido está guardado. Aguarde um instante; para sua segurança, não criamos uma segunda cobrança.",
-      detalhe: "A página tenta novamente sozinha por alguns segundos. Você também pode tentar manualmente.",
+        "Seu pedido está salvo. Aguarde um instante; para sua segurança, não abrimos uma segunda cobrança.",
+      detalhe:
+        "A página tenta novamente sozinha por alguns segundos. Você também pode tentar de novo manualmente.",
+      suporte: "Existe reserva pendente sem URL pronta ou uma criação ainda em andamento.",
     },
     reserva_travada: {
       titulo: "Pagamento em análise pela equipe",
       texto:
-        "Seu pedido está guardado, mas esta tentativa demorou mais que o esperado. Para sua segurança, não abrimos outra cobrança automaticamente.",
-      detalhe: "Fale com a equipe informando o número do pedido para liberarmos o pagamento com segurança.",
+        "Seu pedido está salvo, mas esta tentativa demorou mais que o esperado. Não abrimos outra cobrança automaticamente para evitar pagamento duplicado.",
+      detalhe:
+        "Copie o número do pedido ou veja seu pedido para falar com a equipe. A equipe confere a cobrança pendente antes de liberar nova tentativa.",
+      suporte: "Reserva pendente sem URL passou do tempo de espera.",
     },
     metodo_indisponivel: {
       titulo: "Método de pagamento indisponível",
       texto:
-        "Seu pedido está guardado e nada foi cobrado. O método de pagamento não está disponível neste momento.",
-      detalhe: "Tente novamente em instantes ou fale com a equipe pelo link do pedido.",
+        "Seu pedido está salvo e nada foi cobrado. O método de pagamento não está disponível neste momento.",
+      detalhe:
+        "Tente novamente em instantes. Se continuar, veja seu pedido para falar com a equipe.",
+      suporte: "Provider de pagamento indisponível ou configuração ausente.",
     },
     internacional_indisponivel: {
       titulo: "Pagamento internacional indisponível",
       texto:
-        "Seu pedido está guardado, mas ainda não conseguimos abrir pagamento para este destino com segurança.",
-      detalhe: "Preço, frete e país precisam estar ativos antes de cobrar um pedido internacional.",
+        "Seu pedido está salvo, mas ainda não conseguimos abrir pagamento para este destino com segurança.",
+      detalhe:
+        "Preço, frete e país precisam estar ativos antes de cobrar um pedido internacional. Veja seu pedido para falar com a equipe.",
+      suporte: "Pedido internacional sem condição pagável no momento.",
     },
     link_bloqueado: {
       titulo: "Link de pagamento bloqueado",
       texto:
-        "Seu pedido está guardado e nada foi cobrado. O link retornado pelo gateway não passou pela validação de segurança.",
-      detalhe: "Tente novamente em instantes ou fale com a equipe pelo link do pedido.",
+        "Seu pedido está salvo e nada foi cobrado. O link retornado pelo pagamento não passou pela validação de segurança.",
+      detalhe:
+        "Tente novamente em instantes. Se continuar, veja seu pedido para falar com a equipe.",
+      suporte: "URL retornada pelo gateway não passou no allowlist.",
     },
   };
   const estado = conteudo[motivo];
@@ -760,7 +776,7 @@ function telaDePagamentoIndisponivel(
           href={`/checkout/pagamento?pedido=${accessToken}`}
           className="inline-flex min-h-toque items-center justify-center rounded-xl bg-gold-metal px-5 py-3 font-semibold text-ink shadow-[0_8px_20px_-10px_rgb(var(--gold-rgb)_/_0.9)] transition-all duration-300 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-glow-gold"
         >
-          Tentar novamente
+          Tentar pagamento novamente
         </a>
         <a
           href={`/pedido/${accessToken}`}
@@ -768,16 +784,25 @@ function telaDePagamentoIndisponivel(
         >
           Ver meu pedido
         </a>
+        <CopiarNumeroPedido numeroPedido={numeroPedido} />
       </div>
       {precisaSuporte ? (
         <p className="text-sm text-ink/60">
-          Diagnóstico do pedido: {motivo}. Abra “Ver meu pedido” e use o atendimento de lá; a equipe confere a cobrança pendente antes de liberar qualquer nova tentativa.
+          Se precisar falar com a equipe, envie o número do pedido. Antes de liberar uma nova tentativa, a equipe confere se já existe cobrança pendente.
         </p>
       ) : (
         <p className="text-sm text-ink/60">
-          Diagnóstico do pedido: {motivo}. Se continuar, abra “Ver meu pedido” para acompanhar a recuperação.
+          Se continuar, abra “Ver meu pedido” para acompanhar a recuperação sem criar outra compra.
         </p>
       )}
+      <details className="w-full rounded-lg border border-ink/10 bg-white/45 px-4 py-3 text-left text-sm text-ink/60">
+        <summary className="cursor-pointer font-semibold text-ink/70">
+          Informação para suporte
+        </summary>
+        <p className="mt-2">
+          Pedido {numeroPedido}. Diagnóstico: {motivo}. {estado.suporte}
+        </p>
+      </details>
     </main>
   );
 }

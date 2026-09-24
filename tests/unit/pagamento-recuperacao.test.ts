@@ -17,10 +17,11 @@ describe("checkout pagamento - recuperacao", () => {
   });
 
   it("mantem tentativa segura sem criar segundo link", () => {
-    expect(fonteAscii).toContain("nao criamos uma segunda cobranca");
+    expect(fonteAscii).toContain("nao abrimos uma segunda cobranca");
     expect(fonte).toContain("<AutoRetryPagamento ativo={aguardando} />");
-    expect(fonte).toContain("Tentar novamente");
+    expect(fonte).toContain("Tentar pagamento novamente");
     expect(fonte).toContain("Ver meu pedido");
+    expect(fonte).toContain("<CopiarNumeroPedido numeroPedido={numeroPedido} />");
   });
 
   it("orienta suporte somente quando precisa de intervencao", () => {
@@ -28,9 +29,16 @@ describe("checkout pagamento - recuperacao", () => {
     expect(fonte).toContain('motivo === "metodo_indisponivel"');
     expect(fonte).toContain('motivo === "link_bloqueado"');
     expect(fonte).toContain('motivo === "internacional_indisponivel"');
-    expect(fonte).toContain("Diagnóstico do pedido");
+    expect(fonte).toContain("Informação para suporte");
     expect(fonte).toContain("Ver meu pedido");
     expect(fonte).toContain("cobrança pendente");
+  });
+
+  it("mantem texto principal humano e diagnostico tecnico separado", () => {
+    expect(fonte).toContain("Seu pedido está salvo");
+    expect(fonte).toContain("sem criar outra compra");
+    expect(fonte).toContain("Diagnóstico: {motivo}");
+    expect(fonte).not.toContain("Diagnóstico do pedido: {motivo}");
   });
 
   it("explica as opcoes rapidas esperadas no checkout hospedado", () => {
