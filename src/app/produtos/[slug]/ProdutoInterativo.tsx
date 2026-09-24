@@ -179,12 +179,13 @@ function beneficiosDoProduto(nome: string, baseThicknessMm: number | null) {
 // server component (busca no Supabase); aqui só vive o estado de UI
 // (cor/quantidade/imagem selecionada), mesmo padrão do ProductForm do admin.
 //
-// Variante x cor: hoje (25/08/2026) a Micropele tem uma única variante
-// "genérica" (color_id null, ver seeds/products.json) — nenhuma cor tem
-// preço próprio ainda. Por isso a busca abaixo é por color_id quando
-// existir variante específica daquela cor, e cai para a variante sem cor
-// (genérica) caso contrário: a UI já suporta o dia em que existirem
-// variantes por cor, sem precisar reescrever nada.
+// Variante x cor: produtos com cartela de cores precisam de variantes com
+// `color_id` para que o carrinho, o pedido e a operação saibam qual cor foi
+// comprada. A variante genérica (`color_id null`) continua válida para produto
+// sem cartela ou para o botão principal enquanto não há cor a escolher; o
+// atalho rápido por cor NÃO pode cair nela, porque `cart_items` guarda
+// `variant_id`, não uma coluna separada de cor. A própria page.tsx filtra a
+// cartela para `coresDesteProduto` usando apenas variantes com `colorId`.
 export function ProdutoInterativo({
   name,
   description,
@@ -198,7 +199,7 @@ export function ProdutoInterativo({
   trustItems,
 }: ProdutoInterativoProps) {
   const router = useRouter();
-  const { adicionarItem, abrirDrawer, pendente } = useCart();
+  const { cart, adicionarItem, alterarQuantidade, removerItem, abrirDrawer, pendente } = useCart();
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
   const [adicionando, setAdicionando] = useState(false);
   const [corAdicionandoId, setCorAdicionandoId] = useState<string | null>(null);
@@ -226,6 +227,8 @@ export function ProdutoInterativo({
   }, [variants]);
 
   const varianteGenerica = variants.find((v) => v.colorId == null) ?? null;
+  const variantePorId = useMemo(() => new Map(variants.map((v) => [v.id, v])), [variants]);
+  const varianteIdsDoProduto = useMemo(() => new Set(variants.map((v) => v.id)), [variants]);
 
   /**
    * NADA pré-selecionado (29/08/2026).
@@ -359,21 +362,59 @@ export function ProdutoInterativo({
    * nada porque a mensagem já era a mesma.
    */
   const [confirmacao, setConfirmacao] = useState<{ texto: string; chave: number } | null>(null);
+  const [corAtualizandoId, setCorAtualizandoId] = useState<string | null>(null);
 
   const varianteSelecionada =
     (corSelecionadaId ? variantePorCor.get(corSelecionadaId) : undefined) ??
     varianteGenerica;
-  const varianteParaCor = useCallback(
-    (corId: string) => variantePorCor.get(corId) ?? varianteGenerica,
-    [variantePorCor, varianteGenerica]
-  );
-
   /**
    * A variante usada só para MOSTRAR preço e degraus antes de a cor ser
    * escolhida. Não é a que vai para o carrinho — quem decide isso é
    * `podeComprar` logo abaixo.
    */
   const varianteExibicao = varianteSelecionada ?? variants[0] ?? null;
+  const itensDesteProduto = useMemo(
+    () => cart.items.filter((item) => varianteIdsDoProduto.has(item.variantId)),
+    [cart.items, varianteIdsDoProduto]
+  );
+  const resumoPorCor = useMemo(() => {
+    const mapa = new Map<
+      string,
+      { colorName: string; quantity: number; cartItemId: string }
+    >();
+
+    for (const item of itensDesteProduto) {
+      const variante = variantePorId.get(item.variantId);
+      if (!variante?.colorId) continue;
+      const cor = colors.find((c) => c.id === variante.colorId);
+      const existente = mapa.get(variante.colorId);
+      mapa.set(variante.colorId, {
+        colorName: cor?.name ?? item.variantLabel?.replace(/^Cor\s+/i, "") ?? "Cor",
+        quantity: (existente?.quantity ?? 0) + item.quantity,
+        cartItemId: item.cartItemId,
+      });
+    }
+
+    return mapa;
+  }, [colors, itensDesteProduto, variantePorId]);
+  const quantidadesPorCor = useMemo(() => {
+    const quantidades: Record<string, number> = {};
+    for (const [corId, item] of resumoPorCor) {
+      quantidades[corId] = item.quantity;
+    }
+    return quantidades;
+  }, [resumoPorCor]);
+  const totalProdutoNaSacola = itensDesteProduto.reduce((total, item) => total + item.quantity, 0);
+  const subtotalProdutoNaSacolaCents = itensDesteProduto.reduce((total, item) => total + item.subtotalCents, 0);
+  const descontoProdutoNaSacolaCents = itensDesteProduto.reduce((total, item) => total + item.discountCents, 0);
+  const regrasAtivasOrdenadas = useMemo(
+    () => discountRules.filter((regra) => regra.isActive).sort((a, b) => a.minQty - b.minQty),
+    [discountRules]
+  );
+  const proximoDegrauSacola =
+    regrasAtivasOrdenadas.find((regra) => regra.minQty > totalProdutoNaSacola) ?? null;
+  const regraAtualSacola =
+    [...regrasAtivasOrdenadas].reverse().find((regra) => regra.minQty <= totalProdutoNaSacola) ?? null;
 
   /** Produto com cartela exige cor explícita; produto sem cartela, não. */
   const faltaEscolherCor = colors.length > 0 && !corSelecionadaId;
@@ -465,12 +506,14 @@ export function ProdutoInterativo({
   }
 
   async function adicionarCorRapida(corId: string) {
-    if (corAdicionandoId) return;
+    if (corAdicionandoId || corAtualizandoId) return;
     setMensagemErro(null);
-    const variante = varianteParaCor(corId);
+    // Sem fallback para `varianteGenerica`: o atalho promete uma cor específica,
+    // e o carrinho só consegue preservar essa cor quando ela está no variantId.
+    const variante = variantePorCor.get(corId);
     const cor = colors.find((c) => c.id === corId);
     if (!variante) {
-      setMensagemErro("Esta cor não está disponível para compra.");
+      setMensagemErro("Esta cor precisa de uma variante própria para entrar no pedido por cor.");
       return;
     }
     setCorAdicionandoId(corId);
@@ -495,6 +538,36 @@ export function ProdutoInterativo({
       });
     } finally {
       setCorAdicionandoId(null);
+    }
+  }
+
+  async function removerCorRapida(corId: string) {
+    if (corAdicionandoId || corAtualizandoId) return;
+    const item = resumoPorCor.get(corId);
+    const cor = colors.find((c) => c.id === corId);
+    if (!item) return;
+
+    setMensagemErro(null);
+    setCorAtualizandoId(corId);
+    try {
+      const resultado =
+        item.quantity <= 1
+          ? await removerItem(item.cartItemId)
+          : await alterarQuantidade(item.cartItemId, item.quantity - 1);
+
+      if (resultado.erro) {
+        setMensagemErro(resultado.erro);
+        return;
+      }
+      setCorSelecionadaId(corId);
+      const foto = fotoDaCor(corId);
+      if (foto) setFotoAtivaSrc(foto.src);
+      setConfirmacao({
+        texto: `Cor ${cor?.name ?? ""} atualizada na sacola`.trim(),
+        chave: Date.now(),
+      });
+    } finally {
+      setCorAtualizandoId(null);
     }
   }
 
@@ -669,8 +742,8 @@ export function ProdutoInterativo({
               <div className="flex flex-col gap-3 rounded-xl border border-gold/45 bg-gold/10 p-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0 text-sm text-ink/75">
-                    <p className="font-semibold text-ink">1. Escolha a cor</p>
-                    <p>Depois ajuste a quantidade para liberar a oferta.</p>
+                    <p className="font-semibold text-ink">1. Monte seu pedido por cor</p>
+                    <p>Use + para misturar cores. A oferta soma as peças deste modelo.</p>
                   </div>
                   {varianteExibicao && resultadoDesconto ? (
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
@@ -708,16 +781,99 @@ export function ProdutoInterativo({
                   selectedId={corSelecionadaId}
                   onChange={escolherCor}
                   onQuickAdd={(corId) => void adicionarCorRapida(corId)}
-                  quickAddPendingId={corAdicionandoId}
+                  onQuickRemove={(corId) => void removerCorRapida(corId)}
+                  quickAddQuantities={quantidadesPorCor}
+                  quickAddPendingId={corAdicionandoId ?? corAtualizandoId}
                   quickAddDisabledIds={colors
                     .filter((cor) => {
                       const variante = variantePorCor.get(cor.id);
-                      const varianteFallback = variante ?? varianteGenerica;
-                      return !varianteFallback || varianteFallback.stockQty <= 0 || pendente || adicionando;
+                      const quantidadeNaSacola = quantidadesPorCor[cor.id] ?? 0;
+                      const algumaCorPendente = Boolean(corAdicionandoId || corAtualizandoId);
+                      return (
+                        !variante ||
+                        variante.stockQty <= 0 ||
+                        quantidadeNaSacola >= variante.stockQty ||
+                        pendente ||
+                        adicionando ||
+                        algumaCorPendente
+                      );
                     })
                     .map((cor) => cor.id)}
+                  quickRemoveDisabledIds={
+                    pendente || adicionando || corAdicionandoId || corAtualizandoId
+                      ? colors.map((cor) => cor.id)
+                      : []
+                  }
                   onNeedHelp={() => router.push("/cores#ajuda")}
                 />
+                {totalProdutoNaSacola > 0 ? (
+                  <section
+                    aria-labelledby="resumo-cores-titulo"
+                    className="rounded-lg border border-sand bg-paper/85 p-3"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p id="resumo-cores-titulo" className="text-sm font-semibold text-ink">
+                          Seu pedido neste modelo
+                        </p>
+                        <p className="mt-1 text-sm text-ink/65">
+                          {totalProdutoNaSacola} peça{totalProdutoNaSacola === 1 ? "" : "s"} na sacola
+                          {subtotalProdutoNaSacolaCents > 0
+                            ? ` · ${formatarBRL(subtotalProdutoNaSacolaCents)}`
+                            : ""}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={abrirDrawer}
+                        className="self-start text-sm font-semibold text-ink underline decoration-gold decoration-2 underline-offset-4"
+                      >
+                        Ver sacola
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {Array.from(resumoPorCor.entries()).map(([corId, item]) => (
+                        <span
+                          key={corId}
+                          className="rounded-full border border-gold/45 bg-gold/10 px-3 py-1 text-xs font-semibold text-ink"
+                        >
+                          {item.colorName} x{item.quantity}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-3 rounded-md bg-sand/55 px-3 py-2 text-sm text-ink/75" aria-live="polite">
+                      {regraAtualSacola ? (
+                        <p>
+                          Oferta ativa:{" "}
+                          <span className="font-semibold text-ink">
+                            {regraAtualSacola.label ?? `${regraAtualSacola.minQty}+ peças`}
+                          </span>
+                          {descontoProdutoNaSacolaCents > 0
+                            ? ` · economia de ${formatarBRL(descontoProdutoNaSacolaCents)}`
+                            : ""}
+                        </p>
+                      ) : proximoDegrauSacola ? (
+                        <p>
+                          Faltam{" "}
+                          <span className="font-semibold text-ink">
+                            {proximoDegrauSacola.minQty - totalProdutoNaSacola}
+                          </span>{" "}
+                          peça{proximoDegrauSacola.minQty - totalProdutoNaSacola === 1 ? "" : "s"} para{" "}
+                          <span className="font-semibold text-ink">
+                            {proximoDegrauSacola.label ?? `a oferta de ${proximoDegrauSacola.minQty}`}
+                          </span>
+                          .
+                        </p>
+                      ) : (
+                        <p>Maior oferta deste modelo aplicada na sacola.</p>
+                      )}
+                    </div>
+                  </section>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-sand bg-paper/65 px-3 py-2 text-sm text-ink/65">
+                    Nenhuma cor deste modelo na sacola ainda.
+                  </div>
+                )}
               </div>
             ) : varianteExibicao && resultadoDesconto ? (
               <section

@@ -14,7 +14,10 @@ export interface ColorSelectorProps {
   selectedId: string | null;
   onChange: (id: string) => void;
   onQuickAdd?: (id: string) => void;
+  onQuickRemove?: (id: string) => void;
+  quickAddQuantities?: Record<string, number>;
   quickAddDisabledIds?: string[];
+  quickRemoveDisabledIds?: string[];
   quickAddPendingId?: string | null;
   onNeedHelp?: () => void;
 }
@@ -55,12 +58,16 @@ export function ColorSelector({
   selectedId,
   onChange,
   onQuickAdd,
+  onQuickRemove,
+  quickAddQuantities = {},
   quickAddDisabledIds = [],
+  quickRemoveDisabledIds = [],
   quickAddPendingId,
   onNeedHelp,
 }: ColorSelectorProps) {
   const fileiras = separarEmFileiras(colors);
   const bloqueadas = new Set(quickAddDisabledIds);
+  const remocoesBloqueadas = new Set(quickRemoveDisabledIds);
   return (
     <div className="flex flex-col gap-3">
       {fileiras.map((fileira, i) => (
@@ -69,6 +76,9 @@ export function ColorSelector({
           const selecionado = color.id === selectedId;
           const adicionando = quickAddPendingId === color.id;
           const adicionarBloqueado = bloqueadas.has(color.id) || adicionando;
+          const removerBloqueado = remocoesBloqueadas.has(color.id) || adicionando;
+          const quantidade = quickAddQuantities[color.id] ?? 0;
+          const temQuantidade = quantidade > 0;
           return (
             /**
              * O CÓDIGO DA COR ESCRITO EMBAIXO (29/08/2026).
@@ -80,7 +90,7 @@ export function ColorSelector({
              * cliente e operação falam a mesma língua.
              */
             <span key={color.id} className="flex flex-col items-center gap-1">
-            <span className="flex items-center gap-1">
+            <span className="flex min-h-[44px] items-center gap-1">
               <button
                 type="button"
                 aria-label={`Cor ${color.name}`}
@@ -112,15 +122,41 @@ export function ColorSelector({
                 ) : null}
               </button>
               {onQuickAdd ? (
-                <button
-                  type="button"
-                  aria-label={`Adicionar cor ${color.name} à sacola`}
-                  disabled={adicionarBloqueado}
-                  onClick={() => onQuickAdd(color.id)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-gold/70 bg-gold/15 text-lg font-semibold leading-none text-ink transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-                >
-                  {adicionando ? "…" : "+"}
-                </button>
+                temQuantidade && onQuickRemove ? (
+                  <span className="inline-flex h-8 items-center rounded-full border border-gold/70 bg-paper text-ink shadow-sm">
+                    <button
+                      type="button"
+                      aria-label={`Remover uma unidade da cor ${color.name}`}
+                      disabled={removerBloqueado}
+                      onClick={() => onQuickRemove(color.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-base font-semibold leading-none transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                    >
+                      −
+                    </button>
+                    <span className="min-w-5 text-center text-sm font-semibold tabular-nums" aria-live="polite">
+                      {adicionando ? "…" : quantidade}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Adicionar cor ${color.name} à sacola`}
+                      disabled={adicionarBloqueado}
+                      onClick={() => onQuickAdd(color.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold leading-none transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                    >
+                      +
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`Adicionar cor ${color.name} à sacola`}
+                    disabled={adicionarBloqueado}
+                    onClick={() => onQuickAdd(color.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-gold/70 bg-gold/15 text-lg font-semibold leading-none text-ink transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                  >
+                    {adicionando ? "…" : "+"}
+                  </button>
+                )
               ) : null}
             </span>
             <span
