@@ -26,10 +26,9 @@ import { permiteSimulacao } from "@/lib/config/ambiente";
  *
  * Agora, onde há comprador real, token ausente devolve o provider REAL —
  * cuja primeira chamada falha com ShippingUnavailable("SUPERFRETE_TOKEN não
- * configurado"). Esse é o caminho já desenhado para indisponibilidade: a
- * venda acontece com frete 0 e o motivo gravado em shipping_quotes (decisão
- * da assimetria, em cotarFrete) — em vez de um número falso que ninguém
- * combinou. O mock continua valendo em desenvolvimento e staging, onde é
+ * configurado"). Esse é o caminho já desenhado para indisponibilidade:
+ * `cotarFrete` informa a falha e o checkout recusa criar cobrança sem frete
+ * real. O mock continua valendo em desenvolvimento e staging, onde é
  * exatamente o que se quer.
  */
 export function getShippingProvider(): ShippingProvider {

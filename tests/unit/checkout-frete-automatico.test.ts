@@ -25,4 +25,10 @@ describe("checkout nacional — frete automatico", () => {
     expect(fonte).toContain("const chaveCotacao");
     expect(fonte).toContain('ultimoCepCotado.current = ""');
   });
+
+  it("mostra WhatsApp quando o frete real falha no servidor", () => {
+    expect(fonte).toContain("suporteFreteHref");
+    expect(fonte).toContain("resultado.suporteWhatsAppUrl");
+    expect(fonte).toContain("Falar no WhatsApp");
+  });
 });

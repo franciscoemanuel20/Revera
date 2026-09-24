@@ -56,11 +56,13 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { cotarFrete } from "@/lib/shipping/cotar";
 import { avisarPedidoPendentePorEmail } from "@/lib/notificacoes/email-operacional";
 import { reveraApplePayDisponivel } from "@/lib/payments/revera";
+import { linkWhatsApp } from "@/lib/config/whatsapp";
 import { checkoutSchema } from "./schema";
 
 export interface CheckoutResult {
   erro: string;
   camposComErro?: Record<string, string>;
+  suporteWhatsAppUrl?: string;
 }
 
 // order_number legível e curto, mas NÃO sequencial nem previsível: 8
@@ -70,6 +72,30 @@ export interface CheckoutResult {
 // — isto aqui não revela nada.
 function gerarNumeroPedido(): string {
   return `REV-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+}
+
+function linkAjudaFrete(input: {
+  cep: string;
+  cidade: string;
+  estado: string;
+  itens: Array<{ productName: string; variantLabel: string | null; quantity: number }>;
+}): string {
+  const resumoItens = input.itens
+    .map((item) => {
+      const cor = item.variantLabel ? ` - ${item.variantLabel}` : "";
+      return `${item.quantity}x ${item.productName}${cor}`;
+    })
+    .join("; ");
+
+  return linkWhatsApp(
+    [
+      "Ola, estou tentando finalizar um pedido no site da Revera, mas o frete nao foi calculado.",
+      `CEP: ${input.cep}`,
+      `Cidade/UF: ${input.cidade}/${input.estado}`,
+      `Itens: ${resumoItens}`,
+      "Pode me ajudar a confirmar o envio e concluir com seguranca?",
+    ].join("\n")
+  );
 }
 
 export async function criarPedidoAction(input: unknown): Promise<CheckoutResult> {
@@ -212,11 +238,23 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
         erro: o.error ?? null,
       })),
     });
-    return falhar(
-      "Não conseguimos calcular o frete para este CEP agora, e não vamos " +
-        "fechar o pedido com um valor que não é o real. Tente de novo em " +
-        "alguns minutos — nada foi cobrado."
-    );
+    await devolverCarrinhoParaAberto(carrinho.cartId as string);
+    return {
+      erro:
+        "Não conseguimos calcular o frete automaticamente agora. Seu pedido " +
+        "não foi cobrado. Fale com a equipe para confirmar o envio e concluir " +
+        "com segurança.",
+      suporteWhatsAppUrl: linkAjudaFrete({
+        cep: dados.cep,
+        cidade: dados.city,
+        estado: dados.state,
+        itens: carrinho.items.map((item) => ({
+          productName: item.productName,
+          variantLabel: item.variantLabel,
+          quantity: item.quantity,
+        })),
+      }),
+    };
   }
 
   const shippingCents = cotacao.escolhida.priceCents;

@@ -79,6 +79,7 @@ export function CheckoutForm({
   const [campos, setCampos] = useState<FormState>(ESTADO_INICIAL);
   const [erros, setErros] = useState<Record<string, string>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
+  const [suporteFreteHref, setSuporteFreteHref] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [avisoCep, setAvisoCep] = useState<string | null>(null);
@@ -296,6 +297,7 @@ export function CheckoutForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErroGeral(null);
+    setSuporteFreteHref(null);
 
     if (cartCheckout.items.length === 0) {
       setErroGeral("Sua sacola está vazia — volte e adicione algo antes de finalizar.");
@@ -324,6 +326,7 @@ export function CheckoutForm({
     // src/app/admin/(protected)/produtos/actions.ts).
     if (resultado?.erro) {
       setErroGeral(resultado.erro);
+      setSuporteFreteHref(resultado.suporteWhatsAppUrl ?? null);
       setErros(resultado.camposComErro ?? {});
     }
   }
@@ -331,6 +334,22 @@ export function CheckoutForm({
   return (
     <form onSubmit={handleSubmit} className="flex max-w-2xl flex-col gap-8 pb-16" noValidate>
       {erroGeral ? <Toast message={erroGeral} variant="error" onClose={() => setErroGeral(null)} /> : null}
+      {suporteFreteHref ? (
+        <div className="rounded-xl border border-gold/45 bg-gold/10 p-4 text-sm text-ink shadow-sm">
+          <p className="font-semibold">A equipe pode confirmar esse frete manualmente.</p>
+          <p className="mt-1 text-ink/70">
+            O link ja leva o CEP e os itens da sacola para agilizar o atendimento.
+          </p>
+          <a
+            href={suporteFreteHref}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex min-h-toque items-center justify-center rounded-xl bg-gold-metal px-4 py-3 font-semibold text-ink shadow-[0_8px_20px_-10px_rgb(var(--gold-rgb)_/_0.9)] transition-all duration-300 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-glow-gold"
+          >
+            Falar no WhatsApp
+          </a>
+        </div>
+      ) : null}
 
       <section className="flex flex-col gap-4">
         <h2 className="font-display text-xl text-ink">Seus dados</h2>

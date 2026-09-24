@@ -31,11 +31,18 @@
  * número que está publicado seria cerimônia sem efeito, e pior: faria o
  * próximo a ler o código acreditar numa proteção que não existe mais.
  *
- * O que NÃO mudou: onde o botão aparece. Continuam sendo os mesmos dois
- * lugares de antes — a página do pedido e /para-profissionais. Espalhar
+ * O que NÃO mudou: onde o botão aparece por padrão. Continuam sendo os mesmos
+ * dois lugares de antes — a página do pedido e /para-profissionais. Espalhar
  * botão de WhatsApp por home, produto e checkout é decisão comercial (o
  * cliente que vai para o WhatsApp sai do carrinho), e essa o Francisco não
- * tomou.
+ * tomou como regra geral.
+ *
+ * EXCEÇÃO APROVADA EM 24/09/2026 — falha real de frete no checkout.
+ * Depois da auditoria `docs/auditoria/2026-09-24-checkout-pagamento-frete.md`,
+ * Francisco pediu "pode implementar". Essa exceção só vale quando o servidor
+ * recalcula o frete, falha fechado e NÃO cria cobrança. Nesse caso, a venda já
+ * não consegue seguir no fluxo automático; o WhatsApp vira recuperação manual
+ * de frete, não atalho comercial antes do pagamento.
  *
  * TENTADO E REVERTIDO EM 08/09/2026 — um botão flutuante chegou a existir
  * na home (`BotaoWhatsAppHome.tsx`, já apagado) e foi removido no mesmo
