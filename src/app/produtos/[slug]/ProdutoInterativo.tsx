@@ -201,6 +201,7 @@ export function ProdutoInterativo({
   const { adicionarItem, abrirDrawer, pendente } = useCart();
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
   const [adicionando, setAdicionando] = useState(false);
+  const [corAdicionandoId, setCorAdicionandoId] = useState<string | null>(null);
 
   const fotos = useMemo(
     () => fotosDoProduto(name, fotosDoBanco, fotosFallback),
@@ -362,6 +363,10 @@ export function ProdutoInterativo({
   const varianteSelecionada =
     (corSelecionadaId ? variantePorCor.get(corSelecionadaId) : undefined) ??
     varianteGenerica;
+  const varianteParaCor = useCallback(
+    (corId: string) => variantePorCor.get(corId) ?? varianteGenerica,
+    [variantePorCor, varianteGenerica]
+  );
 
   /**
    * A variante usada só para MOSTRAR preço e degraus antes de a cor ser
@@ -456,6 +461,40 @@ export function ProdutoInterativo({
       });
     } finally {
       setAdicionando(false);
+    }
+  }
+
+  async function adicionarCorRapida(corId: string) {
+    if (corAdicionandoId) return;
+    setMensagemErro(null);
+    const variante = varianteParaCor(corId);
+    const cor = colors.find((c) => c.id === corId);
+    if (!variante) {
+      setMensagemErro("Esta cor não está disponível para compra.");
+      return;
+    }
+    setCorAdicionandoId(corId);
+    try {
+      const { erro } = await adicionarItem(variante.id, 1);
+      if (erro) {
+        setMensagemErro(erro);
+        return;
+      }
+      setCorSelecionadaId(corId);
+      const foto = fotoDaCor(corId);
+      if (foto) setFotoAtivaSrc(foto.src);
+      medirAdicionarAoCarrinho({
+        variantId: variante.id,
+        nome: name,
+        quantidade: 1,
+        precoUnitarioCents: variante.priceCents,
+      });
+      setConfirmacao({
+        texto: `Cor ${cor?.name ?? ""} adicionada à sacola`.trim(),
+        chave: Date.now(),
+      });
+    } finally {
+      setCorAdicionandoId(null);
     }
   }
 
@@ -668,6 +707,15 @@ export function ProdutoInterativo({
                   colors={colors}
                   selectedId={corSelecionadaId}
                   onChange={escolherCor}
+                  onQuickAdd={(corId) => void adicionarCorRapida(corId)}
+                  quickAddPendingId={corAdicionandoId}
+                  quickAddDisabledIds={colors
+                    .filter((cor) => {
+                      const variante = variantePorCor.get(cor.id);
+                      const varianteFallback = variante ?? varianteGenerica;
+                      return !varianteFallback || varianteFallback.stockQty <= 0 || pendente || adicionando;
+                    })
+                    .map((cor) => cor.id)}
                   onNeedHelp={() => router.push("/cores#ajuda")}
                 />
               </div>

@@ -13,6 +13,9 @@ export interface ColorSelectorProps {
   colors: ColorOption[];
   selectedId: string | null;
   onChange: (id: string) => void;
+  onQuickAdd?: (id: string) => void;
+  quickAddDisabledIds?: string[];
+  quickAddPendingId?: string | null;
   onNeedHelp?: () => void;
 }
 
@@ -47,14 +50,25 @@ function separarEmFileiras(colors: ColorOption[]): ColorOption[][] {
   return [base, grisalho, linha3].filter((fileira) => fileira.length > 0);
 }
 
-export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: ColorSelectorProps) {
+export function ColorSelector({
+  colors,
+  selectedId,
+  onChange,
+  onQuickAdd,
+  quickAddDisabledIds = [],
+  quickAddPendingId,
+  onNeedHelp,
+}: ColorSelectorProps) {
   const fileiras = separarEmFileiras(colors);
+  const bloqueadas = new Set(quickAddDisabledIds);
   return (
     <div className="flex flex-col gap-3">
       {fileiras.map((fileira, i) => (
       <div key={i} className="flex flex-wrap gap-2">
         {fileira.map((color) => {
           const selecionado = color.id === selectedId;
+          const adicionando = quickAddPendingId === color.id;
+          const adicionarBloqueado = bloqueadas.has(color.id) || adicionando;
           return (
             /**
              * O CÓDIGO DA COR ESCRITO EMBAIXO (29/08/2026).
@@ -66,36 +80,49 @@ export function ColorSelector({ colors, selectedId, onChange, onNeedHelp }: Colo
              * cliente e operação falam a mesma língua.
              */
             <span key={color.id} className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              aria-label={`Cor ${color.name}`}
-              aria-pressed={selecionado}
-              onClick={() => onChange(color.id)}
-              className={`relative h-11 w-11 overflow-hidden rounded-full border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${
-                selecionado ? "border-gold" : "border-sand"
-              }`}
-              style={!color.photoUrl && color.hexPreview ? { backgroundColor: color.hexPreview } : undefined}
-            >
-              {color.photoUrl ? (
-                /* `sizes` explícito (29/08/2026). Sem ele o <Image fill> do
-                   Next assume 100vw e pede a foto em 3840px de largura para
-                   um círculo de 44px: 435 KB por cor, 3,4 MB só na cartela.
-                   Medido no site em produção — no 4G as bolinhas apareciam
-                   uma a uma e a pessoa escolhia a cor olhando círculo vazio.
-                   44px é o tamanho real; o dobro cobre telas 2x. */
-                <Image
-                  src={color.photoUrl}
-                  alt={color.name}
-                  fill
-                  sizes="88px"
-                  className="object-cover"
-                />
-              ) : !color.hexPreview ? (
-                <span className="flex h-full w-full items-center justify-center text-xs text-ink">
-                  {color.code}
-                </span>
+            <span className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label={`Cor ${color.name}`}
+                aria-pressed={selecionado}
+                onClick={() => onChange(color.id)}
+                className={`relative h-11 w-11 overflow-hidden rounded-full border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${
+                  selecionado ? "border-gold" : "border-sand"
+                }`}
+                style={!color.photoUrl && color.hexPreview ? { backgroundColor: color.hexPreview } : undefined}
+              >
+                {color.photoUrl ? (
+                  /* `sizes` explícito (29/08/2026). Sem ele o <Image fill> do
+                    Next assume 100vw e pede a foto em 3840px de largura para
+                    um círculo de 44px: 435 KB por cor, 3,4 MB só na cartela.
+                    Medido no site em produção — no 4G as bolinhas apareciam
+                    uma a uma e a pessoa escolhia a cor olhando círculo vazio.
+                    44px é o tamanho real; o dobro cobre telas 2x. */
+                  <Image
+                    src={color.photoUrl}
+                    alt={color.name}
+                    fill
+                    sizes="88px"
+                    className="object-cover"
+                  />
+                ) : !color.hexPreview ? (
+                  <span className="flex h-full w-full items-center justify-center text-xs text-ink">
+                    {color.code}
+                  </span>
+                ) : null}
+              </button>
+              {onQuickAdd ? (
+                <button
+                  type="button"
+                  aria-label={`Adicionar cor ${color.name} à sacola`}
+                  disabled={adicionarBloqueado}
+                  onClick={() => onQuickAdd(color.id)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-gold/70 bg-gold/15 text-lg font-semibold leading-none text-ink transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                >
+                  {adicionando ? "…" : "+"}
+                </button>
               ) : null}
-            </button>
+            </span>
             <span
               aria-hidden="true"
               className={`text-[11px] leading-none tabular-nums ${
