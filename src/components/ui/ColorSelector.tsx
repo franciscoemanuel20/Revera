@@ -91,6 +91,17 @@ export function ColorSelector({
              */
             <span key={color.id} className="flex flex-col items-center gap-1">
             <span className="flex min-h-[44px] items-center gap-1">
+              {onQuickAdd && onQuickRemove ? (
+                <button
+                  type="button"
+                  aria-label={`Remover uma unidade da cor ${color.name}`}
+                  disabled={!temQuantidade || removerBloqueado}
+                  onClick={() => onQuickRemove(color.id)}
+                  className="flex h-6 w-6 items-center justify-center rounded-full border border-gold/55 bg-paper text-[11px] font-semibold leading-none text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                >
+                  −
+                </button>
+              ) : null}
               <button
                 type="button"
                 aria-label={`Cor ${color.name}`}
@@ -122,43 +133,22 @@ export function ColorSelector({
                 ) : null}
               </button>
               {onQuickAdd ? (
-                temQuantidade && onQuickRemove ? (
-                  <span className="inline-flex h-8 items-center rounded-full border border-gold/70 bg-paper text-ink shadow-sm">
-                    <button
-                      type="button"
-                      aria-label={`Remover uma unidade da cor ${color.name}`}
-                      disabled={removerBloqueado}
-                      onClick={() => onQuickRemove(color.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-base font-semibold leading-none transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-                    >
-                      −
-                    </button>
-                    <span className="min-w-5 text-center text-sm font-semibold tabular-nums" aria-live="polite">
-                      {adicionando ? "…" : quantidade}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Adicionar cor ${color.name} à sacola`}
-                      disabled={adicionarBloqueado}
-                      onClick={() => onQuickAdd(color.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold leading-none transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-                    >
-                      +
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    aria-label={`Adicionar cor ${color.name} à sacola`}
-                    disabled={adicionarBloqueado}
-                    onClick={() => onQuickAdd(color.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-gold/70 bg-gold/15 text-lg font-semibold leading-none text-ink transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-                  >
-                    {adicionando ? "…" : "+"}
-                  </button>
-                )
+                <button
+                  type="button"
+                  aria-label={`Adicionar cor ${color.name} à sacola`}
+                  disabled={adicionarBloqueado}
+                  onClick={() => onQuickAdd(color.id)}
+                  className="flex h-6 w-6 items-center justify-center rounded-full border border-gold/70 bg-gold/15 text-xs font-semibold leading-none text-ink transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                >
+                  {adicionando ? "…" : "+"}
+                </button>
               ) : null}
             </span>
+            {temQuantidade ? (
+              <span className="sr-only" aria-live="polite">
+                {quantidade} unidade{quantidade === 1 ? "" : "s"} da cor {color.name} na sacola
+              </span>
+            ) : null}
             <span
               aria-hidden="true"
               className={`text-[11px] leading-none tabular-nums ${
@@ -171,6 +161,7 @@ export function ColorSelector({
                   "1B" lá faria o cliente e a operação falarem duas línguas
                   para a mesma cor. */}
               {color.name}
+              {temQuantidade ? ` x${quantidade}` : ""}
             </span>
             </span>
           );
