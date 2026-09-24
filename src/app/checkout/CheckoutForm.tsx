@@ -251,8 +251,9 @@ export function CheckoutForm({
         ultimoCepCotado.current = "";
         setFrete(null);
         setAvisoFrete(
-          "Não conseguimos mostrar o frete agora. Você ainda pode finalizar; o frete " +
-            "será recalculado com segurança antes do pagamento."
+          "Não conseguimos mostrar o frete agora. Vamos tentar recalcular com " +
+            "segurança antes do pagamento; se continuar indisponível, você será " +
+            "encaminhado para atendimento sem cobrança."
         );
         return;
       }
@@ -266,8 +267,9 @@ export function CheckoutForm({
       ultimoCepCotado.current = "";
       setFrete(null);
       setAvisoFrete(
-        "Não conseguimos mostrar o frete agora. Você ainda pode finalizar; o frete " +
-          "será recalculado com segurança antes do pagamento."
+        "Não conseguimos mostrar o frete agora. Vamos tentar recalcular com " +
+          "segurança antes do pagamento; se continuar indisponível, você será " +
+          "encaminhado para atendimento sem cobrança."
       );
     } finally {
       window.clearTimeout(timeout);

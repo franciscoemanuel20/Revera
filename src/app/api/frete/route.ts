@@ -65,8 +65,10 @@ export async function POST(request: Request) {
 
   if (!cotacao.escolhida) {
     // 200, não 5xx: "não consegui cotar" é uma resposta legítima desta rota,
-    // não uma falha dela. A tela mostra o aviso e deixa a compra seguir — o
-    // pedido é criado do mesmo jeito (ver actions.ts).
+    // não uma falha dela. A tela mostra o aviso; se o cliente tentar seguir,
+    // o servidor recota em actions.ts e só cria pedido/cobrança quando houver
+    // frete válido. Persistindo a indisponibilidade, o checkout mostra suporte
+    // por WhatsApp sem cobrar o cliente.
     return NextResponse.json({
       disponivel: false,
       motivo: cotacao.indisponivel ?? "Nenhuma transportadora atende este CEP com a cobertura necessária.",
