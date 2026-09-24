@@ -45,12 +45,16 @@ export interface ColorSelectorProps {
  * Repare que a 3.10 vive na fileira 3, e não entre as básicas: ela é o
  * primeiro degrau da linha 3, e estar nos dois lugares é impossível.
  */
-function separarEmFileiras(colors: ColorOption[]): ColorOption[][] {
+function separarEmFileiras(colors: ColorOption[]): Array<{ label: string; colors: ColorOption[] }> {
   const grisalho = colors.filter((c) => /^1b\d+$/i.test(c.code));
   const linha3 = colors.filter((c) => /^3\.\d+$/.test(c.code));
   const usados = new Set([...grisalho, ...linha3].map((c) => c.id));
   const base = colors.filter((c) => !usados.has(c.id));
-  return [base, grisalho, linha3].filter((fileira) => fileira.length > 0);
+  return [
+    { label: "Naturais", colors: base },
+    { label: "Grisalhos", colors: grisalho },
+    { label: "Linha 3", colors: linha3 },
+  ].filter((fileira) => fileira.colors.length > 0);
 }
 
 export function ColorSelector({
@@ -69,10 +73,16 @@ export function ColorSelector({
   const bloqueadas = new Set(quickAddDisabledIds);
   const remocoesBloqueadas = new Set(quickRemoveDisabledIds);
   return (
-    <div className="flex flex-col gap-3">
-      {fileiras.map((fileira, i) => (
-      <div key={i} className="flex flex-wrap gap-2">
-        {fileira.map((color) => {
+    <div className="flex flex-col gap-4">
+      {fileiras.map((fileira) => {
+        const headingId = `cores-${fileira.label.toLowerCase().replace(/\s+/g, "-")}`;
+        return (
+      <section key={fileira.label} className="flex flex-col gap-2" aria-labelledby={headingId}>
+        <p id={headingId} className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
+          {fileira.label}
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:gap-2">
+        {fileira.colors.map((color) => {
           const selecionado = color.id === selectedId;
           const adicionando = quickAddPendingId === color.id;
           const adicionarBloqueado = bloqueadas.has(color.id) || adicionando;
@@ -89,22 +99,33 @@ export function ColorSelector({
              * e é o mesmo que aparece na sacola ("Cor 3.10") e no pedido, então
              * cliente e operação falam a mesma língua.
              */
-            <span key={color.id} className="flex flex-col items-center gap-1">
-            <span className="flex min-h-[44px] items-center gap-1">
-              {onQuickAdd && onQuickRemove ? (
+            <span
+              key={color.id}
+              className={`flex min-h-[86px] flex-col items-center justify-between rounded-lg border px-2 py-2 transition-colors ${
+                temQuantidade
+                  ? "border-gold/65 bg-gold/10"
+                  : selecionado
+                    ? "border-gold/55 bg-paper"
+                    : "border-sand bg-paper/80"
+              }`}
+            >
+            <span className="grid min-h-11 grid-cols-[24px_44px_24px] items-center gap-1">
+              {onQuickAdd && onQuickRemove && temQuantidade ? (
                 <button
                   type="button"
                   aria-label={`Remover uma unidade da cor ${color.name}`}
-                  disabled={!temQuantidade || removerBloqueado}
+                  disabled={removerBloqueado}
                   onClick={() => onQuickRemove(color.id)}
                   className="flex h-6 w-6 items-center justify-center rounded-full border border-gold/55 bg-paper text-[11px] font-semibold leading-none text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
                 >
                   −
                 </button>
-              ) : null}
+              ) : (
+                <span aria-hidden="true" />
+              )}
               <button
                 type="button"
-                aria-label={`Cor ${color.name}`}
+                aria-label={`Cor ${color.name}${temQuantidade ? `, ${quantidade} unidade${quantidade === 1 ? "" : "s"} na sacola` : ""}`}
                 aria-pressed={selecionado}
                 onClick={() => onChange(color.id)}
                 className={`relative h-11 w-11 overflow-hidden rounded-full border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${
@@ -131,6 +152,14 @@ export function ColorSelector({
                     {color.code}
                   </span>
                 ) : null}
+                {temQuantidade ? (
+                  <span
+                    className="motion-safe:animate-pulse absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-semibold leading-none text-paper shadow-sm"
+                    aria-hidden="true"
+                  >
+                    {quantidade}
+                  </span>
+                ) : null}
               </button>
               {onQuickAdd ? (
                 <button
@@ -151,7 +180,7 @@ export function ColorSelector({
             ) : null}
             <span
               aria-hidden="true"
-              className={`text-[11px] leading-none tabular-nums ${
+              className={`max-w-full truncate text-[11px] leading-none tabular-nums ${
                 selecionado ? "font-semibold text-ink" : "text-ink/55"
               }`}
             >
@@ -161,13 +190,14 @@ export function ColorSelector({
                   "1B" lá faria o cliente e a operação falarem duas línguas
                   para a mesma cor. */}
               {color.name}
-              {temQuantidade ? ` x${quantidade}` : ""}
             </span>
             </span>
           );
         })}
-      </div>
-      ))}
+        </div>
+      </section>
+        );
+      })}
       {onNeedHelp ? (
         <button type="button" onClick={onNeedHelp} className="self-start text-sm text-ink underline decoration-gold decoration-2 underline-offset-4">
           Não sei qual cor escolher

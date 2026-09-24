@@ -415,6 +415,19 @@ export function ProdutoInterativo({
     regrasAtivasOrdenadas.find((regra) => regra.minQty > totalProdutoNaSacola) ?? null;
   const regraAtualSacola =
     [...regrasAtivasOrdenadas].reverse().find((regra) => regra.minQty <= totalProdutoNaSacola) ?? null;
+  const textoProgressoSacola = regraAtualSacola
+    ? `${regraAtualSacola.label ?? `Oferta de ${regraAtualSacola.minQty} peças`} aplicada`
+    : proximoDegrauSacola
+      ? `${totalProdutoNaSacola} peça${totalProdutoNaSacola === 1 ? "" : "s"} escolhida${
+          totalProdutoNaSacola === 1 ? "" : "s"
+        } · faltam ${proximoDegrauSacola.minQty - totalProdutoNaSacola} para ${
+          proximoDegrauSacola.label ?? `a oferta de ${proximoDegrauSacola.minQty}`
+        }`
+      : totalProdutoNaSacola > 0
+        ? `${totalProdutoNaSacola} peça${totalProdutoNaSacola === 1 ? "" : "s"} escolhida${
+            totalProdutoNaSacola === 1 ? "" : "s"
+          }`
+        : "Nenhuma cor escolhida ainda";
 
   /** Produto com cartela exige cor explícita; produto sem cartela, não. */
   const faltaEscolherCor = colors.length > 0 && !corSelecionadaId;
@@ -459,9 +472,14 @@ export function ProdutoInterativo({
 
   const tituloComercial = nomeComercial(name);
   const beneficios = beneficiosDoProduto(name, baseThicknessMm);
+  const temPedidoPorCorNaSacola = colors.length > 0 && totalProdutoNaSacola > 0;
   const rotuloBotao =
     varianteExibicao && varianteExibicao.stockQty <= 0
       ? "Fora de estoque"
+      : temPedidoPorCorNaSacola && regraAtualSacola
+        ? "Finalizar com oferta"
+        : temPedidoPorCorNaSacola
+          ? "Ver sacola"
       : faltaEscolherCor
         ? "Escolha uma cor"
         : pendente || adicionando
@@ -469,7 +487,19 @@ export function ProdutoInterativo({
           : "Adicionar ao carrinho";
 
   const botaoDesabilitado =
-    pendente || adicionando || !podeComprar || !varianteExibicao || varianteExibicao.stockQty <= 0;
+    pendente ||
+    adicionando ||
+    !varianteExibicao ||
+    varianteExibicao.stockQty <= 0 ||
+    (!temPedidoPorCorNaSacola && !podeComprar);
+
+  function acionarBotaoPrincipal() {
+    if (temPedidoPorCorNaSacola) {
+      abrirDrawer();
+      return;
+    }
+    void adicionarAoCarrinho();
+  }
 
   async function adicionarAoCarrinho() {
     if (adicionando) return;
@@ -822,6 +852,9 @@ export function ProdutoInterativo({
                             ? ` · ${formatarBRL(subtotalProdutoNaSacolaCents)}`
                             : ""}
                         </p>
+                        <p className="mt-1 text-sm font-semibold text-moss" aria-live="polite">
+                          {textoProgressoSacola}
+                        </p>
                       </div>
                       <button
                         type="button"
@@ -934,7 +967,7 @@ export function ProdutoInterativo({
                 <Button
                   size="lg"
                   disabled={botaoDesabilitado}
-                  onClick={() => void adicionarAoCarrinho()}
+                  onClick={acionarBotaoPrincipal}
                 >
                   {rotuloBotao}
                 </Button>
@@ -1067,15 +1100,19 @@ export function ProdutoInterativo({
           <div className="mx-auto flex max-w-5xl items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-ink">{tituloComercial}</p>
-              <Price
-                cents={resultadoDesconto!.unitPriceCents}
-                compareAtCents={varianteExibicao.compareAtPriceCents}
-              />
+              {temPedidoPorCorNaSacola ? (
+                <p className="truncate text-sm font-semibold text-moss">{textoProgressoSacola}</p>
+              ) : (
+                <Price
+                  cents={resultadoDesconto!.unitPriceCents}
+                  compareAtCents={varianteExibicao.compareAtPriceCents}
+                />
+              )}
             </div>
             <Button
               size="sm"
               disabled={botaoDesabilitado}
-              onClick={() => void adicionarAoCarrinho()}
+              onClick={acionarBotaoPrincipal}
               className="shrink-0"
             >
               {rotuloBotao}
