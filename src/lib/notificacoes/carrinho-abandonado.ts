@@ -90,9 +90,9 @@ function templateDoCarrinho(etapa: Etapa): string {
 
 function textoDaEtapa(etapa: Etapa): string {
   if (etapa === "primeiro") {
-    return "Olá! Notamos que seu pedido da Reverá ainda aguarda a finalização do pagamento. Se precisar de ajuda para concluir, responda a esta mensagem. Estamos aqui para ajudar.";
+    return "Status do seu pedido na Reverá: aguardando pagamento. Responda esta mensagem para concluir. Se o pagamento já foi feito, desconsidere.";
   }
-  return "Olá! Seu pedido da Reverá continua aguardando pagamento. Se quiser concluir ou tiver alguma dúvida, responda a esta mensagem. Nossa equipe está à disposição para ajudar.";
+  return "Status do seu pedido na Reverá: pagamento pendente. Responda esta mensagem para concluir. Se o pagamento já foi feito, desconsidere.";
 }
 
 /**
