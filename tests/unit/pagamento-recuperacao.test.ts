@@ -24,7 +24,18 @@ describe("checkout pagamento - recuperacao", () => {
   });
 
   it("orienta suporte somente quando precisa de intervencao", () => {
-    expect(fonte).toContain('motivo === "reserva_travada" || motivo === "metodo_indisponivel"');
-    expect(fonte).toContain("No link do pedido, use o atendimento");
+    expect(fonte).toContain('motivo === "reserva_travada"');
+    expect(fonte).toContain('motivo === "metodo_indisponivel"');
+    expect(fonte).toContain('motivo === "link_bloqueado"');
+    expect(fonte).toContain('motivo === "internacional_indisponivel"');
+    expect(fonte).toContain("Diagnóstico do pedido");
+    expect(fonte).toContain("Ver meu pedido");
+    expect(fonte).toContain("cobrança pendente");
+  });
+
+  it("explica as opcoes rapidas esperadas no checkout hospedado", () => {
+    expect(fonte).toContain("Pix aparece como opção rápida");
+    expect(fonte).toContain("Cartão de crédito fica disponível");
+    expect(fonte).toContain("Apple Pay ou Google Pay aparecem");
   });
 });

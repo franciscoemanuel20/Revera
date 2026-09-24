@@ -175,6 +175,7 @@ export default async function PagamentoPage({
     if (!linkPermitido(urlGuardada)) {
       return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
         motivo: "link_bloqueado",
+        checkout: pagamentoExistente?.provider === "infinitepay" ? "infinitepay" : "generico",
       });
     }
     redirect(urlGuardada);
@@ -201,6 +202,7 @@ export default async function PagamentoPage({
       if (!linkPermitido(urlRecuperada)) {
         return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
           motivo: "link_bloqueado",
+          checkout: pagamentoExistente.provider === "infinitepay" ? "infinitepay" : "generico",
         });
       }
       const { error: erroRestaurar } = await supabase
@@ -263,6 +265,7 @@ export default async function PagamentoPage({
     const estagnada = idadeMs > IDADE_PARA_SUGERIR_CONTATO_MS;
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
       motivo: estagnada ? "reserva_travada" : "em_preparacao",
+      checkout: pagamentoExistente.provider === "infinitepay" ? "infinitepay" : "generico",
     });
   }
 
@@ -362,6 +365,7 @@ export default async function PagamentoPage({
     // link pode cobrar duas vezes; preservar a reserva é a opção segura.
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
       motivo: "em_preparacao",
+      checkout: provider.name === "infinitepay" ? "infinitepay" : "generico",
     });
   }
 
@@ -582,6 +586,7 @@ export default async function PagamentoPage({
     // termos o link.
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
       motivo: cobrancaCriada || ambiguo ? "em_preparacao" : "erro_tecnico",
+      checkout: provider.name === "infinitepay" ? "infinitepay" : "generico",
     });
   }
 
@@ -591,6 +596,7 @@ export default async function PagamentoPage({
   if (!linkPermitido(checkoutUrl)) {
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
       motivo: "link_bloqueado",
+      checkout: provider.name === "infinitepay" ? "infinitepay" : "generico",
     });
   }
   redirect(checkoutUrl);
@@ -661,6 +667,7 @@ async function recriarReservaOuUsarVencedor(
     ok: false,
     tela: telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
       motivo: "em_preparacao",
+      checkout: providerName === "infinitepay" ? "infinitepay" : "generico",
     }),
   };
 }
@@ -676,11 +683,16 @@ type MotivoPagamentoIndisponivel =
 function telaDePagamentoIndisponivel(
   numeroPedido: string,
   accessToken: string,
-  opcoes: { motivo?: MotivoPagamentoIndisponivel } = {}
+  opcoes: { motivo?: MotivoPagamentoIndisponivel; checkout?: "infinitepay" | "generico" } = {}
 ) {
   const motivo = opcoes.motivo ?? "erro_tecnico";
+  const checkout = opcoes.checkout ?? "generico";
   const aguardando = motivo === "em_preparacao";
-  const precisaSuporte = motivo === "reserva_travada" || motivo === "metodo_indisponivel";
+  const precisaSuporte =
+    motivo === "reserva_travada" ||
+    motivo === "metodo_indisponivel" ||
+    motivo === "link_bloqueado" ||
+    motivo === "internacional_indisponivel";
   const conteudo: Record<MotivoPagamentoIndisponivel, { titulo: string; texto: string; detalhe: string }> = {
     erro_tecnico: {
       titulo: "Não conseguimos abrir o pagamento",
@@ -732,6 +744,16 @@ function telaDePagamentoIndisponivel(
       <p className="rounded-lg border border-sand bg-paper/70 px-4 py-3 text-sm text-ink/65">
         {estado.detalhe}
       </p>
+      {checkout === "infinitepay" ? (
+        <div className="w-full rounded-lg border border-ink/10 bg-white/55 p-4 text-left text-sm text-ink/70">
+          <p className="font-semibold text-ink">Quando o checkout abrir</p>
+          <ul className="mt-2 space-y-1">
+            <li>Pix aparece como opção rápida no checkout da InfinitePay.</li>
+            <li>Cartão de crédito fica disponível para finalizar na hora.</li>
+            <li>Apple Pay ou Google Pay aparecem quando o seu aparelho e navegador permitem.</li>
+          </ul>
+        </div>
+      ) : null}
       <AutoRetryPagamento ativo={aguardando} />
       <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
         <a
@@ -749,9 +771,13 @@ function telaDePagamentoIndisponivel(
       </div>
       {precisaSuporte ? (
         <p className="text-sm text-ink/60">
-          No link do pedido, use o atendimento com o número do pedido já identificado.
+          Diagnóstico do pedido: {motivo}. Abra “Ver meu pedido” e use o atendimento de lá; a equipe confere a cobrança pendente antes de liberar qualquer nova tentativa.
         </p>
-      ) : null}
+      ) : (
+        <p className="text-sm text-ink/60">
+          Diagnóstico do pedido: {motivo}. Se continuar, abra “Ver meu pedido” para acompanhar a recuperação.
+        </p>
+      )}
     </main>
   );
 }
