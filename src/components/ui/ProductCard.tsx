@@ -22,6 +22,8 @@ const PRODUCT_CARD_COPY: Record<SiteLocale, { featured: string; details: string;
   pt: { featured: "Destaque", details: "Ver detalhes", soon: "Em breve" },
   en: { featured: "Featured", details: "See details", soon: "Coming soon" },
   es: { featured: "Destacado", details: "Ver detalles", soon: "Proximamente" },
+  fr: { featured: "Selection", details: "Voir les details", soon: "Bientot" },
+  de: { featured: "Empfohlen", details: "Details ansehen", soon: "Demnachst" },
 };
 
 // Card de vitrine — priceCents/imageUrl são opcionais porque o produto seed

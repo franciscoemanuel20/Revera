@@ -383,9 +383,129 @@ const ES: TraducoesDeConteudo = {
   "profissionais.mensagemSucesso": "Recibimos tu contacto. Nuestro equipo se pondra en contacto para presentar las condiciones.",
 };
 
-const TRADUCOES: Record<"en" | "es", TraducoesDeConteudo> = {
+const FR: TraducoesDeConteudo = {
+  "trustbar.item1": "Controle qualite avant expedition",
+  "trustbar.item2": "Garantie de 7 jours ouvrables",
+
+  "garantia.eyebrow": "Apres-vente",
+  "garantia.titulo": "Garantie",
+  "garantia.intro":
+    "Avant expedition, chaque prothese capillaire passe par un controle qualite. Mais la verification decisive est la votre, des que la piece arrive, avant coupe, ajustement ou collage.",
+  "garantia.teste.titulo": "Le test des cheveux",
+  "garantia.passo1": "Placez un tissu clair sous la piece pour voir les cheveux qui pourraient se detacher.",
+  "garantia.passo2": "Passez doucement la main sur les cheveux. Ne tirez pas et ne serrez pas.",
+  "garantia.passo3":
+    "Il est normal que quelques cheveux se detachent au debut. Ce sont des cheveux libres de la fabrication, non fixes a la base.",
+  "garantia.passo4":
+    "Continuez pendant environ une minute. Repassez ensuite la main et verifiez le tissu : la chute doit s'etre arretee.",
+  "garantia.passo5.antes": "Si des cheveux continuent a tomber apres cette minute,",
+  "garantia.passo5.destaque": "arretez-vous la",
+  "garantia.passo5.depois":
+    ". Ne coupez pas, n'ajustez pas et ne collez pas. Contactez-nous avec la piece exactement comme elle est arrivee.",
+  "garantia.troca.titulo": "Jusqu'a quand l'echange est possible",
+  "garantia.troca.p1":
+    "Tant que la piece est dans l'etat ou elle est arrivee, sans coupe, coiffage ni colle, elle peut etre retournee et echangee.",
+  "garantia.troca.p2":
+    "Apres coupe, ajustement et collage sur la tete, la prothese ne peut plus revenir a l'etat d'expedition. Elle a ete adaptee a une seule personne. A partir de ce moment, il n'y a plus de retour ni d'echange pour chute de cheveux; c'est pourquoi le test ci-dessus est de votre responsabilite et doit venir avant tout.",
+  "garantia.troca.aviso":
+    "Une minute a passer la main sur les cheveux avant que les ciseaux touchent la piece separe un echange simple d'une piece qui ne peut plus etre retournee.",
+  "garantia.prazos.titulo": "Delais",
+  "garantia.prazos.defeito.antes": "Vous avez",
+  "garantia.prazos.defeito.prazo": "7 jours ouvrables",
+  "garantia.prazos.defeito.depois":
+    "a partir de la reception pour signaler un defaut de fabrication; le test des cheveux est exactement ce qui le revele le premier jour.",
+  "garantia.prazos.desistir.antes": "Vous avez change d'avis ? Vous pouvez vous retracter jusqu'a",
+  "garantia.prazos.desistir.prazo": "7 jours",
+  "garantia.prazos.desistir.depois":
+    "apres reception, avec la piece non utilisee et non modifiee. Il suffit de nous contacter.",
+  "garantia.prazos.cuidados.antes":
+    "La durabilite ensuite depend de l'entretien quotidien. Ce qu'il faut utiliser, comment laver et quoi eviter est explique dans",
+  "garantia.prazos.cuidados.link": "Entretien",
+
+  "porque.eyebrow": "Confiance",
+  "porque.titulo": "Pourquoi Revera",
+  "porque.bloco1.titulo": "Controle qualite avant expedition",
+  "porque.bloco1.texto":
+    "Avant expedition, chaque prothese capillaire passe par un controle qualite rigoureux pour assurer que le produit arrive en bon etat.",
+  "porque.bloco2.titulo": "Variete de couleurs",
+  "porque.bloco2.texto": "La ligne Micropele est disponible en 15 couleurs, y compris des tons gris. Voir toutes les options dans",
+  "porque.bloco2.link": "couleurs",
+  "porque.bloco3.titulo": "Aide au choix de couleur",
+  "porque.bloco3.texto":
+    "Envoyez une photo de vos cheveux naturels et notre equipe indiquera la couleur disponible la plus proche. L'outil se trouve sur la page",
+  "porque.bloco3.link": "couleurs",
+  "porque.bloco4.titulo": "Livraison dans tout le Bresil",
+  "porque.bloco4.texto": "La livraison est calculee par code postal au checkout, pour toute destination dans le pays.",
+  "porque.bloco5.titulo": "Garantie",
+  "porque.bloco5.texto":
+    "Apres reception de la prothese capillaire, le client dispose de 7 jours ouvrables pour signaler un possible defaut de fabrication. Voir les details dans",
+  "porque.bloco5.link": "garantie",
+};
+
+const DE: TraducoesDeConteudo = {
+  "trustbar.item1": "Qualitatskontrolle vor dem Versand",
+  "trustbar.item2": "7 Werktage Garantie",
+
+  "garantia.eyebrow": "Nach dem Kauf",
+  "garantia.titulo": "Garantie",
+  "garantia.intro":
+    "Vor dem Versand wird jedes Haarsystem gepruft. Die entscheidende Kontrolle liegt dennoch bei Ihnen und erfolgt direkt nach Erhalt, vor Schneiden, Formen oder Kleben.",
+  "garantia.teste.titulo": "Der Haartest",
+  "garantia.passo1": "Legen Sie ein helles Tuch unter das System, damit lose Haare sichtbar werden.",
+  "garantia.passo2": "Streichen Sie sanft mit der Hand uber das Haar. Nicht ziehen und nicht drucken.",
+  "garantia.passo3":
+    "Einige lose Haare am Anfang sind normal. Das sind Produktionshaare, die nicht an der Basis befestigt waren.",
+  "garantia.passo4":
+    "Machen Sie etwa eine Minute weiter. Streichen Sie danach erneut uber das Haar und prufen Sie das Tuch: Der Haarausfall sollte aufgehort haben.",
+  "garantia.passo5.antes": "Wenn nach dieser Minute weiterhin Haare ausfallen,",
+  "garantia.passo5.destaque": "stoppen Sie hier",
+  "garantia.passo5.depois":
+    ". Nicht schneiden, nicht formen, nicht kleben. Kontaktieren Sie uns mit dem System genau in dem Zustand, in dem es angekommen ist.",
+  "garantia.troca.titulo": "Bis wann ein Umtausch moglich ist",
+  "garantia.troca.p1":
+    "Solange das System im Ankunftszustand ist, ohne Schnitt, Styling oder Kleber, kann es zuruckgegeben und gegen ein anderes getauscht werden.",
+  "garantia.troca.p2":
+    "Nachdem es geschnitten, angepasst und am Kopf verklebt wurde, kann das Haarsystem nicht mehr in den Versandzustand zuruck. Es wurde fur eine einzelne Person angepasst. Ab diesem Moment gibt es keine Ruckgabe oder keinen Umtausch wegen Haarausfall; deshalb liegt der obige Test in Ihrer Verantwortung und muss vor allem anderen erfolgen.",
+  "garantia.troca.aviso":
+    "Eine Minute mit der Hand uber die Haare zu streichen, bevor eine Schere das System beruhrt, trennt einen einfachen Umtausch von einem System, das nicht mehr zuruckgegeben werden kann.",
+  "garantia.prazos.titulo": "Fristen",
+  "garantia.prazos.defeito.antes": "Sie haben",
+  "garantia.prazos.defeito.prazo": "7 Werktage",
+  "garantia.prazos.defeito.depois":
+    "ab Erhalt, um einen Herstellungsfehler zu melden; genau dafur ist der Haartest am ersten Tag da.",
+  "garantia.prazos.desistir.antes": "Meinung geandert? Sie konnen bis zu",
+  "garantia.prazos.desistir.prazo": "7 Tage",
+  "garantia.prazos.desistir.depois":
+    "nach Erhalt vom Kauf zurucktreten, solange das System unbenutzt und unverandert ist. Kontaktieren Sie uns einfach.",
+  "garantia.prazos.cuidados.antes":
+    "Die Haltbarkeit danach hangt von der taglichen Pflege ab. Was zu verwenden ist, wie man wascht und was zu vermeiden ist, steht unter",
+  "garantia.prazos.cuidados.link": "Pflege",
+
+  "porque.eyebrow": "Vertrauen",
+  "porque.titulo": "Warum Revera",
+  "porque.bloco1.titulo": "Qualitatskontrolle vor dem Versand",
+  "porque.bloco1.texto":
+    "Vor dem Versand wird jedes Haarsystem streng gepruft, damit das Produkt in gutem Zustand geliefert wird.",
+  "porque.bloco2.titulo": "Farbvielfalt",
+  "porque.bloco2.texto": "Die Micropele-Linie ist in 15 Farben erhaltlich, einschliesslich Grautonen. Alle Optionen finden Sie unter",
+  "porque.bloco2.link": "Farben",
+  "porque.bloco3.titulo": "Hilfe bei der Farbauswahl",
+  "porque.bloco3.texto":
+    "Senden Sie ein Foto Ihres naturlichen Haares und unser Team empfiehlt die nachste verfugbare Farbe. Das Tool befindet sich auf der Seite",
+  "porque.bloco3.link": "Farben",
+  "porque.bloco4.titulo": "Versand in ganz Brasilien",
+  "porque.bloco4.texto": "Der Versand wird beim Checkout per Postleitzahl berechnet, fur jeden Ort im Land.",
+  "porque.bloco5.titulo": "Garantie",
+  "porque.bloco5.texto":
+    "Nach Erhalt des Haarsystems hat der Kunde bis zu 7 Werktage Zeit, einen moglichen Herstellungsfehler zu melden. Details finden Sie unter",
+  "porque.bloco5.link": "Garantie",
+};
+
+const TRADUCOES: Record<"en" | "es" | "fr" | "de", TraducoesDeConteudo> = {
   en: EN,
   es: ES,
+  fr: FR,
+  de: DE,
 };
 
 export function traducaoDeConteudo(chave: ChaveDeTexto, locale: SiteLocale): string | null {

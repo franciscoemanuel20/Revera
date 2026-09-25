@@ -1,4 +1,4 @@
-export const SITE_LOCALES = ["pt", "en", "es"] as const;
+export const SITE_LOCALES = ["pt", "en", "es", "fr", "de"] as const;
 
 export type SiteLocale = (typeof SITE_LOCALES)[number];
 
@@ -86,12 +86,16 @@ export const LANG_BY_SITE_LOCALE: Record<SiteLocale, string> = {
   pt: "pt-BR",
   en: "en",
   es: "es",
+  fr: "fr",
+  de: "de",
 };
 
 export const OG_LOCALE_BY_SITE_LOCALE: Record<SiteLocale, string> = {
   pt: "pt_BR",
   en: "en_US",
   es: "es_ES",
+  fr: "fr_FR",
+  de: "de_DE",
 };
 
 type SiteCopy = {
@@ -214,6 +218,72 @@ export const SITE_COPY: Record<SiteLocale, SiteCopy> = {
     seoSuffix: {
       title: "Protesis capilares naturales",
       description: "Protesis capilares Revera con acabado natural, orientacion de color y compra segura.",
+    },
+  },
+  fr: {
+    menuConheca: "Decouvrir",
+    abrirMenu: "Ouvrir le menu",
+    nav: {
+      "/": "Accueil",
+      "/produtos": "Protheses capillaires",
+      "/cores": "Couleurs",
+      "/cuidados": "Entretien",
+      "/garantia": "Garantie",
+      "/faq": "FAQ",
+      "/sobre-as-proteses": "A propos des protheses",
+      "/naturalidade": "Aspect naturel",
+      "/por-que-revera": "Pourquoi Revera",
+      "/para-profissionais": "Pour les professionnels",
+      "/privacidade": "Confidentialite",
+      "/termos": "Conditions d'utilisation",
+      "/cookies": "Cookies",
+    },
+    footerGroups: { loja: "Boutique", saibaMais: "En savoir plus" },
+    cookies: {
+      aria: "Preferences de cookies",
+      titulo: "Votre confidentialite",
+      texto:
+        "Nous utilisons les cookies necessaires au fonctionnement de la boutique. Les cookies optionnels de Meta et Google ne sont actives que si vous les acceptez.",
+      aceitar: "Accepter les optionnels",
+      recusar: "Refuser",
+      saibaMais: "En savoir plus",
+    },
+    seoSuffix: {
+      title: "Protheses capillaires naturelles",
+      description: "Protheses capillaires Revera avec finition naturelle, aide au choix de couleur et achat securise.",
+    },
+  },
+  de: {
+    menuConheca: "Entdecken",
+    abrirMenu: "Menu offnen",
+    nav: {
+      "/": "Startseite",
+      "/produtos": "Haarsysteme",
+      "/cores": "Farben",
+      "/cuidados": "Pflege",
+      "/garantia": "Garantie",
+      "/faq": "FAQ",
+      "/sobre-as-proteses": "Uber Haarsysteme",
+      "/naturalidade": "Naturlicher Look",
+      "/por-que-revera": "Warum Revera",
+      "/para-profissionais": "Fur Profis",
+      "/privacidade": "Datenschutz",
+      "/termos": "Nutzungsbedingungen",
+      "/cookies": "Cookies",
+    },
+    footerGroups: { loja: "Shop", saibaMais: "Mehr erfahren" },
+    cookies: {
+      aria: "Cookie-Einstellungen",
+      titulo: "Ihre Privatsphare",
+      texto:
+        "Wir verwenden notwendige Cookies, damit der Shop funktioniert. Optionale Cookies von Meta und Google werden nur aktiviert, wenn Sie zustimmen.",
+      aceitar: "Optionale akzeptieren",
+      recusar: "Ablehnen",
+      saibaMais: "Mehr erfahren",
+    },
+    seoSuffix: {
+      title: "Naturliche Haarsysteme",
+      description: "Revera Haarsysteme mit naturlicher Optik, Farbberatung und sicherem Checkout.",
     },
   },
 };

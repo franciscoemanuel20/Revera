@@ -83,12 +83,24 @@ const RESUMO_GARANTIA: Record<SiteLocale, Array<[string, string]>> = {
     ["Viste un defecto", "Deten el uso y habla con Revera antes de alterar la pieza."],
     ["Vas a aplicarla", "Despues de cortar, moldear o pegar, la pieza no vuelve al estado original."],
   ],
+  fr: [
+    ["Reception", "Faites le test des cheveux avec la piece intacte."],
+    ["Defaut constate", "Arretez l'utilisation et contactez Revera avant de modifier la piece."],
+    ["Avant la pose", "Apres coupe, ajustement ou collage, la piece ne revient pas a son etat d'origine."],
+  ],
+  de: [
+    ["Erhalten", "Machen Sie den Haartest, solange das System unverandert ist."],
+    ["Fehler bemerkt", "Stoppen Sie die Nutzung und kontaktieren Sie Revera, bevor Sie das System verandern."],
+    ["Vor der Anwendung", "Nach Schneiden, Formen oder Kleben kann das System nicht in den Originalzustand zuruck."],
+  ],
 };
 
 const INTRO_GARANTIA: Record<SiteLocale, string> = {
   pt: "A regra principal é simples: confira a peça antes de cortar, moldar ou aplicar cola. Esse cuidado preserva a possibilidade de troca.",
   en: "The main rule is simple: check the piece before cutting, shaping or applying glue. This care preserves the possibility of exchange.",
   es: "La regla principal es simple: revisa la pieza antes de cortar, moldear o aplicar pegamento. Ese cuidado preserva la posibilidad de cambio.",
+  fr: "La regle principale est simple : verifiez la piece avant de la couper, de l'ajuster ou d'appliquer de la colle. Cette precaution preserve la possibilite d'echange.",
+  de: "Die wichtigste Regel ist einfach: Prufen Sie das System, bevor Sie es schneiden, formen oder Kleber auftragen. So bleibt ein Umtausch moglich.",
 };
 
 export async function GarantiaContent({ locale = "pt" }: { locale?: SiteLocale } = {}) {

@@ -41,6 +41,8 @@ const INTRO_PORQUE: Record<SiteLocale, string> = {
   pt: "A Reverá organiza a compra para reduzir dúvida: peça clara, cor comparável, teste antes do envio e política de garantia explicada.",
   en: "Revera organizes the purchase to reduce uncertainty: clear product information, comparable color, pre-shipping check and an explained warranty policy.",
   es: "Revera organiza la compra para reducir dudas: pieza clara, color comparable, prueba antes del envio y politica de garantia explicada.",
+  fr: "Revera organise l'achat pour reduire l'incertitude : informations claires, couleur comparable, verification avant expedition et garantie expliquee.",
+  de: "Revera strukturiert den Kauf, um Unsicherheit zu reduzieren: klare Produktinfos, vergleichbare Farbe, Prufung vor dem Versand und verstandliche Garantie.",
 };
 
 const RESUMO_PORQUE: Record<SiteLocale, Array<[string, string]>> = {
@@ -58,6 +60,16 @@ const RESUMO_PORQUE: Record<SiteLocale, Array<[string, string]>> = {
     ["Eleccion", "Modelos separados por base, textura e indicacion de uso."],
     ["Confianza", "Garantia y prueba de los cabellos explicadas antes de la compra."],
     ["Postcompra", "Orientacion sobre color, cuidados y conservacion de la pieza."],
+  ],
+  fr: [
+    ["Choix", "Modeles separes par base, texture et usage recommande."],
+    ["Confiance", "Garantie et test des cheveux expliques avant l'achat."],
+    ["Apres achat", "Conseils pour la couleur, l'entretien et la conservation de la piece."],
+  ],
+  de: [
+    ["Auswahl", "Modelle nach Basis, Textur und empfohlener Nutzung getrennt."],
+    ["Vertrauen", "Garantie und Haartest werden vor dem Kauf erklart."],
+    ["Nach dem Kauf", "Hinweise zu Farbe, Pflege und Erhaltung des Systems."],
   ],
 };
 
