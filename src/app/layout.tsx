@@ -38,6 +38,7 @@ const hotmartLike = Plus_Jakarta_Sans({
  */
 export async function generateMetadata(): Promise<Metadata> {
   const site = await aparenciaDoSite();
+
   return {
   metadataBase: new URL(baseUrl()),
   title: {
@@ -101,9 +102,19 @@ export default async function RootLayout({
               empurra o conteúdo sozinho. Cada página pública compensa com
               padding-top próprio (HEADER_HEIGHT_PX), igual o hero da home já
               fazia antes de o header existir. */}
-          <Header logo={site.logoUrl} brandName={site.brandName} menuPrincipal={site.menuPrincipal} menuConheca={site.menuConheca} linkProfissionais={site.linkProfissionais} />
+          <Header
+            logo={site.logoUrl}
+            brandName={site.brandName}
+            menuPrincipal={site.menuPrincipal}
+            menuConheca={site.menuConheca}
+            linkProfissionais={site.linkProfissionais}
+          />
           <div className="flex-1">{children}</div>
-          <Footer logo={site.logoUrl} brandName={site.brandName} instagramUrl={site.instagramUrl} />
+          <Footer
+            logo={site.logoUrl}
+            brandName={site.brandName}
+            instagramUrl={site.instagramUrl}
+          />
         </CartProvider>
       </body>
     </html>

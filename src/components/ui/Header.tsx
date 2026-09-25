@@ -6,6 +6,16 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CartTriggerButton } from "@/components/cart/CartTriggerButton";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+import {
+  SITE_COPY,
+  SITE_LOCALES,
+  labelForHref,
+  localeFromPath,
+  localeSwitchPath,
+  localizePath,
+  stripLocaleFromPath,
+  type SiteLocale,
+} from "@/lib/i18n/site";
 
 const LINKS = [
   // "Próteses" primeiro, e de propósito (29/08/2026): sem esta entrada,
@@ -59,9 +69,20 @@ const LINKS_MOBILE = [...LINKS, ...LINKS_CONHECA, LINK_PROFISSIONAIS];
  * --paper por trás dá ≈3,13:1; o mesmo texto sobre --ink puro (home, hero)
  * dá ≈18,68:1. A diferença é só ISSO — de onde vem a regra acima.
  */
-export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHECA, linkProfissionais = LINK_PROFISSIONAIS, brandName = "Reverá" }: { logo: string; menuPrincipal?: { href: string; label: string }[]; menuConheca?: { href: string; label: string }[]; linkProfissionais?: { href: string; label: string }; brandName?: string }) {
+type LinkDoMenu = { href: string; label: string };
+
+function traduzirLinks(links: LinkDoMenu[], locale: SiteLocale): LinkDoMenu[] {
+  return links.map((link) => ({
+    href: localizePath(link.href, locale),
+    label: locale === "pt" ? link.label : labelForHref(link.href, locale, link.label),
+  }));
+}
+
+export function Header({ locale = "pt", logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHECA, linkProfissionais = LINK_PROFISSIONAIS, brandName = "Reverá" }: { locale?: SiteLocale; logo: string; menuPrincipal?: LinkDoMenu[]; menuConheca?: LinkDoMenu[]; linkProfissionais?: LinkDoMenu; brandName?: string }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
+  const localeAtual = localeFromPath(pathname ?? "/") ?? locale;
+  const copy = SITE_COPY[localeAtual];
 
   useEffect(() => {
     const aoRolar = () => setScrolled(window.scrollY > 80);
@@ -115,20 +136,24 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
   // "Flutuante" (sem fundo sólido) só na home, e só antes de rolar — é a
   // única rota com hero escuro logo atrás do header. Em qualquer outra
   // página, ou depois de rolar na própria home, o header é sólido.
-  const flutuante = pathname === "/" && !scrolled;
-  const linksDesktopPrincipais = menuPrincipal.slice(0, 2);
+  const pathnamePublico = stripLocaleFromPath(pathname ?? "/");
+  const flutuante = pathnamePublico === "/" && !scrolled;
+  const menuPrincipalTraduzido = traduzirLinks(menuPrincipal, localeAtual);
+  const menuConhecaTraduzido = traduzirLinks(menuConheca, localeAtual);
+  const linkProfissionaisTraduzido = traduzirLinks([linkProfissionais], localeAtual)[0]!;
+  const linksDesktopPrincipais = menuPrincipalTraduzido.slice(0, 2);
   const linksDesktopConheca = [
-    ...menuPrincipal.slice(2),
-    ...menuConheca,
-    linkProfissionais,
+    ...menuPrincipalTraduzido.slice(2),
+    ...menuConhecaTraduzido,
+    linkProfissionaisTraduzido,
   ];
-  const linksMobile = [...menuPrincipal, ...menuConheca, linkProfissionais];
+  const linksMobile = [...menuPrincipalTraduzido, ...menuConhecaTraduzido, linkProfissionaisTraduzido];
 
   // DESTAQUE DE PRÓTESES (18/09/2026, pedido do Francisco): o link do
   // catálogo sai do meio dos textos do menu e vira um botão dourado no topo,
   // e no celular fica visível fora do ≡. Achado pelo href, não pela posição
   // nem pelo rótulo — o menu é editável no painel e pode ser reordenado.
-  const linkProteses = menuPrincipal.find((link) => link.href === "/produtos");
+  const linkProteses = menuPrincipalTraduzido.find((link) => link.href === localizePath("/produtos", localeAtual));
   const classeDestaque =
     "rounded-full border border-gold/70 bg-gold/10 px-4 py-1.5 text-sm font-semibold text-gold transition-colors hover:bg-gold hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold";
 
@@ -142,7 +167,7 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
       style={{ height: HEADER_HEIGHT_PX }}
     >
       <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="shrink-0" aria-label={`${brandName} — início`}>
+        <Link href={localizePath("/", localeAtual)} className="shrink-0" aria-label={`${brandName} — ${labelForHref("/", localeAtual, "inicio")}`}>
           {/* logo-revera.png é a versão com alfa para fundo escuro (ver
               comentário em src/app/page.tsx) — o header nunca fica sobre
               fundo claro sem o degradê escuro acima, então é sempre seguro
@@ -185,7 +210,7 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
             <summary
               className="flex cursor-pointer list-none items-center gap-1 text-sm text-paper/85 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold [&::-webkit-details-marker]:hidden"
             >
-              Conheça
+              {copy.menuConheca}
               <span aria-hidden="true" className="text-xs">▾</span>
             </summary>
             <nav className="surface-elevada absolute left-1/2 top-full mt-2 flex w-60 -translate-x-1/2 flex-col gap-1 rounded-md p-2 shadow-glow-gold">
@@ -220,7 +245,7 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
             porque "Sobre as próteses" não cabia numa linha. */}
         <details className="relative sm:hidden">
           <summary
-            aria-label="Abrir menu"
+            aria-label={copy.abrirMenu}
             className="flex min-h-toque min-w-toque list-none items-center justify-center text-paper [&::-webkit-details-marker]:hidden"
           >
             <span aria-hidden="true" className="text-2xl leading-none">
@@ -239,6 +264,20 @@ export function Header({ logo, menuPrincipal = LINKS, menuConheca = LINKS_CONHEC
             ))}
           </nav>
         </details>
+        <nav className="hidden items-center gap-1 md:flex" aria-label="Language">
+          {SITE_LOCALES.map((l) => (
+            <Link
+              key={l}
+              href={localeSwitchPath(pathname ?? "/", l)}
+              className={`rounded px-2 py-1 text-xs font-semibold uppercase ${
+                l === localeAtual ? "bg-paper text-ink" : "text-paper/70 hover:text-gold"
+              }`}
+              hrefLang={l === "pt" ? "pt-BR" : l}
+            >
+              {l}
+            </Link>
+          ))}
+        </nav>
         </div>
       </div>
     </header>

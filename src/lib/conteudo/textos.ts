@@ -27,6 +27,8 @@
 import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { REGISTRO, type ChaveDeTexto } from "./registro";
 import { MIDIA_REMOVIDA, urlsDasFotosDoSite } from "./fotos-do-site";
+import { traducaoDeConteudo } from "@/lib/i18n/conteudo-publico";
+import { DEFAULT_SITE_LOCALE, type SiteLocale } from "@/lib/i18n/site";
 
 /**
  * O leitor de texto de uma página.
@@ -93,7 +95,8 @@ export async function edicoesDaPagina(pagina: string): Promise<Map<string, strin
 }
 
 /** Carrega as edições e devolve o leitor pronto para a página usar. */
-export async function textosDaPagina(pagina: string): Promise<LeitorDeTexto> {
+export async function textosDaPagina(pagina: string, locale?: SiteLocale): Promise<LeitorDeTexto> {
+  const idioma = locale ?? DEFAULT_SITE_LOCALE;
   const edicoes = await edicoesDaPagina(pagina);
   const imagensPadrao = (Object.keys(REGISTRO) as ChaveDeTexto[])
     .filter((chave) => REGISTRO[chave].pagina === pagina && (REGISTRO[chave].tipo === "imagem" || REGISTRO[chave].tipo === "video"))
@@ -102,9 +105,15 @@ export async function textosDaPagina(pagina: string): Promise<LeitorDeTexto> {
   return (chave) => {
     const valor = edicoes.get(chave);
     if (valor === MIDIA_REMOVIDA) return "";
-    if (valor) return valor;
     const registro = REGISTRO[chave];
-    return (registro.tipo === "imagem" || registro.tipo === "video") ? (urls.get(registro.padrao) ?? registro.padrao) : registro.padrao;
+    if (registro.tipo === "imagem" || registro.tipo === "video") {
+      if (valor) return valor;
+      return urls.get(registro.padrao) ?? registro.padrao;
+    }
+    const traduzido = idioma === DEFAULT_SITE_LOCALE ? null : traducaoDeConteudo(chave, idioma);
+    if (traduzido) return traduzido;
+    if (valor) return valor;
+    return registro.padrao;
   };
 }
 

@@ -2,6 +2,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  SITE_COPY,
+  labelForHref,
+  localeFromPath,
+  localizePath,
+  type SiteLocale,
+} from "@/lib/i18n/site";
 
 // Rodapé das páginas públicas — só links que já existem de fato (a lista
 // cresceu de 5 para 9 em 26/08/2026, ver comentário abaixo de LINKS). Nada
@@ -51,12 +58,25 @@ const GRUPOS_DE_LINKS = [
   },
 ];
 
-export function Footer({ logo, brandName = "Reverá", instagramUrl = "" }: { logo: string; brandName?: string; instagramUrl?: string }) {
+export function Footer({ locale = "pt", logo, brandName = "Reverá", instagramUrl = "" }: { locale?: SiteLocale; logo: string; brandName?: string; instagramUrl?: string }) {
   const pathname = usePathname();
+  const localeAtual = localeFromPath(pathname ?? "/") ?? locale;
+  const copy = SITE_COPY[localeAtual];
 
   if (pathname?.startsWith("/admin")) {
     return null;
   }
+
+  const grupos = GRUPOS_DE_LINKS.map((grupo) => ({
+    titulo:
+      grupo.titulo === "Loja"
+        ? copy.footerGroups.loja
+        : copy.footerGroups.saibaMais,
+    links: grupo.links.map((link) => ({
+      href: localizePath(link.href, localeAtual),
+      label: localeAtual === "pt" ? link.label : labelForHref(link.href, localeAtual, link.label),
+    })),
+  }));
 
   return (
     <footer className="mt-auto bg-ink px-6 py-10">
@@ -73,7 +93,7 @@ export function Footer({ logo, brandName = "Reverá", instagramUrl = "" }: { log
           className="h-auto w-[170px]"
         /> : null}
         <div className="flex w-full flex-col flex-wrap justify-center gap-x-16 gap-y-8 sm:flex-row">
-          {GRUPOS_DE_LINKS.map((grupo) => (
+          {grupos.map((grupo) => (
             <nav
               key={grupo.titulo}
               aria-label={grupo.titulo}
