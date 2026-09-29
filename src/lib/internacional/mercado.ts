@@ -1,7 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
-import { reveraInternationalPaymentAvailable } from "@/lib/payments/revera";
-import { StripeProvider } from "@/lib/payments/stripe-provider";
+import { reveraInternationalCheckoutDisponivel } from "@/lib/payments/revera";
 import { ehMoedaSuportada, type Moeda } from "./moeda";
 import { paisesDoCheckout, regraDoPais } from "./paises";
 
@@ -11,7 +10,7 @@ import { paisesDoCheckout, regraDoPais } from "./paises";
  *
  * Um país só abre quando TODAS as pernas existem:
  *   1. está em CHECKOUT_PAISES (decisão do Francisco, por env);
- *   2. há gateway internacional configurado (Stripe);
+ *   2. há gateway internacional configurado (Stripe ou PayPal);
  *   3. há cotação de frete ATIVA e DENTRO DA VALIDADE para o país, na
  *      moeda do mercado (tabela intl_shipping_quotes — cotação manual,
  *      cadastrada pela operação; frete não se inventa);
@@ -109,7 +108,7 @@ export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado
   if (!ehMoedaSuportada(regra.moedaPadrao)) {
     return { aberto: false, motivo: "Moeda do mercado não suportada." };
   }
-  if (!reveraInternationalPaymentAvailable() || !(await new StripeProvider().disponivel())) {
+  if (!(await reveraInternationalCheckoutDisponivel())) {
     return { aberto: false, motivo: "Pagamento internacional indisponível.", codigo: "pagamento" };
   }
 

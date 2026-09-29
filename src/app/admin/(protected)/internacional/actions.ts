@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
 import { MOEDAS_SUPORTADAS } from "@/lib/internacional/moeda";
 import { ehPaisSuportado } from "@/lib/internacional/paises";
+import { cotarDhlOperacional } from "@/lib/shipping/dhl/admin-quote";
+import { modoDhl } from "@/lib/shipping/dhl/mydhl-provider";
 
 /**
  * Server Actions do painel Internacional — preço por mercado e cotações
@@ -33,6 +35,22 @@ const precoSchema = z.object({
 
 export type SalvarPrecoIntlInput = z.infer<typeof precoSchema>;
 export type ResultadoAdminIntl = { error: string } | { ok: true };
+
+async function exigirAdminInternacional(): Promise<{ error: string } | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão de admin expirada." };
+
+  const { data: admin, error } = await supabase
+    .from("admin_users")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error || !admin) return { error: "Acesso administrativo necessário." };
+  return null;
+}
 
 export async function salvarPrecosInternacionaisAction(
   input: SalvarPrecoIntlInput
@@ -166,4 +184,70 @@ export async function desativarCotacaoInternacionalAction(
 
   revalidatePath("/admin/internacional");
   return { ok: true };
+}
+
+const cotarDhlSchema = z.object({
+  country: z.string().trim().transform((v) => v.toUpperCase()).refine((v) => v !== "BR" && ehPaisSuportado(v), "País inválido."),
+  postalCode: z.string().trim().max(30).nullable(),
+  cityName: z.string().trim().min(1, "Informe a cidade.").max(80),
+  provinceCode: z.string().trim().max(40).nullable(),
+  addressLine1: z.string().trim().max(120).nullable(),
+  currency: z.enum(MOEDAS_INTL as unknown as [string, ...string[]]),
+  declaredValueCents: z.number().int().positive(),
+  weightGrams: z.number().int().positive(),
+  lengthCm: z.number().positive(),
+  widthCm: z.number().positive(),
+  heightCm: z.number().positive(),
+});
+
+export type CotarDhlOperacionalInput = z.infer<typeof cotarDhlSchema>;
+
+export type ResultadoCotacaoDhlOperacional =
+  | {
+      ok: true;
+      ambiente: "sandbox" | "producao";
+      quotes: Array<{
+        productCode: string;
+        productName: string;
+        currency: string;
+        priceCents: number;
+        etaDays: number | null;
+        deliveryDate: string | null;
+      }>;
+    }
+  | { error: string };
+
+export async function cotarDhlOperacionalAction(
+  input: CotarDhlOperacionalInput
+): Promise<ResultadoCotacaoDhlOperacional> {
+  const bloqueio = await exigirAdminInternacional();
+  if (bloqueio) return bloqueio;
+
+  const parsed = cotarDhlSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dado inválido para cotar DHL." };
+  }
+
+  try {
+    const resultado = await cotarDhlOperacional(parsed.data);
+    return {
+      ok: true,
+      ambiente: modoDhl(),
+      quotes: resultado.quotes.map((q) => ({
+        productCode: q.productCode,
+        productName: q.productName,
+        currency: q.currency,
+        priceCents: q.priceCents,
+        etaDays: q.etaDays,
+        deliveryDate: q.deliveryDate,
+      })),
+    };
+  } catch (e) {
+    return {
+      error:
+        e instanceof Error
+          ? e.message
+          : "Não foi possível consultar a DHL agora.",
+    };
+  }
 }

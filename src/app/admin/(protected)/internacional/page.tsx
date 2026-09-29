@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { reveraInternationalPaymentAvailable } from "@/lib/payments/revera";
+import {
+  getReveraInternationalProviderName,
+  reveraInternationalPaymentAvailable,
+} from "@/lib/payments/revera";
 import { paisesDoCheckout, nomeDoPais, bandeira, PAISES } from "@/lib/internacional/paises";
 import { PrecosInternacionais } from "./PrecosInternacionais";
 import { CotacoesFrete } from "./CotacoesFrete";
@@ -33,7 +36,13 @@ export default async function InternacionalPage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  const stripeOk = reveraInternationalPaymentAvailable();
+  const gatewayInternacionalOk = reveraInternationalPaymentAvailable();
+  let gatewayInternacional = "stripe";
+  try {
+    gatewayInternacional = getReveraInternationalProviderName();
+  } catch {
+    gatewayInternacional = "configuração inválida";
+  }
   const paisesAbertos = paisesDoCheckout().filter((p) => p !== "BR");
   const paisesConhecidos = Object.keys(PAISES).filter((p) => p !== "BR");
 
@@ -52,8 +61,8 @@ export default async function InternacionalPage() {
         <h2 className="font-medium text-ink">Estado das alavancas</h2>
         <ul className="mt-2 space-y-1 text-ink/80">
           <li>
-            Gateway internacional (Stripe):{" "}
-            {stripeOk ? (
+            Gateway internacional ({gatewayInternacional}):{" "}
+            {gatewayInternacionalOk ? (
               <span className="text-moss">configurado</span>
             ) : (
               <span className="font-medium text-amber-800">NÃO CONFIGURADO</span>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
 import {
+  cotarDhlOperacionalAction,
   criarCotacaoInternacionalAction,
   desativarCotacaoInternacionalAction,
 } from "./actions";
@@ -55,6 +56,20 @@ export function CotacoesFrete({ cotacoes }: { cotacoes: Cotacao[] }) {
   });
   const [estado, setEstado] = useState<"parado" | "salvando">("parado");
   const [erro, setErro] = useState<string | null>(null);
+  const [consulta, setConsulta] = useState({
+    cityName: "New York",
+    postalCode: "10001",
+    provinceCode: "NY",
+    addressLine1: "",
+    declaredValue: "1600.00",
+    weightGrams: "300",
+    lengthCm: "30",
+    widthCm: "20",
+    heightCm: "5",
+  });
+  const [estadoDhl, setEstadoDhl] = useState<"parado" | "cotando">("parado");
+  const [erroDhl, setErroDhl] = useState<string | null>(null);
+  const [resultadoDhl, setResultadoDhl] = useState<Awaited<ReturnType<typeof cotarDhlOperacionalAction>> | null>(null);
 
   const moedaDoPais =
     PAISES_INTL.find((p) => p.iso === form.country)?.moeda ?? "USD";
@@ -82,6 +97,40 @@ export function CotacoesFrete({ cotacoes }: { cotacoes: Cotacao[] }) {
     });
     setEstado("parado");
     if ("error" in resultado) setErro(resultado.error);
+  }
+
+  async function consultarDhl() {
+    setErroDhl(null);
+    setResultadoDhl(null);
+    const declarado = Number(consulta.declaredValue.replace(",", "."));
+    if (!Number.isFinite(declarado) || declarado <= 0) {
+      setErroDhl("Informe o valor declarado para a simulação DHL.");
+      return;
+    }
+    const numeros = {
+      weightGrams: Number(consulta.weightGrams),
+      lengthCm: Number(consulta.lengthCm),
+      widthCm: Number(consulta.widthCm),
+      heightCm: Number(consulta.heightCm),
+    };
+    if (Object.values(numeros).some((n) => !Number.isFinite(n) || n <= 0)) {
+      setErroDhl("Peso e medidas precisam ser maiores que zero.");
+      return;
+    }
+    setEstadoDhl("cotando");
+    const resultado = await cotarDhlOperacionalAction({
+      country: form.country,
+      postalCode: consulta.postalCode.trim() || null,
+      cityName: consulta.cityName,
+      provinceCode: consulta.provinceCode.trim() || null,
+      addressLine1: consulta.addressLine1.trim() || null,
+      currency: moedaDoPais,
+      declaredValueCents: Math.round(declarado * 100),
+      ...numeros,
+    });
+    setEstadoDhl("parado");
+    setResultadoDhl(resultado);
+    if ("error" in resultado) setErroDhl(resultado.error);
   }
 
   const input =
@@ -195,6 +244,130 @@ export function CotacoesFrete({ cotacoes }: { cotacoes: Cotacao[] }) {
           </Button>
           {erro ? <span className="text-xs text-red-700">{erro}</span> : null}
         </div>
+      </div>
+
+      <div className="rounded-lg border border-sand bg-paper p-4">
+        <h3 className="text-sm font-medium text-ink">Consultar DHL</h3>
+        <p className="mt-1 text-xs text-ink/60">
+          Diagnóstico operacional: consulta a MyDHL API e mostra opções. Não salva cotação,
+          não abre país, não cria envio. Enquanto a chave de produção não for aprovada,
+          mantenha DHL_AMBIENTE=sandbox.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <label className="flex flex-col gap-1 text-xs text-ink/70">
+            Cidade
+            <input
+              value={consulta.cityName}
+              onChange={(e) => setConsulta((f) => ({ ...f, cityName: e.target.value }))}
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink/70">
+            Postal
+            <input
+              value={consulta.postalCode}
+              onChange={(e) => setConsulta((f) => ({ ...f, postalCode: e.target.value }))}
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink/70">
+            Região
+            <input
+              value={consulta.provinceCode}
+              onChange={(e) => setConsulta((f) => ({ ...f, provinceCode: e.target.value }))}
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink/70">
+            Valor ({moedaDoPais})
+            <input
+              value={consulta.declaredValue}
+              onChange={(e) => setConsulta((f) => ({ ...f, declaredValue: e.target.value }))}
+              inputMode="decimal"
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink/70">
+            Peso (g)
+            <input
+              value={consulta.weightGrams}
+              onChange={(e) => setConsulta((f) => ({ ...f, weightGrams: e.target.value }))}
+              inputMode="numeric"
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink/70">
+            C (cm)
+            <input
+              value={consulta.lengthCm}
+              onChange={(e) => setConsulta((f) => ({ ...f, lengthCm: e.target.value }))}
+              inputMode="decimal"
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink/70">
+            L (cm)
+            <input
+              value={consulta.widthCm}
+              onChange={(e) => setConsulta((f) => ({ ...f, widthCm: e.target.value }))}
+              inputMode="decimal"
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink/70">
+            A (cm)
+            <input
+              value={consulta.heightCm}
+              onChange={(e) => setConsulta((f) => ({ ...f, heightCm: e.target.value }))}
+              inputMode="decimal"
+              className={input}
+            />
+          </label>
+          <label className="col-span-2 flex flex-col gap-1 text-xs text-ink/70">
+            Linha do endereço
+            <input
+              value={consulta.addressLine1}
+              onChange={(e) => setConsulta((f) => ({ ...f, addressLine1: e.target.value }))}
+              placeholder="Opcional para diagnóstico"
+              className={input}
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button type="button" variant="secondary" onClick={consultarDhl} disabled={estadoDhl === "cotando"}>
+            {estadoDhl === "cotando" ? "Consultando…" : "Consultar DHL"}
+          </Button>
+          {erroDhl ? <span className="text-xs text-red-700">{erroDhl}</span> : null}
+        </div>
+        {resultadoDhl && "ok" in resultadoDhl ? (
+          <div className="mt-3 overflow-x-auto rounded-md border border-sand/80">
+            <table className="w-full text-left text-xs text-ink">
+              <thead>
+                <tr className="border-b border-sand text-ink/60">
+                  <th className="px-2 py-1">Ambiente</th>
+                  <th className="px-2 py-1">Serviço</th>
+                  <th className="px-2 py-1">Valor</th>
+                  <th className="px-2 py-1">Prazo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resultadoDhl.quotes.map((q) => (
+                  <tr key={`${q.productCode}-${q.priceCents}`} className="border-b border-sand/60 last:border-0">
+                    <td className="px-2 py-1">{resultadoDhl.ambiente}</td>
+                    <td className="px-2 py-1">
+                      {q.productName} <span className="text-ink/50">({q.productCode})</span>
+                    </td>
+                    <td className="px-2 py-1">{formatarValorNaMoeda(q.priceCents, q.currency)}</td>
+                    <td className="px-2 py-1">
+                      {q.etaDays == null ? "—" : `${q.etaDays} dias`}
+                      {q.deliveryDate ? <span className="text-ink/50"> · {q.deliveryDate}</span> : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-sand bg-paper">
