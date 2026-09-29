@@ -264,7 +264,7 @@ export function Header({ locale = "pt", logo, menuPrincipal = LINKS, menuConheca
             ))}
           </nav>
         </details>
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Language">
+        <nav className="hidden items-center gap-1 md:flex" aria-label="Idioma">
           {SITE_LOCALES.map((l) => (
             <Link
               key={l}

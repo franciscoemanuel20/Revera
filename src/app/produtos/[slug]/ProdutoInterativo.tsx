@@ -132,6 +132,33 @@ const passosCompraSegura = [
   "Frete e pagamento ficam na próxima etapa",
 ];
 
+function promessaDoProduto(nome: string, baseThicknessMm: number | null) {
+  const normalizado = nome.toLowerCase();
+  const espessura = baseThicknessMm != null ? `${baseThicknessMm.toLocaleString("pt-BR")}mm` : null;
+
+  if (normalizado.includes("0,06") || normalizado.includes("0.06")) {
+    return `Base${espessura ? ` ${espessura}` : ""} para quem quer a frente mais discreta da linha Reverá.`;
+  }
+
+  if (normalizado.includes("0,08") || normalizado.includes("0.08")) {
+    return "Equilíbrio entre naturalidade, resistência e praticidade para o uso diário.";
+  }
+
+  if (normalizado.includes("cacho") || normalizado.includes("afro")) {
+    return "Textura própria para preservar volume, movimento e identidade do cabelo.";
+  }
+
+  if (normalizado.includes("full lace")) {
+    return "Base em renda para leveza e acabamento natural em toda a peça.";
+  }
+
+  if (normalizado.includes("austr")) {
+    return "Renda nas áreas visíveis e película onde a fixação precisa de mais segurança.";
+  }
+
+  return "Peça conferida antes do envio, com escolha de cor e compra segura.";
+}
+
 function beneficiosDoProduto(nome: string, baseThicknessMm: number | null) {
   const normalizado = nome.toLowerCase();
   const espessura = baseThicknessMm != null ? `${baseThicknessMm.toLocaleString("pt-BR")} mm` : null;
@@ -472,6 +499,7 @@ export function ProdutoInterativo({
 
   const tituloComercial = nomeComercial(name);
   const beneficios = beneficiosDoProduto(name, baseThicknessMm);
+  const promessa = promessaDoProduto(name, baseThicknessMm);
   const temPedidoPorCorNaSacola = colors.length > 0 && totalProdutoNaSacola > 0;
   const rotuloBotao =
     varianteExibicao && varianteExibicao.stockQty <= 0
@@ -619,7 +647,73 @@ export function ProdutoInterativo({
       className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 pb-32 sm:pb-16"
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
-      <div className="grid gap-8 sm:grid-cols-2 lg:items-start">
+      <section className="rounded-2xl border border-sand bg-paper p-4 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] sm:p-5">
+        <div className="grid gap-5 sm:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] sm:items-center">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-sand sm:aspect-[3/4]">
+            {fotoAtiva.tipo === "video" ? (
+              <video src={fotoAtiva.src} controls playsInline className="h-full w-full object-cover" aria-label={fotoAtiva.alt} />
+            ) : (
+              <Image
+                src={fotoAtiva.src}
+                alt={fotoAtiva.alt}
+                fill
+                sizes="(min-width: 640px) 45vw, 100vw"
+                className={`object-cover ${fotoAtiva.ehFotoDeCor ? "object-contain sm:object-cover" : ""}`}
+                priority
+              />
+            )}
+          </div>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <span className="eyebrow-ink">Compra segura Reverá</span>
+              <h1 className="font-display text-3xl leading-tight text-ink sm:text-4xl">
+                {tituloComercial}
+              </h1>
+              <p className="text-base leading-7 text-ink/75">{promessa}</p>
+              {description ? <p className="text-sm leading-6 text-ink/60">{description}</p> : null}
+            </div>
+            {varianteExibicao ? (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/55">
+                  Preço da peça
+                </span>
+                <Price
+                  cents={resultadoDesconto!.unitPriceCents}
+                  compareAtCents={varianteExibicao.compareAtPriceCents}
+                />
+              </div>
+            ) : (
+              <p className="text-ink/60">Preço em definição — em breve disponível para compra.</p>
+            )}
+            <div className="grid gap-2 text-sm text-ink/70 sm:grid-cols-2">
+              <span className="rounded-lg bg-sand/60 px-3 py-2">Frete calculado por CEP</span>
+              <span className="rounded-lg bg-sand/60 px-3 py-2">Envio para todo o Brasil</span>
+              <span className="rounded-lg bg-sand/60 px-3 py-2">Teste de qualidade antes do envio</span>
+              <span className="rounded-lg bg-sand/60 px-3 py-2">7 dias úteis de garantia</span>
+            </div>
+            <div className="rounded-xl border border-gold/45 bg-gold/10 p-4">
+              <p className="text-sm font-semibold text-ink">Está em dúvida sobre a cor?</p>
+              <p className="mt-1 text-sm leading-6 text-ink/70">
+                Compare a cartela antes de comprar. Se precisar, peça ajuda para escolher o tom mais próximo.
+              </p>
+              <Link
+                href="/cores#ajuda"
+                className="mt-3 inline-flex min-h-toque items-center justify-center rounded-xl border border-ink/25 bg-paper px-4 py-2 text-sm font-semibold text-ink transition-all duration-300 hover:-translate-y-0.5 hover:border-gold-deep hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+              >
+                Não sei qual cor escolher
+              </Link>
+            </div>
+            <a
+              href="#escolher-cor"
+              className="min-h-toque rounded-xl bg-gold-metal px-5 py-3 text-center text-sm font-semibold text-ink shadow-[0_8px_20px_-10px_rgb(var(--gold-rgb)_/_0.9)] transition-all duration-300 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-glow-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+            >
+              Escolher cor e comprar
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <div id="escolher-cor" className="grid scroll-mt-28 gap-8 sm:grid-cols-2 lg:items-start">
         {/* Galeria — miniatura clicável troca a foto principal; hover na
             foto principal dá o leve zoom (scale 1.03) pedido para fotos de
             produto/cor, dentro de container overflow-hidden (nunca anima
@@ -747,9 +841,9 @@ export function ProdutoInterativo({
           <Reveal delayMs={100} className="flex flex-col gap-5">
             <div className="flex flex-col gap-2">
               <span className="eyebrow-ink">Reverá</span>
-              <h1 className="font-display text-3xl text-ink">{tituloComercial}</h1>
+              <h2 className="font-display text-3xl text-ink">{tituloComercial}</h2>
               {tituloComercial !== name ? <p className="text-sm text-ink/55">{name}</p> : null}
-              {description ? <p className="text-ink/80">{description}</p> : null}
+              <p className="text-ink/80">{promessa}</p>
               {baseThicknessMm != null ? (
                 <p className="text-sm text-ink/60">
                   Espessura da base: {baseThicknessMm.toLocaleString("pt-BR")}mm
@@ -772,8 +866,8 @@ export function ProdutoInterativo({
               <div className="flex flex-col gap-3 rounded-xl border border-gold/45 bg-gold/10 p-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0 text-sm text-ink/75">
-                    <p className="font-semibold text-ink">1. Monte seu pedido por cor</p>
-                    <p>Use + para misturar cores. A oferta soma as peças deste modelo.</p>
+                    <p className="font-semibold text-ink">1. Escolha a cor e monte seu pedido</p>
+                    <p>Use + para adicionar uma ou mais cores. A oferta soma as peças deste modelo.</p>
                   </div>
                   {varianteExibicao && resultadoDesconto ? (
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:justify-end">

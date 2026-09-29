@@ -4,11 +4,9 @@ import {
   LOCALE_COOKIE,
   LOCALE_HEADER,
   isFullyLocalizedPath,
-  localeFromAcceptLanguage,
   localeFromPath,
   normalizeSiteLocale,
   stripLocaleFromPath,
-  type SiteLocale,
 } from "@/lib/i18n/site";
 
 function shouldIgnore(pathname: string): boolean {
@@ -23,13 +21,6 @@ function shouldIgnore(pathname: string): boolean {
   );
 }
 
-function preferredLocale(request: NextRequest): SiteLocale {
-  return (
-    normalizeSiteLocale(request.cookies.get(LOCALE_COOKIE)?.value) ??
-    localeFromAcceptLanguage(request.headers.get("accept-language"))
-  );
-}
-
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (shouldIgnore(pathname)) return NextResponse.next();
@@ -37,15 +28,15 @@ export function middleware(request: NextRequest) {
   const localeInPath = localeFromPath(pathname);
 
   if (!localeInPath) {
-    const locale = preferredLocale(request);
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set(LOCALE_HEADER, locale);
-
+    const locale = normalizeSiteLocale(request.cookies.get(LOCALE_COOKIE)?.value) ?? DEFAULT_SITE_LOCALE;
     if (locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname)) {
       const url = request.nextUrl.clone();
       url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
       return NextResponse.redirect(url);
     }
+
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set(LOCALE_HEADER, locale);
 
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
@@ -55,10 +46,11 @@ export function middleware(request: NextRequest) {
   url.pathname = strippedPath;
   url.search = search;
 
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set(LOCALE_HEADER, localeInPath);
-
-  if (shouldIgnore(strippedPath) || !isFullyLocalizedPath(strippedPath)) {
+  if (
+    localeInPath === DEFAULT_SITE_LOCALE ||
+    shouldIgnore(strippedPath) ||
+    !isFullyLocalizedPath(strippedPath)
+  ) {
     const response = NextResponse.redirect(url);
     response.cookies.set(LOCALE_COOKIE, localeInPath, {
       maxAge: 60 * 60 * 24 * 365,
@@ -68,17 +60,14 @@ export function middleware(request: NextRequest) {
     return response;
   }
 
-  const response =
-    localeInPath === DEFAULT_SITE_LOCALE
-      ? NextResponse.redirect(url)
-      : NextResponse.next({ request: { headers: requestHeaders } });
-
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(LOCALE_HEADER, localeInPath);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.cookies.set(LOCALE_COOKIE, localeInPath, {
     maxAge: 60 * 60 * 24 * 365,
     path: "/",
     sameSite: "lax",
   });
-
   return response;
 }
 

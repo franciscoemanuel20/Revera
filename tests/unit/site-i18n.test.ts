@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
+import { middleware } from "@/middleware";
+import { CATALOGO_COPY, hrefAjudaCorCatalogo } from "@/app/produtos/ProdutosContent";
 import {
   DEFAULT_SITE_LOCALE,
+  LOCALE_COOKIE,
+  LOCALE_HEADER,
   labelForHref,
   isFullyLocalizedPath,
   localeSwitchPath,
@@ -88,5 +93,77 @@ describe("i18n publico do site", () => {
     expect(isFullyLocalizedPath("/por-que-revera")).toBe(true);
     expect(isFullyLocalizedPath("/cuidados")).toBe(false);
     expect(isFullyLocalizedPath("/produtos/micropele-008")).toBe(false);
+  });
+
+  it("middleware mantem o dominio sem prefixo em portugues por padrao", () => {
+    const request = new NextRequest("https://www.reveraprotesecapilar.com/produtos", {
+      headers: { "accept-language": "de-DE,de;q=0.9" },
+    });
+
+    const response = middleware(request);
+
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("pt");
+  });
+
+  it("middleware redireciona rota plenamente localizada quando existe escolha manual em cookie", () => {
+    const request = new NextRequest("https://www.reveraprotesecapilar.com/cores");
+    request.cookies.set(LOCALE_COOKIE, "en");
+
+    const response = middleware(request);
+
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("en");
+
+    const produtos = new NextRequest("https://www.reveraprotesecapilar.com/produtos");
+    produtos.cookies.set(LOCALE_COOKIE, "en");
+
+    expect(middleware(produtos).headers.get("location")).toBe(
+      "https://www.reveraprotesecapilar.com/en/produtos"
+    );
+  });
+
+  it("middleware preserva rotas localizadas diretas que ainda existem", () => {
+    const response = middleware(new NextRequest("https://www.reveraprotesecapilar.com/en/produtos"));
+
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("en");
+  });
+
+  it("middleware preserva garantia localizada e limpa o prefixo portugues", () => {
+    const localizada = middleware(new NextRequest("https://www.reveraprotesecapilar.com/es/garantia"));
+    const portugues = middleware(new NextRequest("https://www.reveraprotesecapilar.com/pt/produtos"));
+
+    expect(localizada.headers.get("location")).toBeNull();
+    expect(localizada.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("es");
+    expect(portugues.headers.get("location")).toBe("https://www.reveraprotesecapilar.com/produtos");
+  });
+
+  it("middleware grava idioma manual antes de limpar rota nao localizada", () => {
+    const response = middleware(new NextRequest("https://www.reveraprotesecapilar.com/en/cores"));
+
+    expect(response.headers.get("location")).toBe("https://www.reveraprotesecapilar.com/cores");
+    expect(response.headers.get("set-cookie")).toContain(`${LOCALE_COOKIE}=en`);
+  });
+
+  it("mantem selos comerciais traduzidos no catalogo localizado", () => {
+    const provasPt = CATALOGO_COPY.pt.provas;
+
+    expect(CATALOGO_COPY.en.provas).not.toEqual(provasPt);
+    expect(CATALOGO_COPY.es.provas).not.toEqual(provasPt);
+    expect(CATALOGO_COPY.fr.provas).not.toEqual(provasPt);
+    expect(CATALOGO_COPY.de.provas).not.toEqual(provasPt);
+    expect(CATALOGO_COPY.en.provas).toContain("Shipping across Brazil");
+    expect(CATALOGO_COPY.es.provas).toContain("Envio a todo Brasil");
+    expect(CATALOGO_COPY.fr.provas).toContain("Livraison dans tout le Bresil");
+    expect(CATALOGO_COPY.de.provas).toContain("Versand in ganz Brasilien");
+  });
+
+  it("nao envia catalogo localizado para ajuda de cor ainda portuguesa", () => {
+    expect(hrefAjudaCorCatalogo("pt")).toBe("/cores#ajuda");
+    expect(hrefAjudaCorCatalogo("en")).toBeNull();
+    expect(hrefAjudaCorCatalogo("es")).toBeNull();
+    expect(hrefAjudaCorCatalogo("fr")).toBeNull();
+    expect(hrefAjudaCorCatalogo("de")).toBeNull();
   });
 });

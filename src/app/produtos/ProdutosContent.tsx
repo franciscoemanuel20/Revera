@@ -46,7 +46,14 @@ const ETAPAS_COMPRA = [
   "Receba com orientação",
 ];
 
-const CATALOGO_COPY: Record<SiteLocale, {
+const PROVAS_COMPRA = [
+  "Compra segura",
+  "Frete por CEP",
+  "Envio para todo o Brasil",
+  "Ajuda para escolher a cor",
+];
+
+export const CATALOGO_COPY: Record<SiteLocale, {
   eyebrow: string;
   titulo: string;
   intro: string;
@@ -63,12 +70,21 @@ const CATALOGO_COPY: Record<SiteLocale, {
   etapasAria: string;
   etapas: string[];
   badges: Record<string, string>;
+  heroCta: string;
+  heroCtaSecundario: string;
+  precoInicial: string;
+  provaTitulo: string;
+  provaTexto: string;
+  guiaTitulo: string;
+  guiaTexto: string;
+  guiaBotao: string;
+  provas: string[];
 }> = {
   pt: {
-    eyebrow: "Nossas peças",
-    titulo: "Próteses Reverá",
+    eyebrow: "Prótese capilar natural",
+    titulo: "Escolha sua prótese capilar com ajuda para acertar a cor",
     intro:
-      "Escolha por naturalidade, textura e base. Todas as peças passam por conferência antes do envio; a cor é definida na página de cada modelo.",
+      "Peças Reverá com acabamento natural, conferência antes do envio e compra online com frete calculado por CEP. Você escolhe o modelo, compara a cor e finaliza com segurança.",
     tags: ["Micropele", "Full lace", "Cacheadas", "Afro"],
     vazio: "Nenhuma peça disponível para compra neste momento.",
     manutencaoEyebrow: "Depois da prótese",
@@ -82,6 +98,15 @@ const CATALOGO_COPY: Record<SiteLocale, {
     etapasAria: "Etapas da compra",
     etapas: ETAPAS_COMPRA,
     badges: ROTULOS_VALOR,
+    heroCta: "Escolher minha prótese",
+    heroCtaSecundario: "Tenho dúvida sobre a cor",
+    precoInicial: "Modelos a partir de R$ 650",
+    provaTitulo: "Compra assistida, sem escolher no escuro",
+    provaTexto: "A cor é escolhida na página do modelo. Se ficar em dúvida, a página de cores mostra a cartela e abre o pedido de ajuda antes da compra.",
+    guiaTitulo: "A cor é a maior dúvida? A Reverá te ajuda antes da compra.",
+    guiaTexto: "Compare a cartela, veja os tons disponíveis e peça orientação se ainda estiver inseguro. A compra só avança depois de escolher a cor.",
+    guiaBotao: "Ver cartela de cores",
+    provas: PROVAS_COMPRA,
   },
   en: {
     eyebrow: "Our pieces",
@@ -113,6 +138,15 @@ const CATALOGO_COPY: Record<SiteLocale, {
       "full-lace": "Total lightness",
       australia: "Secure hold",
     },
+    heroCta: "Choose my hair system",
+    heroCtaSecundario: "I need color help",
+    precoInicial: "Models from R$650",
+    provaTitulo: "Guided purchase",
+    provaTexto: "Color is selected on the model page, with guidance before checkout.",
+    guiaTitulo: "Not sure which hair system fits?",
+    guiaTexto: "Compare texture, base and use case before choosing.",
+    guiaBotao: "See color chart",
+    provas: ["Secure purchase", "Shipping by postal code", "Shipping across Brazil", "Color choice support"],
   },
   es: {
     eyebrow: "Nuestras piezas",
@@ -144,6 +178,15 @@ const CATALOGO_COPY: Record<SiteLocale, {
       "full-lace": "Ligereza total",
       australia: "Fijacion segura",
     },
+    heroCta: "Elegir mi protesis",
+    heroCtaSecundario: "Necesito ayuda con el color",
+    precoInicial: "Modelos desde R$650",
+    provaTitulo: "Compra guiada",
+    provaTexto: "El color se elige en la pagina del modelo, con orientacion antes de finalizar.",
+    guiaTitulo: "No sabes cual protesis elegir?",
+    guiaTexto: "Compara textura, base e indicacion de uso antes de elegir.",
+    guiaBotao: "Ver carta de colores",
+    provas: ["Compra segura", "Envio por codigo postal", "Envio a todo Brasil", "Ayuda para elegir el color"],
   },
   fr: {
     eyebrow: "Nos pieces",
@@ -175,6 +218,15 @@ const CATALOGO_COPY: Record<SiteLocale, {
       "full-lace": "Legerete totale",
       australia: "Fixation sure",
     },
+    heroCta: "Choisir ma prothese",
+    heroCtaSecundario: "Besoin d'aide couleur",
+    precoInicial: "Modeles des R$650",
+    provaTitulo: "Achat guide",
+    provaTexto: "La couleur est choisie sur la page du modele, avec aide avant le paiement.",
+    guiaTitulo: "Vous ne savez pas quelle prothese choisir?",
+    guiaTexto: "Comparez texture, base et usage avant de choisir.",
+    guiaBotao: "Voir les couleurs",
+    provas: ["Achat securise", "Livraison par code postal", "Livraison dans tout le Bresil", "Aide au choix de couleur"],
   },
   de: {
     eyebrow: "Unsere Systeme",
@@ -206,8 +258,21 @@ const CATALOGO_COPY: Record<SiteLocale, {
       "full-lace": "Volle Leichtigkeit",
       australia: "Sicherer Halt",
     },
+    heroCta: "Haarsystem wahlen",
+    heroCtaSecundario: "Hilfe bei der Farbe",
+    precoInicial: "Modelle ab R$650",
+    provaTitulo: "Gefuhrter Kauf",
+    provaTexto: "Die Farbe wird auf der Modellseite gewahlt, mit Hilfe vor dem Checkout.",
+    guiaTitulo: "Nicht sicher, welches System passt?",
+    guiaTexto: "Vergleichen Sie Textur, Basis und Anwendung vor der Auswahl.",
+    guiaBotao: "Farben ansehen",
+    provas: ["Sicherer Kauf", "Versand nach Postleitzahl", "Versand in ganz Brasilien", "Hilfe bei der Farbauswahl"],
   },
 };
+
+export function hrefAjudaCorCatalogo(locale: SiteLocale): string | null {
+  return locale === "pt" ? "/cores#ajuda" : null;
+}
 
 /**
  * O CATÁLOGO — a página que faltava (29/08/2026).
@@ -320,14 +385,56 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
       className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 pb-20"
       style={{ paddingTop: HEADER_HEIGHT_PX + 48 }}
     >
-      <header className="rounded-2xl border border-sand bg-paper p-6 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] sm:p-8">
-        <div className="flex flex-col gap-3">
-          <span className="eyebrow-ink">{copy.eyebrow}</span>
-          <h1 className="text-balance font-display text-4xl text-ink">{copy.titulo}</h1>
-          <p className="max-w-2xl text-ink/70">{copy.intro}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+      <header className="overflow-hidden rounded-2xl border border-sand bg-paper shadow-[0_1px_0_rgb(255_255_255_/_0.8)]">
+        <div className="grid gap-6 p-6 sm:p-8 md:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] md:items-center">
+          <div className="flex flex-col gap-4">
+            <span className="eyebrow-ink">{copy.eyebrow}</span>
+            <h1 className="text-balance font-display text-4xl leading-tight text-ink sm:text-5xl">
+              {copy.titulo}
+            </h1>
+            <p className="max-w-2xl text-base leading-7 text-ink/75">{copy.intro}</p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <a
+                href="#catalogo-titulo"
+                className="min-h-toque rounded-xl bg-gold-metal px-5 py-3 text-center text-sm font-semibold text-ink shadow-[0_8px_20px_-10px_rgb(var(--gold-rgb)_/_0.9)] transition-all duration-300 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-glow-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+              >
+                {copy.heroCta}
+              </a>
+              {hrefAjudaCorCatalogo(locale) ? (
+                <a
+                  href={hrefAjudaCorCatalogo(locale)!}
+                  className="min-h-toque rounded-xl border border-ink/20 bg-paper px-5 py-3 text-center text-sm font-semibold text-ink transition-all duration-300 hover:-translate-y-0.5 hover:border-gold-deep hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                >
+                  {copy.heroCtaSecundario}
+                </a>
+              ) : null}
+            </div>
+            <div className="grid gap-2 text-sm text-ink/70 sm:grid-cols-2">
+              {copy.provas.map((item) => (
+                <span key={item} className="rounded-lg bg-sand/60 px-3 py-2">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-sand bg-sand/45 p-4">
+            <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-sand">
+              <img
+                src={fallbackProduto}
+                alt="Prótese capilar Reverá com acabamento natural"
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              <p className="text-sm font-semibold text-ink">{copy.precoInicial}</p>
+              <p className="text-sm leading-6 text-ink/70">{copy.provaTexto}</p>
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-sand bg-sand/45 px-6 py-4 sm:px-8">
+          <div className="flex flex-wrap gap-2">
             {copy.tags.map((item) => (
-              <span key={item} className="rounded-full border border-sand bg-sand/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
+              <span key={item} className="rounded-full border border-sand bg-paper/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
                 {item}
               </span>
             ))}
@@ -365,6 +472,26 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {hrefAjudaCorCatalogo(locale) ? (
+      <section aria-labelledby="guia-compra-titulo" className="rounded-2xl border border-gold/45 bg-gold/10 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-2xl">
+            <span className="eyebrow-ink">{copy.provaTitulo}</span>
+            <h2 id="guia-compra-titulo" className="mt-1 font-display text-2xl text-ink">
+              {copy.guiaTitulo}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-ink/70">{copy.guiaTexto}</p>
+          </div>
+          <a
+            href={hrefAjudaCorCatalogo(locale)!}
+            className="min-h-toque shrink-0 rounded-xl border border-ink/25 bg-paper px-5 py-3 text-center text-sm font-semibold text-ink transition-all duration-300 hover:-translate-y-0.5 hover:border-gold-deep hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+          >
+            {copy.guiaBotao}
+          </a>
+        </div>
+      </section>
       ) : null}
 
       <section aria-label={copy.diferenciaisAria} className="grid gap-3 border-t border-sand pt-8 sm:grid-cols-3">
