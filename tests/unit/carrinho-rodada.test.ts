@@ -18,11 +18,19 @@ vi.mock("@/lib/config/ambiente", () => ({
 let pedidos: Array<{
   id: string;
   created_at: string;
+  total_cents?: number;
   currency: string;
   access_token: string;
   customers: { phone: string; email: string; full_name: string };
 }> = [];
+let notificacoes: Array<{
+  order_id: string;
+  kind: string;
+  created_at: string;
+  sent_at: string | null;
+}> = [];
 let reservas = 0;
+let pedidosReservados: string[] = [];
 let contagemDoDia = 0;
 /** Simula "esta pessoa já pagou por outro checkout". */
 let jaComprouPorOutro = false;
@@ -40,7 +48,17 @@ let pedidoCancelado = false;
  */
 vi.mock("@/lib/supabase/server", () => {
   const construir = (tabela: string) => {
-    const estado = { tabela, op: "select", contando: false, single: false, buscaPagos: false, valorPago: "" };
+    const estado = {
+      tabela,
+      op: "select",
+      contando: false,
+      single: false,
+      buscaPagos: false,
+      valorPago: "",
+      rangeFrom: null as number | null,
+      rangeTo: null as number | null,
+      insertPayload: null as null | { order_id?: string },
+    };
     const alvo: Record<string, unknown> = {};
     const encadeia = new Proxy(alvo, {
       get(_t, prop: string) {
@@ -49,12 +67,13 @@ vi.mock("@/lib/supabase/server", () => {
             if (estado.tabela === "order_notifications") {
               if (estado.op === "insert") {
                 reservas += 1;
+                if (estado.insertPayload?.order_id) pedidosReservados.push(estado.insertPayload.order_id);
                 return resolver({ error: null });
               }
               if (estado.op === "update") return resolver({ error: null });
               if (estado.contando) return resolver({ count: contagemDoDia, error: null });
               if (historicoQuebrado) return resolver({ data: null, error: { message: "banco fora" } });
-              return resolver({ data: [], error: null });
+              return resolver({ data: notificacoes, error: null });
             }
             if (estado.single) {
               return resolver({ data: { payment_status: pagamentoAtual, canceled_at: pedidoCancelado ? "2026-09-05T17:00:00Z" : null }, error: null });
@@ -64,11 +83,17 @@ vi.mock("@/lib/supabase/server", () => {
               const achou = jaComprouPorOutro || telefonesPagos.has(estado.valorPago) || emailsPagos.has(estado.valorPago);
               return resolver({ data: achou ? [{ id: "outro" }] : [], error: null });
             }
+            if (estado.rangeFrom !== null && estado.rangeTo !== null) {
+              return resolver({ data: pedidos.slice(estado.rangeFrom, estado.rangeTo + 1), error: null });
+            }
             return resolver({ data: pedidos, error: null });
           };
         }
         return (...args: unknown[]) => {
-          if (prop === "insert") estado.op = "insert";
+          if (prop === "insert") {
+            estado.op = "insert";
+            estado.insertPayload = args[0] as { order_id?: string };
+          }
           if (prop === "update") estado.op = "update";
           if (prop === "maybeSingle") estado.single = true;
           if (prop === "eq" && args[0] === "payment_status" && args[1] === "paid") {
@@ -79,6 +104,10 @@ vi.mock("@/lib/supabase/server", () => {
           }
           if (prop === "select" && typeof args[1] === "object" && args[1] !== null) {
             estado.contando = true;
+          }
+          if (prop === "range") {
+            estado.rangeFrom = Number(args[0]);
+            estado.rangeTo = Number(args[1]);
           }
           return encadeia;
         };
@@ -96,6 +125,8 @@ const AGORA = new Date("2026-09-05T18:00:00Z"); // 15h em São Paulo
 
 beforeEach(() => {
   reservas = 0;
+  pedidosReservados = [];
+  notificacoes = [];
   contagemDoDia = 0;
   jaComprouPorOutro = false;
   telefonesPagos = new Set();
@@ -117,6 +148,7 @@ beforeEach(() => {
     id: `pedido-${i}`,
     access_token: `token-${i}`,
     created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+    total_cents: 67000 + i,
     currency: "BRL",
     customers: { phone: `4899988${String(i).padStart(4, "0")}`, email: `c${i}@exemplo.com`, full_name: `Cliente ${i}` },
   }));
@@ -180,6 +212,7 @@ describe("rodada com a Clint recusando tudo", () => {
         id: "pendente",
         access_token: "token-pendente",
         created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+        total_cents: 67000,
         currency: "BRL",
         customers: { phone: "11999990000", email: "maria@exemplo.com", full_name: "Maria Souza" },
       },
@@ -231,6 +264,7 @@ describe("rodada com a Clint recusando tudo", () => {
       id: `tentativa-${i}`,
       access_token: `token-tentativa-${i}`,
       created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+      total_cents: 67000,
       currency: "BRL",
       customers: { phone: "48999887766", email: "mesma@pessoa.com", full_name: "Maria Souza" },
     }));
@@ -256,7 +290,246 @@ describe("rodada com a Clint recusando tudo", () => {
 
     expect(reservas).toBe(1);
     expect(r.enviados).toBe(1);
-    expect(r.pulados.mesma_pessoa_nesta_rodada).toBe(2);
+    expect(r.pulados.mesma_pessoa_nesta_rodada).toBeUndefined();
+  });
+
+  it("mesma pessoa com dois pedidos elegíveis recebe só pelo maior valor", async () => {
+    process.env.CARRINHO_MAX_POR_RODADA = "3";
+    pedidos = [
+      {
+        id: "pedido-menor",
+        access_token: "token-menor",
+        created_at: new Date(AGORA.getTime() - 40 * 60_000).toISOString(),
+        total_cents: 67275,
+        currency: "BRL",
+        customers: { phone: "71987345510", email: "aqfjunior@hotmail.com", full_name: "Antonio" },
+      },
+      {
+        id: "pedido-maior",
+        access_token: "token-maior",
+        created_at: new Date(AGORA.getTime() - 25 * 60_000).toISOString(),
+        total_cents: 77382,
+        currency: "BRL",
+        customers: { phone: "71987345510", email: "aqfjunior@hotmail.com", full_name: "Antonio" },
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(entrada);
+        if (url.includes("/v1/contacts")) {
+          if (init?.method === "POST") {
+            return new Response(JSON.stringify({ id: "c1" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify({ data: [{ id: "c1" }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ id: "msg" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      })
+    );
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.enviados).toBe(1);
+    expect(pedidosReservados).toEqual(["pedido-maior"]);
+  });
+
+  it("mesma pessoa e mesmo valor escolhe o pedido mais recente", async () => {
+    process.env.CARRINHO_MAX_POR_RODADA = "3";
+    pedidos = [
+      {
+        id: "pedido-antigo",
+        access_token: "token-antigo",
+        created_at: new Date(AGORA.getTime() - 80 * 60_000).toISOString(),
+        total_cents: 66861,
+        currency: "BRL",
+        customers: { phone: "11979503437", email: "osmar@example.com", full_name: "Osmar" },
+      },
+      {
+        id: "pedido-recente",
+        access_token: "token-recente",
+        created_at: new Date(AGORA.getTime() - 40 * 60_000).toISOString(),
+        total_cents: 66861,
+        currency: "BRL",
+        customers: { phone: "11979503437", email: "osmar@example.com", full_name: "Osmar" },
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(entrada);
+        if (url.includes("/v1/contacts")) {
+          if (init?.method === "POST") {
+            return new Response(JSON.stringify({ id: "c1" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify({ data: [{ id: "c1" }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ id: "msg" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      })
+    );
+
+    await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(pedidosReservados).toEqual(["pedido-recente"]);
+  });
+
+  it("escolhe o maior pedido mesmo quando ele cai em outra página da fila", async () => {
+    process.env.CARRINHO_MAX_POR_RODADA = "1";
+    const filler = Array.from({ length: 49 }, (_, i) => ({
+      id: `filler-${i}`,
+      access_token: `token-filler-${i}`,
+      created_at: new Date(AGORA.getTime() - (30 + i) * 60_000).toISOString(),
+      total_cents: 67000 + i,
+      currency: "BRL",
+      customers: {
+        phone: `4899900${String(i).padStart(4, "0")}`,
+        email: `filler${i}@exemplo.com`,
+        full_name: `Cliente ${i}`,
+      },
+    }));
+    pedidos = [
+      {
+        id: "antonio-menor-pagina-1",
+        access_token: "token-menor",
+        created_at: new Date(AGORA.getTime() - 25 * 60_000).toISOString(),
+        total_cents: 67275,
+        currency: "BRL",
+        customers: { phone: "71987345510", email: "aqfjunior@hotmail.com", full_name: "Antonio" },
+      },
+      ...filler,
+      {
+        id: "antonio-maior-pagina-2",
+        access_token: "token-maior",
+        created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+        total_cents: 77382,
+        currency: "BRL",
+        customers: { phone: "71987345510", email: "aqfjunior@hotmail.com", full_name: "Antonio" },
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(entrada);
+        if (url.includes("/v1/contacts")) {
+          if (init?.method === "POST") {
+            return new Response(JSON.stringify({ id: "c1" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify({ data: [{ id: "c1" }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ id: "msg" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      })
+    );
+
+    await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(pedidosReservados).toEqual(["antonio-maior-pagina-2"]);
+  });
+
+  it("pedido maior criado depois de aviso menor aparece como suprimido por pessoa", async () => {
+    process.env.CARRINHO_MAX_POR_RODADA = "3";
+    pedidos = [
+      {
+        id: "pedido-menor-ja-avisado",
+        access_token: "token-menor",
+        created_at: new Date(AGORA.getTime() - 60 * 60_000).toISOString(),
+        total_cents: 67275,
+        currency: "BRL",
+        customers: { phone: "71987345510", email: "aqfjunior@hotmail.com", full_name: "Antonio" },
+      },
+      {
+        id: "pedido-maior-posterior",
+        access_token: "token-maior",
+        created_at: new Date(AGORA.getTime() - 25 * 60_000).toISOString(),
+        total_cents: 77382,
+        currency: "BRL",
+        customers: { phone: "71987345510", email: "aqfjunior@hotmail.com", full_name: "Antonio" },
+      },
+    ];
+    notificacoes = [
+      {
+        order_id: "pedido-menor-ja-avisado",
+        kind: "checkout_abandonado_primeiro",
+        created_at: new Date(AGORA.getTime() - 30 * 60_000).toISOString(),
+        sent_at: new Date(AGORA.getTime() - 30 * 60_000).toISOString(),
+      },
+    ];
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.enviados).toBe(0);
+    expect(reservas).toBe(0);
+    expect(r.pulados.mesma_pessoa_nesta_rodada).toBe(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("histórico salvo com DDI também suprime pedido novo do mesmo telefone", async () => {
+    process.env.CARRINHO_MAX_POR_RODADA = "3";
+    pedidos = [
+      {
+        id: "pedido-ja-avisado-com-ddi",
+        access_token: "token-avisado",
+        created_at: new Date(AGORA.getTime() - 60 * 60_000).toISOString(),
+        total_cents: 67275,
+        currency: "BRL",
+        customers: { phone: "5571987345510", email: "aqfjunior@hotmail.com", full_name: "Antonio" },
+      },
+      {
+        id: "pedido-novo-sem-ddi",
+        access_token: "token-novo",
+        created_at: new Date(AGORA.getTime() - 25 * 60_000).toISOString(),
+        total_cents: 77382,
+        currency: "BRL",
+        customers: { phone: "71987345510", email: "aqfjunior@hotmail.com", full_name: "Antonio" },
+      },
+    ];
+    notificacoes = [
+      {
+        order_id: "pedido-ja-avisado-com-ddi",
+        kind: "checkout_abandonado_primeiro",
+        created_at: new Date(AGORA.getTime() - 30 * 60_000).toISOString(),
+        sent_at: new Date(AGORA.getTime() - 30 * 60_000).toISOString(),
+      },
+    ];
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.enviados).toBe(0);
+    expect(reservas).toBe(0);
+    expect(r.pulados.mesma_pessoa_nesta_rodada).toBe(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   /**
@@ -272,6 +545,7 @@ describe("rodada com a Clint recusando tudo", () => {
         id: "pedido-unico",
         access_token: "token-unico",
         created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+        total_cents: 67000,
         currency: "BRL",
         customers: { phone: "48999887766", email: "maria@exemplo.com", full_name: "Maria Souza" },
       },

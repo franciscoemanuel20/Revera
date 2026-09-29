@@ -185,29 +185,20 @@ export async function rodadaDeCarrinhoAbandonado(
     // do banco só conhece os avisos de rodadas anteriores.
     const telefonesDaRodada = new Set<string>();
 
-    /**
-     * Pagina SOB DEMANDA, e não uma vez só antes do laço.
-     *
-     * Achado do Codex em 05/09/2026: as exclusões caras — "esta pessoa já
-     * comprou por outro checkout" — só podem ser avaliadas pedido a pedido,
-     * depois da leitura. Se os 50 mais recentes caírem todos nelas, a rodada
-     * enviava zero e nunca chegava aos elegíveis mais antigos; e como pedido
-     * pulado não ganha reserva, a rodada seguinte traria os mesmos 50 até
-     * todos expirarem na janela. Agora busca a próxima página enquanto
-     * houver orçamento, com o teto de páginas de sempre.
-     */
+    const candidatos: CandidatoRecuperacao[] = [];
     for (let pagina = 0; pagina < MAX_PAGINAS; pagina += 1) {
-      if (reservados >= limites.maxPorRodada) break;
-      if (hoje + reservados >= limites.maxPorDia) break;
-
       const leitura = await lerPagina(supabase, agora, limites, pagina, historico);
       if (leitura.erro) {
         return { ...vazio, motivo: "não deu para montar a fila com segurança" };
       }
+      candidatos.push(...leitura.candidatos);
+      if (leitura.fim) break;
+    }
 
-      resultado.vistos += leitura.candidatos.length;
+    const fila = melhorCandidatoPorPessoa(candidatos);
+    resultado.vistos = fila.length;
 
-      for (const { pedido, etapa } of leitura.candidatos) {
+    for (const { pedido, etapa } of fila) {
         if (reservados >= limites.maxPorRodada) break;
         if (hoje + reservados >= limites.maxPorDia) break;
 
@@ -225,7 +216,10 @@ export async function rodadaDeCarrinhoAbandonado(
 
       const telefonesAvisadosNestaEtapa =
         etapa === "primeiro" ? historico.telefonesComPrimeiro : historico.telefonesComUltimo;
-      if (telefonesDaRodada.has(destino) || telefonesAvisadosNestaEtapa.has(destino.replace(/^55/, ""))) {
+      if (
+        telefonesDaRodada.has(destino) ||
+        telefoneJaAvisado(telefonesAvisadosNestaEtapa, pedido.telefone, destino)
+      ) {
         conta("mesma_pessoa_nesta_rodada");
         continue;
       }
@@ -251,7 +245,7 @@ export async function rodadaDeCarrinhoAbandonado(
       }
       const recentesNestaEtapa =
         etapa === "primeiro" ? recente.telefonesComPrimeiro : recente.telefonesComUltimo;
-      if (recentesNestaEtapa.has(destino.replace(/^55/, ""))) {
+      if (telefoneJaAvisado(recentesNestaEtapa, pedido.telefone, destino)) {
         conta("mesma_pessoa_nesta_rodada");
         continue;
       }
@@ -415,9 +409,6 @@ export async function rodadaDeCarrinhoAbandonado(
       conta(desligado ? "whatsapp_desligado" : "envio_recusado");
     }
 
-      if (leitura.fim) break;
-    }
-
     return resultado;
   } catch (erro) {
     console.error("[carrinho] exceção na rodada", erro);
@@ -494,12 +485,27 @@ function variantesTelefoneBrasileiro(telefone: string): string[] {
   return [...new Set([telefone, sem55, com55, com55 ? `+${com55}` : ""].filter(Boolean))];
 }
 
+function telefoneJaAvisado(avisados: Set<string>, telefone: string | null | undefined, destino: string): boolean {
+  const digitos = (telefone ?? "").replace(/\D/g, "");
+  for (const variante of variantesTelefoneBrasileiro(digitos || destino)) {
+    const soDigitos = variante.replace(/\D/g, "");
+    if (soDigitos && avisados.has(soDigitos)) return true;
+  }
+  return false;
+}
+
 /**
- * Pendentes ainda dentro da janela, sem aviso reservado, do mais novo para o
- * mais velho — quem abandonou há pouco é quem ainda lembra do carrinho.
+ * Pendentes ainda dentro da janela. A página vem do mais novo para o mais
+ * velho, mas antes de sair daqui ela é reduzida para UM candidato por pessoa:
+ * maior valor primeiro; em empate, o mais recente.
  */
 const PAGINA = 50;
 const MAX_PAGINAS = 10;
+
+type CandidatoRecuperacao = {
+  pedido: PedidoCandidato & { linkDeRetomada: string; totalCents: number };
+  etapa: Etapa;
+};
 
 interface Historico {
   porPedido: Map<string, Array<{ kind: string; createdAt: string; sentAt: string | null }>>;
@@ -591,7 +597,7 @@ async function lerPagina(
   erro: true;
 } | {
   erro: false;
-  candidatos: Array<{ pedido: PedidoCandidato & { linkDeRetomada: string }; etapa: Etapa }>;
+  candidatos: CandidatoRecuperacao[];
   fim: boolean;
 }> {
   const maduroAte = new Date(agora.getTime() - limites.esperaMinutos * 60_000).toISOString();
@@ -599,7 +605,7 @@ async function lerPagina(
 
   const { data, error } = await supabase
     .from("orders")
-    .select("id, created_at, currency, access_token, customers ( phone, email, full_name )")
+    .select("id, created_at, total_cents, currency, access_token, customers ( phone, email, full_name )")
     .eq("payment_status", "pending")
     // Cancelar NÃO mexe em payment_status: a action do painel grava só
     // `canceled_at` (admin/pedidos/actions.ts). Sem este filtro, um pedido que
@@ -619,6 +625,7 @@ async function lerPagina(
   type Linha = {
     id: string;
     created_at: string;
+    total_cents: number | null;
     currency: string | null;
     access_token: string | null;
     customers:
@@ -628,7 +635,7 @@ async function lerPagina(
   };
 
   const linhas = (data ?? []) as Linha[];
-  const candidatos: Array<{ pedido: PedidoCandidato & { linkDeRetomada: string }; etapa: Etapa }> = [];
+  const candidatos: CandidatoRecuperacao[] = [];
 
   for (const linha of linhas) {
     const eventos = historico.porPedido.get(linha.id) ?? [];
@@ -645,10 +652,6 @@ async function lerPagina(
     if (!etapa) continue;
     const c = linha.customers;
     const cliente = Array.isArray(c) ? c[0] : c;
-    const digitos = (cliente?.phone ?? "").replace(/\D/g, "");
-    const avisadosNestaEtapa =
-      etapa === "primeiro" ? historico.telefonesComPrimeiro : historico.telefonesComUltimo;
-    if (digitos && avisadosNestaEtapa.has(digitos)) continue;
     if (!linha.access_token) continue;
     candidatos.push({
       etapa,
@@ -659,10 +662,42 @@ async function lerPagina(
         email: cliente?.email ?? null,
         nome: cliente?.full_name ??null,
         moeda: linha.currency,
+        totalCents: linha.total_cents ?? 0,
         linkDeRetomada: `${baseUrl()}/checkout/pagamento?pedido=${encodeURIComponent(linha.access_token)}`,
       },
     });
   }
 
-  return { erro: false, candidatos, fim: linhas.length < PAGINA };
+  return { erro: false, candidatos: melhorCandidatoPorPessoa(candidatos), fim: linhas.length < PAGINA };
+}
+
+function melhorCandidatoPorPessoa(candidatos: CandidatoRecuperacao[]): CandidatoRecuperacao[] {
+  const porPessoa = new Map<string, CandidatoRecuperacao>();
+
+  for (const candidato of candidatos) {
+    const chave = chaveDaPessoa(candidato.pedido);
+    const atual = porPessoa.get(chave);
+    if (!atual || compararPrioridade(candidato, atual) < 0) {
+      porPessoa.set(chave, candidato);
+    }
+  }
+
+  return [...porPessoa.values()].sort(compararPrioridade);
+}
+
+function chaveDaPessoa(pedido: PedidoCandidato): string {
+  const destino = comDDI(pedido.telefone);
+  if (destino) return `tel:${destino}`;
+  const email = (pedido.email ?? "").trim().toLowerCase();
+  if (email) return `email:${email}`;
+  return `pedido:${pedido.id}`;
+}
+
+function compararPrioridade(a: CandidatoRecuperacao, b: CandidatoRecuperacao): number {
+  if (a.pedido.totalCents !== b.pedido.totalCents) {
+    return b.pedido.totalCents - a.pedido.totalCents;
+  }
+  const criadoA = new Date(a.pedido.criadoEm).getTime();
+  const criadoB = new Date(b.pedido.criadoEm).getTime();
+  return criadoB - criadoA;
 }
