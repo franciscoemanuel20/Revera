@@ -3,12 +3,11 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
-import { ColorHelpForm } from "./ColorHelpForm";
 
 export const metadata: Metadata = {
   title: "Cores de prótese capilar",
   description:
-    "Veja a cartela de cores da prótese capilar Reverá, incluindo tons naturais e grisalhos. Compare as fotos e peça ajuda para escolher a cor certa.",
+    "Veja a cartela de cores da prótese capilar Reverá, incluindo tons naturais e grisalhos. Compare as fotos e escolha o tom mais próximo com segurança.",
   keywords: [
     "cores de prótese capilar",
     "cartela de cores prótese capilar",
@@ -19,7 +18,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Cores de prótese capilar — Reverá",
     description:
-      "Veja a cartela de cores da prótese capilar Reverá, incluindo tons naturais e grisalhos. Compare as fotos e peça ajuda para escolher a cor certa.",
+      "Veja a cartela de cores da prótese capilar Reverá, incluindo tons naturais e grisalhos. Compare as fotos e escolha o tom mais próximo com segurança.",
     url: "/cores",
   },
 };
@@ -55,7 +54,7 @@ export default async function CoresPage() {
         {[
           ["Luz natural", "Compare sua referência em luz clara, sem filtro e sem sombra forte."],
           ["Raiz e laterais", "Olhe o tom próximo da raiz e das laterais, não só a ponta do fio."],
-          ["Dúvida real", "Envie uma foto no formulário abaixo e peça indicação da equipe."],
+          ["Conferência Reverá", "Escolha o tom mais próximo agora. A equipe confere o pedido antes do envio."],
         ].map(([titulo, texto]) => (
           <Reveal key={titulo} className="rounded-xl border border-sand bg-paper p-4">
             <h2 className="font-display text-lg text-ink">{titulo}</h2>
@@ -109,20 +108,28 @@ export default async function CoresPage() {
       </div>
 
       <section id="ajuda" className="flex scroll-mt-8 flex-col gap-2 rounded-2xl border border-sand bg-sand/25 p-6 text-center">
-        <span className="eyebrow-ink mx-auto">Precisa de ajuda?</span>
+        <span className="eyebrow-ink mx-auto">Guia rápido de cor</span>
         <h2 className="font-display text-2xl text-ink">
-          Não sabe qual cor escolher?
+          Escolha a cor mais próxima e siga para a compra
         </h2>
         <p className="mx-auto max-w-prose text-ink/80">
-          Envie uma foto do seu cabelo natural e nossa equipe indica a cor
-          mais parecida entre as opções disponíveis.
+          Compare a cartela com seu cabelo em luz natural, escolha o tom mais
+          parecido na página do produto e finalize o pedido. A equipe Reverá
+          confere se a peça separada bate com a cor escolhida antes do envio.
         </p>
-        {/* Ferramenta adicionada em 26/08/2026 — o texto acima já existia
-            (era só descrição, sem formulário de fato); ColorHelpForm.tsx
-            grava em color_help_requests + bucket privado color-help (ver
-            actions.ts e a migration 00000000000004, ainda não aplicada). */}
-        <div className="pt-4">
-          <ColorHelpForm />
+        <div className="mx-auto mt-4 grid max-w-3xl gap-3 text-left text-sm text-ink/75 sm:grid-cols-3">
+          <div className="rounded-xl border border-sand bg-paper p-4">
+            <h3 className="font-semibold text-ink">1. Compare sem filtro</h3>
+            <p className="mt-1 leading-6">Use uma foto em luz natural e observe a raiz e as laterais.</p>
+          </div>
+          <div className="rounded-xl border border-sand bg-paper p-4">
+            <h3 className="font-semibold text-ink">2. Escolha no produto</h3>
+            <p className="mt-1 leading-6">Volte ao modelo desejado, marque a cor mais próxima e adicione à sacola.</p>
+          </div>
+          <div className="rounded-xl border border-sand bg-paper p-4">
+            <h3 className="font-semibold text-ink">3. Conferimos antes</h3>
+            <p className="mt-1 leading-6">Seu pedido passa por conferência da peça e da cor antes de ser despachado.</p>
+          </div>
         </div>
       </section>
     </main>

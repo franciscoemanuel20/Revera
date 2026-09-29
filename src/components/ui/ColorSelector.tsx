@@ -200,7 +200,7 @@ export function ColorSelector({
       })}
       {onNeedHelp ? (
         <button type="button" onClick={onNeedHelp} className="self-start text-sm text-ink underline decoration-gold decoration-2 underline-offset-4">
-          Não sei qual cor escolher
+          Ver guia de cores
         </button>
       ) : null}
     </div>

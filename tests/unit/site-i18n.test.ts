@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { middleware } from "@/middleware";
 import { CATALOGO_COPY, hrefAjudaCorCatalogo } from "@/app/produtos/ProdutosContent";
 import {
@@ -165,5 +167,18 @@ describe("i18n publico do site", () => {
     expect(hrefAjudaCorCatalogo("es")).toBeNull();
     expect(hrefAjudaCorCatalogo("fr")).toBeNull();
     expect(hrefAjudaCorCatalogo("de")).toBeNull();
+  });
+
+  it("mantem ajuda de cor pre-compra dentro do site, sem puxar WhatsApp", () => {
+    const coresPage = readFileSync(join(process.cwd(), "src/app/cores/page.tsx"), "utf8");
+
+    expect(CATALOGO_COPY.pt.heroCtaSecundario).toBe("Ver guia de cores");
+    expect(CATALOGO_COPY.pt.provaTexto).toContain("a equipe confere antes do envio");
+    expect(CATALOGO_COPY.pt.guiaTexto).toContain("Escolha a cor mais próxima agora");
+    expect(CATALOGO_COPY.pt.guiaTexto).toContain("peça separada bate com a cor escolhida");
+    expect(coresPage).not.toContain("ColorHelpForm");
+    expect(coresPage).not.toContain("WhatsApp");
+    expect(coresPage).toContain("Escolha a cor mais próxima e siga para a compra");
+    expect(coresPage).toContain("peça separada bate com a cor escolhida");
   });
 });

@@ -694,13 +694,13 @@ export function ProdutoInterativo({
             <div className="rounded-xl border border-gold/45 bg-gold/10 p-4">
               <p className="text-sm font-semibold text-ink">Está em dúvida sobre a cor?</p>
               <p className="mt-1 text-sm leading-6 text-ink/70">
-                Compare a cartela antes de comprar. Se precisar, peça ajuda para escolher o tom mais próximo.
+                Compare a cartela, escolha o tom mais próximo e siga para a compra. A equipe Reverá confere se a peça separada bate com a cor escolhida antes do envio.
               </p>
               <Link
                 href="/cores#ajuda"
                 className="mt-3 inline-flex min-h-toque items-center justify-center rounded-xl border border-ink/25 bg-paper px-4 py-2 text-sm font-semibold text-ink transition-all duration-300 hover:-translate-y-0.5 hover:border-gold-deep hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
               >
-                Não sei qual cor escolher
+                Ver guia de cores
               </Link>
             </div>
             <a
