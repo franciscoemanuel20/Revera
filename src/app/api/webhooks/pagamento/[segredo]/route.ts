@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getStripeProvider } from "@/lib/payments";
-import { getReveraNationalProvider, getReveraProviderByName } from "@/lib/payments/revera";
+import {
+  getReveraInternationalProviderName,
+  getReveraNationalProvider,
+  getReveraProviderByName,
+} from "@/lib/payments/revera";
 import { confirmarPagamento, registrarReembolso } from "@/lib/payments/confirmar";
 import type { PaymentProvider, WebhookHint } from "@/lib/payments/provider";
 import { segredoConfere } from "@/lib/payments/webhook-url";
@@ -74,6 +78,16 @@ export async function POST(
   const { provider, hint } = roteado;
 
   const supabase = createAdminClient();
+  if (provider.name === "paypal" && !UUID.test(hint.orderId)) {
+    const resolvido = await resolverPedidoPorPagamento(supabase, provider.name, hint.transactionId);
+    if (resolvido === "erro") {
+      return NextResponse.json({ erro: "falha ao resolver pagamento" }, { status: 500 });
+    }
+    if (!resolvido) {
+      return NextResponse.json({ ok: true, ignorado: "pagamento paypal não encontrado" });
+    }
+    hint.orderId = resolvido;
+  }
 
   // Checkout da Asaas de OUTRO produto da mesma conta: a referência não é um
   // pedido da Reverá. Sem este corte, o id alheio (nem sempre uuid) quebrava a
@@ -291,6 +305,27 @@ async function pedidoExisteNaRevera(
   return data ? "sim" : "nao";
 }
 
+async function resolverPedidoPorPagamento(
+  supabase: ReturnType<typeof createAdminClient>,
+  provider: string,
+  transactionId: string | null
+): Promise<string | null | "erro"> {
+  if (!transactionId) return null;
+  const { data, error } = await supabase
+    .from("payments")
+    .select("order_id")
+    .eq("provider", provider)
+    .eq("provider_payment_id", transactionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("[webhook] falha ao resolver pagamento por transação", error);
+    return "erro";
+  }
+  return (data?.order_id as string | undefined) ?? null;
+}
+
 function avisoAutenticadoDaAsaas(headers: Headers): boolean {
   const esperado = process.env.ASAAS_WEBHOOK_AUTH_TOKEN?.trim();
   return Boolean(esperado) && headers.get("asaas-access-token") === esperado;
@@ -319,6 +354,12 @@ function rotearWebhook(
   for (const nome of ["asaas", "infinitepay"] as const) {
     if (candidatos.some((p) => p.name === nome)) continue;
     candidatos.push(getReveraProviderByName(nome));
+  }
+  if (
+    process.env.PAYPAL_WEBHOOK_ENABLED?.trim() === "1" &&
+    getReveraInternationalProviderName() === "paypal"
+  ) {
+    candidatos.push(getReveraProviderByName("paypal"));
   }
 
   for (const provider of candidatos) {
