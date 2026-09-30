@@ -80,6 +80,16 @@ export function horaDoPagamentoSegundos(
   return Math.floor((Number.isFinite(ms) ? ms : agoraMs) / 1000);
 }
 
+/**
+ * A Meta recusa `event_time` com mais de 7 dias. Reenvio depois disso não
+ * troca a data pela de hoje (seria o defeito que horaDoPagamentoSegundos
+ * corrige): o envio é pulado e o motivo fica em conversion_logs. Margem de
+ * 1h para o relógio da Meta não recusar no limite.
+ */
+export function vendaForaDaJanelaDaMeta(horaDaVendaSegundos: number, agoraMs: number = Date.now()): boolean {
+  return agoraMs / 1000 - horaDaVendaSegundos > 7 * 24 * 3600 - 3600;
+}
+
 export function valorDasPecas(pedido: {
   total_cents: number;
   shipping_cents?: number | null;
@@ -213,6 +223,7 @@ async function despachar(
   const numItems = linhas.reduce((s, i) => s + (i.quantity as number), 0);
 
   const horaDaVenda = horaDoPagamentoSegundos(evento.created_at as string | null);
+  const foraDaJanelaMeta = vendaForaDaJanelaDaMeta(horaDaVenda);
 
   // Os dois envios em paralelo: um não deve esperar o outro, e uma plataforma
   // lenta não pode atrasar a outra.
@@ -221,6 +232,11 @@ async function despachar(
       ? Promise.resolve<ResultadoEnvio>({
           sucesso: true,
           motivoPulado: "já enviado antes (sent_capi)",
+        })
+      : foraDaJanelaMeta
+      ? Promise.resolve<ResultadoEnvio>({
+          sucesso: false,
+          motivoPulado: "venda com mais de 7 dias: fora da janela de event_time da Meta",
         })
       : enviarPurchaseMeta({
           comoTeste: permissao.comoTeste,

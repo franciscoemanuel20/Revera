@@ -64,6 +64,25 @@ describe("event_time do Purchase", () => {
     expect(new Date(b! * 1000).toISOString()).toBe(PAGO_EM);
   });
 
+  it("reenvio depois de 7 dias não vai à Meta com data falsa: é pulado e registrado", async () => {
+    const { despacharPurchase } = await import("@/lib/tracking/despachar");
+    const fake = banco();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-06T00:00:00Z"));
+    await despacharPurchase(fake as never, PEDIDO, "infinitepay");
+    expect(enviarPurchaseMeta).not.toHaveBeenCalled();
+    const log = fake.tabela("conversion_logs").find((l) => l.plataforma === "meta");
+    expect(log?.motivo_pulado).toMatch(/7 dias/);
+    expect(fake.tabela("pixel_event_log")[0]?.sent_capi).toBe(false);
+  });
+
+  it("janela da Meta: 6 dias entra, 7 não", async () => {
+    const { vendaForaDaJanelaDaMeta } = await import("@/lib/tracking/despachar");
+    const venda = Date.parse(PAGO_EM) / 1000;
+    expect(vendaForaDaJanelaDaMeta(venda, Date.parse(PAGO_EM) + 6 * 86400_000)).toBe(false);
+    expect(vendaForaDaJanelaDaMeta(venda, Date.parse(PAGO_EM) + 7 * 86400_000)).toBe(true);
+  });
+
   it("sem data registrada cai no agora, em segundos", async () => {
     const { horaDoPagamentoSegundos } = await import("@/lib/tracking/despachar");
     expect(horaDoPagamentoSegundos(null, 1_790_000_000_999)).toBe(1_790_000_000);
