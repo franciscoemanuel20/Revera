@@ -122,18 +122,18 @@ type SiteCopy = {
 
 export const SITE_COPY: Record<SiteLocale, SiteCopy> = {
   pt: {
-    menuConheca: "Conheca",
+    menuConheca: "Conheça",
     abrirMenu: "Abrir menu",
     nav: {
-      "/": "Inicio",
-      "/produtos": "Proteses",
+      "/": "Início",
+      "/produtos": "Próteses",
       "/cores": "Cores",
       "/cuidados": "Cuidados",
       "/garantia": "Garantia",
       "/faq": "FAQ",
-      "/sobre-as-proteses": "Sobre as proteses",
+      "/sobre-as-proteses": "Sobre as próteses",
       "/naturalidade": "Naturalidade",
-      "/por-que-revera": "Por que Revera",
+      "/por-que-revera": "Por que Reverá",
       "/para-profissionais": "Para profissionais",
       "/privacidade": "Privacidade",
       "/termos": "Termos de uso",
@@ -141,17 +141,17 @@ export const SITE_COPY: Record<SiteLocale, SiteCopy> = {
     },
     footerGroups: { loja: "Loja", saibaMais: "Saiba mais" },
     cookies: {
-      aria: "Preferencias de cookies",
+      aria: "Preferências de cookies",
       titulo: "Sua privacidade",
       texto:
-        "Usamos cookies necessarios para a loja funcionar. Cookies opcionais da Meta e do Google so sao ativados se voce aceitar.",
+        "Usamos cookies necessários para a loja funcionar. Cookies opcionais da Meta e do Google só são ativados se você aceitar.",
       aceitar: "Aceitar opcionais",
       recusar: "Recusar",
       saibaMais: "Saiba mais",
     },
     seoSuffix: {
-      title: "Protese capilar natural",
-      description: "Proteses capilares Revera com acabamento natural, escolha de cor e compra segura.",
+      title: "Prótese capilar natural",
+      description: "Próteses capilares Reverá com acabamento natural, escolha de cor e compra segura.",
     },
   },
   en: {
