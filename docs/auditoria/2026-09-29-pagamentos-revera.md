@@ -61,14 +61,17 @@ Pronto no código, condicionado ao painel e às variáveis:
 
 ## PayPal
 
-Não pronto para produção.
+Atualizado em 30/09/2026: integração preparada para ativação em produção.
 
 Motivos:
 
-- Ainda não há validação criptográfica do webhook PayPal.
+- A assinatura do webhook é conferida pela API oficial antes de processar o evento.
 - A rota pública mantém PayPal desligado por padrão via `PAYPAL_WEBHOOK_ENABLED`.
 - O checkout mantém PayPal desligado por padrão via `PAYPAL_CHECKOUT_ENABLED`.
-- Antes de ativar, implementar e testar verificação oficial de assinatura do PayPal, com `PAYPAL_WEBHOOK_ID`, headers `PAYPAL-*` e chamada de verificação do gateway.
+- A ativação exige `PAYPAL_CHECKOUT_ENABLED=1`, `PAYPAL_WEBHOOK_ENABLED=1`, `PAYPAL_WEBHOOK_ID`, credenciais Live e `REVERA_INTERNATIONAL_PAYMENT_PROVIDER=paypal`.
+- O app Live deve assinar `CHECKOUT.ORDER.APPROVED` e `PAYMENT.CAPTURE.COMPLETED`.
+- Links `payer-action` e `approve` são aceitos; a página exige ID de pagamento persistido antes de redirecionar novas cobranças PayPal.
+- A criação de ordem Live sem pagamento e a autenticação foram verificadas. A compra aprovada/capturada de ponta a ponta ainda depende de uma compra real de comprador externo.
 
 ## Falha e recuperação
 

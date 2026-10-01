@@ -53,10 +53,12 @@ export function getReveraProviderByName(name: string): PaymentProvider {
 export function getReveraInternationalProviderName(): ProviderInternacionalRevera {
   const nome = process.env.REVERA_INTERNATIONAL_PAYMENT_PROVIDER?.trim() || "stripe";
   if (nome === "stripe") return nome;
-  if (nome === "paypal" && process.env.PAYPAL_CHECKOUT_ENABLED?.trim() === "1") return nome;
+  if (nome === "paypal" && process.env.PAYPAL_CHECKOUT_ENABLED?.trim() === "1" &&
+      process.env.PAYPAL_WEBHOOK_ENABLED?.trim() === "1" &&
+      process.env.PAYPAL_WEBHOOK_ID?.trim()) return nome;
   if (nome === "paypal") {
     throw new PagamentoIndisponivel(
-      "PayPal internacional está em WIP e fica desligado até PAYPAL_CHECKOUT_ENABLED=1."
+      "PayPal internacional exige checkout e webhook habilitados, com PAYPAL_WEBHOOK_ID configurado."
     );
   }
   throw new PagamentoIndisponivel(

@@ -11,6 +11,7 @@ import { baseUrl } from "@/lib/config/urls";
 import { idiomaDoPais } from "@/lib/internacional/paises";
 import { pedidoInternacionalPagavel } from "@/lib/internacional/mercado";
 import { urlCheckoutStripeSegura } from "@/lib/payments/stripe-provider";
+import { urlCheckoutPayPalSegura } from "@/lib/payments/paypal-provider";
 import { montarItensDoPagamento } from "@/lib/payments/itens";
 import { AutoRetryPagamento } from "./AutoRetryPagamento";
 import { CopiarNumeroPedido } from "./CopiarNumeroPedido";
@@ -119,7 +120,7 @@ export default async function PagamentoPage({
     }
     idiomaPagamento = idiomaDoPais(endereco!.country);
   }
-  const linkPermitido = (url: string) => pedido.currency === "BRL" || urlCheckoutStripeSegura(url);
+  const linkPermitido = (url: string) => pedido.currency === "BRL" || urlCheckoutStripeSegura(url) || urlCheckoutPayPalSegura(url);
 
   const [{ data: itens }, { data: cliente }, { data: endereco }] = await Promise.all([
     supabase
@@ -589,6 +590,22 @@ export default async function PagamentoPage({
       motivo: cobrancaCriada || ambiguo ? "em_preparacao" : "erro_tecnico",
       checkout: provider.name === "infinitepay" ? "infinitepay" : "generico",
     });
+  }
+
+  if (provider.name === "paypal") {
+    // PayPal precisa do ID persistido para confirmar o retorno e resolver webhooks.
+    const { data: pagamentoSalvo, error: erroConferir } = await supabase
+      .from("payments")
+      .select("provider_payment_id")
+      .eq("order_id", pedido.id)
+      .eq("provider", "paypal")
+      .eq("status", "pending")
+      .maybeSingle();
+    if (erroConferir || !pagamentoSalvo?.provider_payment_id) {
+      return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+        motivo: "em_preparacao",
+      });
+    }
   }
 
   // Fora do try: `redirect` funciona lançando uma exceção especial do Next,

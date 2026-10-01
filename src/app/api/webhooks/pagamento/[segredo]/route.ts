@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getStripeProvider } from "@/lib/payments";
+import { PayPalProvider } from "@/lib/payments/paypal-provider";
 import {
   getReveraInternationalProviderName,
   getReveraNationalProvider,
@@ -76,6 +77,16 @@ export async function POST(
     return NextResponse.json({ erro: "corpo inválido" }, { status: 400 });
   }
   const { provider, hint } = roteado;
+
+  if (provider.name === "paypal") {
+    try {
+      if (!(await new PayPalProvider().verificarWebhook(rawBody, request.headers))) {
+        return NextResponse.json({ erro: "assinatura inválida" }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ erro: "verificação PayPal indisponível" }, { status: 503 });
+    }
+  }
 
   const supabase = createAdminClient();
   if (provider.name === "paypal" && !UUID.test(hint.orderId)) {

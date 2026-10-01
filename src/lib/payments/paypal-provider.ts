@@ -125,6 +125,7 @@ export class PayPalProvider implements PaymentProvider {
       },
       body: "grant_type=client_credentials",
       cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
     });
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
@@ -140,17 +141,18 @@ export class PayPalProvider implements PaymentProvider {
     return json.access_token;
   }
 
-  private async chamar(caminho: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }) {
+  private async chamar(caminho: string, init?: { method?: string; body?: unknown; signal?: AbortSignal; requestId?: string }) {
     const token = await this.accessToken();
     return fetch(`${apiBase()}${caminho}`, {
       method: init?.method ?? "GET",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        ...(init?.requestId ? { "PayPal-Request-Id": init.requestId } : {}),
       },
       body: init?.body === undefined ? undefined : JSON.stringify(init.body),
       cache: "no-store",
-      signal: init?.signal,
+      signal: init?.signal ?? AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
     });
   }
 
@@ -174,6 +176,7 @@ export class PayPalProvider implements PaymentProvider {
     try {
       res = await this.chamar("/v2/checkout/orders", {
         method: "POST",
+        requestId: charge.orderId,
         signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
         body: {
           intent: "CAPTURE",
@@ -229,7 +232,7 @@ export class PayPalProvider implements PaymentProvider {
       });
     }
 
-    const checkoutUrl = ordem.links?.find((l) => l.rel === "approve")?.href;
+    const checkoutUrl = ordem.links?.find((l) => l.rel === "payer-action" || l.rel === "approve")?.href;
     if (!ordem.id || !checkoutUrl || !urlCheckoutPayPalSegura(checkoutUrl)) {
       throw new AmbiguousChargeError("PayPal respondeu sem link de aprovação seguro.");
     }
@@ -279,6 +282,31 @@ export class PayPalProvider implements PaymentProvider {
       eventId: evento.id,
       kind: "ignorar",
     };
+  }
+
+  async verificarWebhook(rawBody: string, headers: Headers): Promise<boolean> {
+    const webhookId = process.env.PAYPAL_WEBHOOK_ID?.trim();
+    const transmissionId = headers.get("paypal-transmission-id");
+    const transmissionTime = headers.get("paypal-transmission-time");
+    const transmissionSig = headers.get("paypal-transmission-sig");
+    const certUrl = headers.get("paypal-cert-url");
+    const authAlgo = headers.get("paypal-auth-algo");
+    if (!webhookId || !transmissionId || !transmissionTime || !transmissionSig || !certUrl || !authAlgo) return false;
+    const res = await this.chamar("/v1/notifications/verify-webhook-signature", {
+      method: "POST",
+      body: {
+        webhook_id: webhookId,
+        transmission_id: transmissionId,
+        transmission_time: transmissionTime,
+        transmission_sig: transmissionSig,
+        cert_url: certUrl,
+        auth_algo: authAlgo,
+        webhook_event: JSON.parse(rawBody),
+      },
+    });
+    if (!res.ok) throw new Error("Não foi possível verificar a assinatura PayPal.");
+    const json = (await res.json()) as { verification_status?: string };
+    return json.verification_status === "SUCCESS";
   }
 
   async confirmPayment(hint: WebhookHint): Promise<ConfirmedPayment> {
@@ -336,6 +364,7 @@ export class PayPalProvider implements PaymentProvider {
   private async capturarOrdem(orderId: string): Promise<OrdemPayPal> {
     const res = await this.chamar(`/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
       method: "POST",
+      requestId: `capture-${orderId}`,
       body: {},
     });
     if (!res.ok) {

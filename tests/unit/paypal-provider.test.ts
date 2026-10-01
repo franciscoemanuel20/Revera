@@ -18,6 +18,47 @@ async function provider() {
 }
 
 describe("PayPalProvider", () => {
+  it("exige checkout e webhook juntos para ativar PayPal", async () => {
+    vi.stubEnv("REVERA_INTERNATIONAL_PAYMENT_PROVIDER", "paypal");
+    vi.stubEnv("PAYPAL_CHECKOUT_ENABLED", "1");
+    vi.stubEnv("PAYPAL_WEBHOOK_ENABLED", "0");
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "webhook_teste");
+    const { getReveraInternationalProviderName } = await import("@/lib/payments/revera");
+    expect(() => getReveraInternationalProviderName()).toThrow(/webhook/);
+    vi.stubEnv("PAYPAL_WEBHOOK_ENABLED", "1");
+    expect(getReveraInternationalProviderName()).toBe("paypal");
+  });
+  it("recusa webhook sem assinatura antes de consultar a API", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await provider();
+    expect(await p.verificarWebhook("{}", new Headers())).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["SUCCESS", "FAILURE"])("valida assinatura PayPal: %s", async (status) => {
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "webhook_teste");
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/v1/oauth2/token")) {
+        return Response.json({ access_token: "access", expires_in: 3600 });
+      }
+      expect(url).toContain("/v1/notifications/verify-webhook-signature");
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        webhook_id: "webhook_teste",
+        webhook_event: { id: "evt" },
+      });
+      return Response.json({ verification_status: status });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const headers = new Headers({
+      "paypal-transmission-id": "transmission",
+      "paypal-transmission-time": "time",
+      "paypal-transmission-sig": "sig",
+      "paypal-cert-url": "https://api-m.sandbox.paypal.com/cert",
+      "paypal-auth-algo": "SHA256withRSA",
+    });
+    expect(await (await provider()).verificarWebhook('{"id":"evt"}', headers)).toBe(status === "SUCCESS");
+  });
   it("não reporta gateway internacional configurado sem credenciais PayPal", async () => {
     vi.stubEnv("REVERA_INTERNATIONAL_PAYMENT_PROVIDER", "paypal");
     vi.stubEnv("PAYPAL_CLIENT_ID", "");
@@ -41,7 +82,7 @@ describe("PayPalProvider", () => {
     ).rejects.toThrow(/BRL/);
   });
 
-  it("cria order com custom_id do pedido e link de aprovação seguro", async () => {
+  it.each(["approve", "payer-action"])("cria order com custom_id e link seguro %s", async (rel) => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith("/v1/oauth2/token")) {
         return new Response(JSON.stringify({ access_token: "access", expires_in: 3600 }), {
@@ -58,7 +99,7 @@ describe("PayPalProvider", () => {
         JSON.stringify({
           id: "PAYPAL-ORDER-1",
           status: "CREATED",
-          links: [{ rel: "approve", href: "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-1" }],
+          links: [{ rel, href: "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-1" }],
         }),
         { status: 201 }
       );
