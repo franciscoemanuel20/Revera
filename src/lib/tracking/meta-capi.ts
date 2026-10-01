@@ -153,6 +153,7 @@ export async function enviarPurchaseMeta(input: {
   });
 
   const corpo = {
+    access_token: token,
     data: [
       {
         event_name: "Purchase",
@@ -180,31 +181,34 @@ export async function enviarPurchaseMeta(input: {
       : {}),
   };
 
-  let res: Response;
-  try {
-    res = await fetch(
-      `https://graph.facebook.com/${VERSAO}/${META_PIXEL_ID}/events?access_token=${encodeURIComponent(token)}`,
-      {
+  const body = JSON.stringify(corpo);
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    if (tentativa > 0) await new Promise((resolve) => setTimeout(resolve, tentativa * 250));
+    let res: Response;
+    let resposta: unknown;
+    try {
+      res = await fetch(`https://graph.facebook.com/${VERSAO}/${META_PIXEL_ID}/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(corpo),
+        body,
         cache: "no-store",
-      }
-    );
-  } catch (e) {
-    return {
-      sucesso: false,
-      motivoPulado: `Meta não respondeu: ${e instanceof Error ? e.message : e}`,
-    };
+        signal: AbortSignal.timeout(5_000),
+      });
+      // A leitura do corpo também está coberta pelo timeout e recuperação.
+      const texto = await res.text();
+      try { resposta = JSON.parse(texto); } catch { resposta = texto; }
+    } catch {
+      if (tentativa < 2) continue;
+      return { sucesso: false, motivoPulado: "Meta não respondeu após três tentativas" };
+    }
+    const aceito = res.ok && resposta !== null && typeof resposta === "object"
+      && "events_received" in resposta
+      && typeof resposta.events_received === "number"
+      && resposta.events_received >= 1;
+    if (aceito) return { sucesso: true, httpStatus: res.status, resposta };
+    const temporario = res.status === 429 || res.status >= 500;
+    if (temporario && tentativa < 2) continue;
+    return { sucesso: false, httpStatus: res.status, resposta };
   }
-
-  const texto = await res.text();
-  let resposta: unknown = texto;
-  try {
-    resposta = JSON.parse(texto);
-  } catch {
-    /* resposta não-JSON: guarda o texto cru, que é melhor que nada */
-  }
-
-  return { sucesso: res.ok, httpStatus: res.status, resposta };
+  return { sucesso: false };
 }
