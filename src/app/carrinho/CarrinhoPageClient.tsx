@@ -58,7 +58,14 @@ export function CarrinhoPageClient() {
           <ul className="flex flex-col gap-6">
             {cart.items.map((item) => (
               <li key={item.cartItemId} className="flex flex-col gap-4 border-b border-sand pb-6 last:border-b-0">
-                <div className="flex gap-4">
+                {/* `flex-wrap` + `min-w-0` (30/09/2026): em 375 px a linha
+                    foto + seletor de quantidade + "remover" + preço não cabia
+                    e, como item de flex não encolhe abaixo do conteúdo, a
+                    página inteira ficava mais larga que a tela e o preço
+                    saía cortado. Agora o preço desce para a linha de baixo
+                    (alinhado à direita por `ml-auto`) quando não cabe; no
+                    desktop nada muda. Mesma correção no CartDrawer. */}
+                <div className="flex flex-wrap gap-4">
                   <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-sand">
                     {item.colorPhotoUrl ? (
                       <Image
@@ -70,12 +77,12 @@ export function CarrinhoPageClient() {
                     ) : null}
                   </div>
 
-                  <div className="flex flex-1 flex-col gap-1">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <p className="font-medium text-ink">{item.productName}</p>
                     {item.variantLabel ? <p className="text-sm text-ink/60">{item.variantLabel}</p> : null}
                     <p className="text-sm text-ink/60">{formatarBRL(item.unitPriceCents)} / unidade</p>
 
-                    <div className="mt-2 flex items-center gap-4">
+                    <div className="mt-2 flex flex-wrap items-center gap-4">
                       <QuantitySelector
                         value={item.quantity}
                         max={item.stockQty}
@@ -92,7 +99,7 @@ export function CarrinhoPageClient() {
                     </div>
                   </div>
 
-                  <div className="text-right">
+                  <div className="ml-auto text-right">
                     <Price cents={item.subtotalCents} />
                     {item.discountCents > 0 ? (
                       <p className="mt-1 text-xs font-semibold text-gold-deep">

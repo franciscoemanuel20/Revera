@@ -97,7 +97,14 @@ export function CartDrawer({
             <li className="text-ink/60">Sua sacola está vazia.</li>
           ) : (
             items.map((item) => (
-              <li key={item.id} className="flex gap-3">
+              /* `flex-wrap` + `min-w-0` + `ml-auto` (30/09/2026): no celular
+                 a linha não cabia nos 327 px úteis do painel (foto +
+                 seletor 44+32+44 + "remover" + preço) e, como item de flex
+                 não encolhe abaixo do conteúdo, a lista rolava para o lado
+                 e o preço aparecia cortado. Agora o preço desce para a
+                 linha de baixo quando não cabe. Mesma correção em
+                 src/app/carrinho/CarrinhoPageClient.tsx. */
+              <li key={item.id} className="flex flex-wrap gap-3">
                 {/* A FOTO DA COR NA LINHA (29/08/2026).
                     O drawer já recebia `imageUrl` (a foto da cor, vinda de
                     colors.photo_url) e nunca a mostrava. Desde que a cor
@@ -116,10 +123,10 @@ export function CartDrawer({
                     />
                   </span>
                 ) : null}
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="font-medium text-ink">{item.name}</p>
                   {item.variantLabel ? <p className="text-sm text-ink/60">{item.variantLabel}</p> : null}
-                  <div className="mt-2 flex items-center gap-4">
+                  <div className="mt-2 flex flex-wrap items-center gap-4">
                     <QuantitySelector
                       value={item.quantity}
                       onChange={(next) => onQuantityChange(item.id, next)}
@@ -129,7 +136,9 @@ export function CartDrawer({
                     </button>
                   </div>
                 </div>
-                <Price cents={item.unitPriceCents * item.quantity} />
+                <span className="ml-auto">
+                  <Price cents={item.unitPriceCents * item.quantity} />
+                </span>
               </li>
             ))
           )}
