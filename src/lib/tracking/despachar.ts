@@ -55,6 +55,41 @@ type Cliente = ReturnType<typeof createAdminClient>;
  * dado corrompido — e valor negativo na Meta é evento recusado, não erro
  * visível.
  */
+/**
+ * `event_time` do Purchase = a hora em que o pedido VIROU pago, não a hora do
+ * envio (auditoria Meta/Webhooks/Checkout, 30/09/2026).
+ *
+ * Antes era `Date.now()`: um reenvio tardio (Meta fora do ar, reprocessamento
+ * manual) jogava a venda para o dia do reenvio, e o relatório atribuía a
+ * compra à campanha errada.
+ *
+ * A fonte é `pixel_event_log.created_at` da linha do Purchase: ela nasce em
+ * `registrarPurchasePendente`, logo depois da transição atômica
+ * pending → paid em confirmar.ts, e nunca é reescrita. `orders` não tem
+ * `paid_at`, e `updated_at` muda a cada etiqueta — não serve.
+ *
+ * Segundos, não milissegundos: a Meta rejeita o evento se vier em ms, e a
+ * mensagem de erro não diz isso claramente. Sem data válida (não deveria
+ * acontecer), cai no agora — melhor um horário aproximado que evento perdido.
+ */
+export function horaDoPagamentoSegundos(
+  registradoEm: string | null | undefined,
+  agoraMs: number = Date.now()
+): number {
+  const ms = registradoEm ? new Date(registradoEm).getTime() : NaN;
+  return Math.floor((Number.isFinite(ms) ? ms : agoraMs) / 1000);
+}
+
+/**
+ * A Meta recusa `event_time` com mais de 7 dias. Reenvio depois disso não
+ * troca a data pela de hoje (seria o defeito que horaDoPagamentoSegundos
+ * corrige): o envio é pulado e o motivo fica em conversion_logs. Margem de
+ * 1h para o relógio da Meta não recusar no limite.
+ */
+export function vendaForaDaJanelaDaMeta(horaDaVendaSegundos: number, agoraMs: number = Date.now()): boolean {
+  return agoraMs / 1000 - horaDaVendaSegundos > 7 * 24 * 3600 - 3600;
+}
+
 export function valorDasPecas(pedido: {
   total_cents: number;
   shipping_cents?: number | null;
@@ -147,7 +182,7 @@ async function despachar(
 
   const { data: evento } = await supabase
     .from("pixel_event_log")
-    .select("sent_capi, sent_ga4")
+    .select("sent_capi, sent_ga4, created_at")
     .eq("event_name", "Purchase")
     .eq("event_id", orderId)
     .maybeSingle();
@@ -187,9 +222,8 @@ async function despachar(
   }));
   const numItems = linhas.reduce((s, i) => s + (i.quantity as number), 0);
 
-  // Segundos, não milissegundos: a Meta rejeita o evento se vier em ms, e a
-  // mensagem de erro não diz isso claramente.
-  const agoraSegundos = Math.floor(Date.now() / 1000);
+  const horaDaVenda = horaDoPagamentoSegundos(evento.created_at as string | null);
+  const foraDaJanelaMeta = vendaForaDaJanelaDaMeta(horaDaVenda);
 
   // Os dois envios em paralelo: um não deve esperar o outro, e uma plataforma
   // lenta não pode atrasar a outra.
@@ -199,10 +233,15 @@ async function despachar(
           sucesso: true,
           motivoPulado: "já enviado antes (sent_capi)",
         })
+      : foraDaJanelaMeta
+      ? Promise.resolve<ResultadoEnvio>({
+          sucesso: false,
+          motivoPulado: "venda com mais de 7 dias: fora da janela de event_time da Meta",
+        })
       : enviarPurchaseMeta({
           comoTeste: permissao.comoTeste,
           eventId: orderId,
-          eventTimeSegundos: agoraSegundos,
+          eventTimeSegundos: horaDaVenda,
           valorCents: valorDasPecas(pedido),
           orderNumber: pedido.order_number,
           sourceUrl: `${baseUrl()}/pedido`,
