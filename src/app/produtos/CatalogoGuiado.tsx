@@ -293,7 +293,7 @@ export function CatalogoGuiado({ locale = "pt", produtos }: { locale?: SiteLocal
       <section aria-labelledby="catalogo-titulo" className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 id="catalogo-titulo" className="font-display text-2xl text-ink">{copy.titulo}</h2>
+            <h2 id="catalogo-titulo" className="scroll-mt-28 font-display text-2xl text-ink">{copy.titulo}</h2>
             <p className="text-sm text-ink/70">{copy.intro}</p>
           </div>
           <div className="flex flex-wrap gap-2" aria-label={copy.filtroAria}>

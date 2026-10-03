@@ -107,7 +107,7 @@ export default async function CoresPage() {
         ))}
       </div>
 
-      <section id="ajuda" className="flex scroll-mt-8 flex-col gap-2 rounded-2xl border border-sand bg-sand/25 p-6 text-center">
+      <section id="ajuda" className="flex scroll-mt-28 flex-col gap-2 rounded-2xl border border-sand bg-sand/25 p-6 text-center">
         <span className="eyebrow-ink mx-auto">Guia rápido de cor</span>
         <h2 className="font-display text-2xl text-ink">
           Escolha a cor mais próxima e siga para a compra
