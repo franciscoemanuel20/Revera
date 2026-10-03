@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createClient } from "@/lib/supabase/server";
 import { produtoEstaVendavel, type ProdutoVitrine } from "@/lib/catalog/vitrine";
@@ -419,10 +420,13 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
           </div>
           <div className="rounded-xl border border-sand bg-sand/45 p-4">
             <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-sand">
-              <img
+              <Image
                 src={fallbackProduto}
                 alt="Prótese capilar Reverá com acabamento natural"
-                className="h-full w-full object-cover"
+                fill
+                sizes="(min-width: 1024px) 365px, (min-width: 768px) 36vw, calc(100vw - 132px)"
+                priority
+                className="object-cover"
               />
             </div>
             <div className="mt-4 flex flex-col gap-2">

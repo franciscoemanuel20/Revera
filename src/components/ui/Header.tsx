@@ -175,8 +175,8 @@ export function Header({ locale = "pt", logo, menuPrincipal = LINKS, menuConheca
           {logo ? <Image
             src={logo}
             alt={brandName}
-            width={1500}
-            height={920}
+            width={75}
+            height={46}
             priority
             className="h-10 w-auto sm:h-12"
           /> : null}

@@ -88,8 +88,8 @@ export function Footer({ locale = "pt", logo, brandName = "Reverá", instagramUr
         {logo ? <Image
           src={logo}
           alt={brandName}
-          width={1500}
-          height={920}
+          width={150}
+          height={92}
           className="h-auto w-[170px]"
         /> : null}
         <div className="flex w-full flex-col flex-wrap justify-center gap-x-16 gap-y-8 sm:flex-row">
@@ -115,7 +115,7 @@ export function Footer({ locale = "pt", logo, brandName = "Reverá", instagramUr
           ))}
         </div>
         {instagramUrl ? <a href={instagramUrl} target="_blank" rel="noreferrer" className="text-sm text-paper/70 hover:text-gold">Instagram</a> : null}
-        <p className="text-xs text-paper/40">© {new Date().getFullYear()} {brandName}</p>
+        <p className="text-xs text-paper/60">© {new Date().getFullYear()} {brandName}</p>
       </div>
     </footer>
   );

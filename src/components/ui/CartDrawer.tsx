@@ -1,10 +1,11 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import Image from "next/image";
 import { Price } from "./Price";
 import { QuantitySelector } from "./QuantitySelector";
 import { Button } from "./Button";
 import { Toast } from "./Toast";
+import { activateDialogFocus, isTopDialog } from "@/lib/ui/dialog-focus";
 
 export interface CartDrawerItem {
   id: string;
@@ -46,6 +47,12 @@ export function CartDrawer({
   erro,
   onDismissErro,
 }: CartDrawerProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    if (open && dialogRef.current) return activateDialogFocus(dialogRef.current);
+  }, [open]);
+
   /**
    * ESC FECHA A SACOLA (29/08/2026).
    *
@@ -57,7 +64,7 @@ export function CartDrawer({
   useEffect(() => {
     if (!open) return;
     function aoTeclar(evento: KeyboardEvent) {
-      if (evento.key === "Escape") onClose();
+      if (evento.key === "Escape" && dialogRef.current && isTopDialog(dialogRef.current)) onClose();
     }
     document.addEventListener("keydown", aoTeclar);
     return () => document.removeEventListener("keydown", aoTeclar);
@@ -75,16 +82,19 @@ export function CartDrawer({
      * sacola no meio da compra — que é pior que não fechar nunca.
      */
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-50 flex justify-end bg-ink/40"
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div className="flex h-full w-full max-w-md flex-col gap-4 bg-paper p-6">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl text-ink">Sua sacola</h2>
+          <h2 id={titleId} className="font-display text-xl text-ink">Sua sacola</h2>
           <button type="button" onClick={onClose} aria-label="Fechar carrinho" className="min-h-toque min-w-toque">
             ✕
           </button>
