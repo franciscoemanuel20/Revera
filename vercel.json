@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/carrinho-abandonado",
       "schedule": "*/20 * * * *"
+    },
+    {
+      "path": "/api/cron/conversoes",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

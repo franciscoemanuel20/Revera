@@ -1,4 +1,5 @@
 import "server-only";
+import type { Moeda } from "@/lib/internacional/moeda";
 import { createHash } from "node:crypto";
 import { META_PIXEL_ID, MOEDA, centavosParaMoeda } from "./config";
 import { ehProducao, descricaoDoAmbiente } from "@/lib/config/ambiente";
@@ -99,6 +100,7 @@ export async function enviarPurchaseMeta(input: {
    */
   comoTeste?: boolean;
   eventId: string;
+  currency?: Moeda;
   eventTimeSegundos: number;
   valorCents: number;
   orderNumber: string;
@@ -164,7 +166,7 @@ export async function enviarPurchaseMeta(input: {
         event_source_url: input.sourceUrl,
         user_data: userData,
         custom_data: {
-          currency: MOEDA,
+          currency: input.currency ?? MOEDA,
           value: centavosParaMoeda(input.valorCents),
           content_type: "product",
           content_ids: input.contents.map((c) => c.id),

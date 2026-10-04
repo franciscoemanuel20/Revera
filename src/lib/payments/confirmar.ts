@@ -209,7 +209,12 @@ export async function confirmarPagamento(
     return { estado: "nao_pago", motivo: "valor divergente" };
   }
 
-  await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "approved");
+  const provaPersistida = await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "approved");
+  if (!provaPersistida) {
+    // O gateway confirmou; falta persistir a prova. Mantém pending para
+    // nova consulta/webhook, sem perder o gatilho atômico da fila de Purchase.
+    return { estado: "indisponivel", motivo: "erro ao registrar confirmação" };
+  }
 
   // A trava contra corrida: se as duas portas chegarem juntas, só uma
   // atualiza — a outra vê zero linhas e entende que já foi.
@@ -312,7 +317,7 @@ async function registrarTentativa(
     if (erroAtualizar) {
       console.error("[confirmar] falha ao atualizar payment pendente", erroAtualizar);
     } else if (atualizada) {
-      return;
+      return true;
     }
   }
 
@@ -323,6 +328,7 @@ async function registrarTentativa(
     ...payload,
   });
   if (error) console.error("[confirmar] falha ao registrar payment", error);
+  return !error;
 }
 
 /**

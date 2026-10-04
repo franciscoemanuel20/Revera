@@ -1,4 +1,5 @@
 import "server-only";
+import type { Moeda } from "@/lib/internacional/moeda";
 import { GA4_MEASUREMENT_ID, MOEDA, centavosParaMoeda } from "./config";
 import { ehProducao, descricaoDoAmbiente } from "@/lib/config/ambiente";
 import type { ResultadoEnvio } from "./meta-capi";
@@ -26,6 +27,8 @@ import type { ResultadoEnvio } from "./meta-capi";
 
 export async function enviarPurchaseGa4(input: {
   eventId: string;
+  eventTimeSegundos?: number;
+  currency?: Moeda;
   clientId: string | null;
   valorCents: number;
   freteCents: number;
@@ -58,10 +61,28 @@ export async function enviarPurchaseGa4(input: {
     };
   }
 
+  // O Measurement Protocol só aceita eventos retroativos por até 72 horas.
+  // Depois disso ele ainda pode responder 204, mas descarta o evento em
+  // silêncio. Não transformamos esse falso aceite em "entregue": a Meta
+  // continua com sua janela própria e a fila registra o GA4 como bloqueado.
+  if (
+    input.eventTimeSegundos &&
+    Math.floor(Date.now() / 1000) - input.eventTimeSegundos > 72 * 60 * 60
+  ) {
+    return {
+      sucesso: false,
+      motivoPulado:
+        "evento fora da janela de 72 horas do GA4 — não enviado para evitar falso aceite 204",
+    };
+  }
+
   const corpo = {
     client_id: input.clientId,
-    // Sem isto o GA4 pode descartar eventos com timestamp fora da janela.
-    // Enviamos o purchase logo após a confirmação, então "agora" está certo.
+    // Em recuperação tardia, preserva a hora em que o pagamento foi
+    // confirmado. Sem isto o GA4 atribuiria a compra ao instante do retry.
+    ...(input.eventTimeSegundos
+      ? { timestamp_micros: input.eventTimeSegundos * 1_000_000 }
+      : {}),
     events: [
       {
         name: "purchase",
@@ -70,7 +91,7 @@ export async function enviarPurchaseGa4(input: {
           // transaction_id dentro da janela dele.
           transaction_id: input.eventId,
           value: centavosParaMoeda(input.valorCents),
-          currency: MOEDA,
+          currency: input.currency ?? MOEDA,
           shipping: centavosParaMoeda(input.freteCents),
           // O número que a operação e o cliente usam para falar do pedido.
           affiliation: "Reverá",
@@ -95,6 +116,7 @@ export async function enviarPurchaseGa4(input: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpo),
         cache: "no-store",
+        signal: AbortSignal.timeout(5_000),
       }
     );
   } catch (e) {

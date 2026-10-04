@@ -38,6 +38,7 @@ export function PurchaseTracker({ payload }: { payload: PurchasePayload }) {
 
     medirCompra({
       eventId: payload.eventId,
+      currency: payload.currency,
       valueCents: payload.valueCents,
       orderNumber: payload.orderNumber,
       contents: payload.contents,

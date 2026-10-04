@@ -1,4 +1,5 @@
 import "server-only";
+import type { Moeda } from "@/lib/internacional/moeda";
 import { valorDasPecas } from "./despachar";
 import type { createAdminClient } from "@/lib/supabase/server";
 import { podeEnviarConversao } from "./permissao";
@@ -65,7 +66,7 @@ export async function registrarPurchasePendente(
 export interface PurchasePayload {
   eventId: string;
   valueCents: number;
-  currency: "BRL";
+  currency: Moeda;
   orderId: string;
   orderNumber: string;
   contentIds: string[];
@@ -87,7 +88,7 @@ export async function consumirPurchaseParaNavegador(
   // O pedido precisa estar pago DE FATO. Não basta existir o registro.
   const { data: pedido } = await supabase
     .from("orders")
-    .select("id, order_number, status, total_cents, shipping_cents")
+    .select("id, order_number, status, total_cents, shipping_cents, currency")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -163,7 +164,7 @@ export async function consumirPurchaseParaNavegador(
      * corrida. Ver valorDasPecas em src/lib/tracking/despachar.ts.
      */
     valueCents: valorDasPecas(pedido),
-    currency: "BRL",
+    currency: (pedido.currency ?? "BRL") as Moeda,
     orderId,
     orderNumber: pedido.order_number,
     contentIds: linhas.map((i) => i.variant_id as string),

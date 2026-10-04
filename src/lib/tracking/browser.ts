@@ -1,3 +1,4 @@
+import type { Moeda } from "@/lib/internacional/moeda";
 /**
  * Os eventos que o NAVEGADOR pode disparar.
  *
@@ -153,6 +154,7 @@ export function medirIniciarCheckout(input: {
  */
 export function medirCompra(payload: {
   eventId: string;
+  currency?: Moeda;
   valueCents: number;
   orderNumber: string;
   contents: Array<{ id: string; quantity: number; item_price: number }>;
@@ -170,7 +172,7 @@ export function medirCompra(payload: {
         contents: payload.contents,
         num_items: payload.numItems,
         value: valor,
-        currency: MOEDA,
+        currency: payload.currency ?? MOEDA,
       },
       { eventID: payload.eventId }
     );
@@ -179,7 +181,7 @@ export function medirCompra(payload: {
     window.gtag?.("event", "purchase", {
       transaction_id: payload.eventId,
       value: valor,
-      currency: MOEDA,
+      currency: payload.currency ?? MOEDA,
       items: payload.contents.map((c) => ({
         item_id: c.id,
         price: c.item_price,
