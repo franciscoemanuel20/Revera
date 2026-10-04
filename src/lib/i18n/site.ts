@@ -4,6 +4,8 @@ export type SiteLocale = (typeof SITE_LOCALES)[number];
 
 export const DEFAULT_SITE_LOCALE: SiteLocale = "pt";
 export const LOCALE_COOKIE = "revera_locale";
+export const LOCALE_MANUAL_COOKIE = "revera_locale_manual";
+export const LOCALE_GEO_PENDING_COOKIE = "revera_locale_geo_pending";
 export const LOCALE_HEADER = "x-revera-locale";
 
 const LOCALE_SET = new Set<string>(SITE_LOCALES);
@@ -35,6 +37,28 @@ export function localeFromAcceptLanguage(acceptLanguage: string | null | undefin
     )
     .sort((a, b) => b.q - a.q || a.index - b.index);
   return candidates[0]?.locale ?? DEFAULT_SITE_LOCALE;
+}
+
+const PAISES_PT = new Set(["BR", "PT", "AO", "MZ", "CV", "GW", "ST", "TL"]);
+const PAISES_DE = new Set(["DE", "AT", "CH", "LI"]);
+const PAISES_FR = new Set([
+  "FR", "MC", "SN", "CI", "CM", "ML", "BF", "NE", "TG", "BJ", "CD",
+  "CG", "GA", "GN", "HT", "MG",
+]);
+const PAISES_ES = new Set([
+  "ES", "MX", "AR", "CL", "CO", "VE", "EC", "GT", "PA", "CR", "DO",
+  "UY", "PY", "BO", "PE", "HN", "SV", "NI", "CU", "PR",
+]);
+
+/** Idioma inicial da vitrine segundo o país detectado pela Vercel. */
+export function localeFromCountry(country: string | null | undefined): SiteLocale {
+  const iso = country?.trim().toUpperCase();
+  if (!iso || iso === "XX") return DEFAULT_SITE_LOCALE;
+  if (PAISES_PT.has(iso)) return "pt";
+  if (PAISES_DE.has(iso)) return "de";
+  if (PAISES_FR.has(iso)) return "fr";
+  if (PAISES_ES.has(iso)) return "es";
+  return "en";
 }
 
 export function localeFromPath(pathname: string): SiteLocale | null {

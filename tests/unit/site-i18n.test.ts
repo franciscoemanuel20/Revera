@@ -7,11 +7,14 @@ import { CATALOGO_COPY, hrefAjudaCorCatalogo } from "@/app/produtos/ProdutosCont
 import {
   DEFAULT_SITE_LOCALE,
   LOCALE_COOKIE,
+  LOCALE_GEO_PENDING_COOKIE,
+  LOCALE_MANUAL_COOKIE,
   LOCALE_HEADER,
   labelForHref,
   isFullyLocalizedPath,
   localeSwitchPath,
   localeFromAcceptLanguage,
+  localeFromCountry,
   localeFromPath,
   localizePath,
   normalizeSiteLocale,
@@ -39,6 +42,15 @@ describe("i18n publico do site", () => {
   it("respeita o peso q do Accept-Language antes da ordem textual", () => {
     expect(localeFromAcceptLanguage("pt-BR;q=0.1,en-US;q=0.9")).toBe("en");
     expect(localeFromAcceptLanguage("es-ES;q=0,en-US;q=0.5,pt-BR;q=0.4")).toBe("en");
+  });
+
+  it("escolhe o idioma inicial pelo país detectado na borda", () => {
+    expect(localeFromCountry("BR")).toBe("pt");
+    expect(localeFromCountry("DE")).toBe("de");
+    expect(localeFromCountry("FR")).toBe("fr");
+    expect(localeFromCountry("MX")).toBe("es");
+    expect(localeFromCountry("US")).toBe("en");
+    expect(localeFromCountry(null)).toBe("pt");
   });
 
   it("reconhece e remove prefixo de idioma da URL", () => {
@@ -108,21 +120,73 @@ describe("i18n publico do site", () => {
     expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("pt");
   });
 
-  it("middleware redireciona rota plenamente localizada quando existe escolha manual em cookie", () => {
+  it("middleware ignora cookie antigo e usa o país na entrada sem prefixo", () => {
     const request = new NextRequest("https://www.reveraprotesecapilar.com/cores");
     request.cookies.set(LOCALE_COOKIE, "en");
 
     const response = middleware(request);
 
     expect(response.headers.get("location")).toBeNull();
-    expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("en");
+    expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("pt");
 
-    const produtos = new NextRequest("https://www.reveraprotesecapilar.com/produtos");
-    produtos.cookies.set(LOCALE_COOKIE, "en");
+    const produtos = new NextRequest("https://www.reveraprotesecapilar.com/produtos", {
+      headers: { "x-vercel-ip-country": "DE" },
+    });
+    produtos.cookies.set(LOCALE_COOKIE, "pt");
 
     expect(middleware(produtos).headers.get("location")).toBe(
-      "https://www.reveraprotesecapilar.com/en/produtos"
+      "https://www.reveraprotesecapilar.com/de/produtos"
     );
+  });
+
+  it.each([
+    ["BR", null],
+    ["DE", "https://www.reveraprotesecapilar.com/de"],
+    ["FR", "https://www.reveraprotesecapilar.com/fr"],
+    ["AR", "https://www.reveraprotesecapilar.com/es"],
+    ["US", "https://www.reveraprotesecapilar.com/en"],
+  ])("abre a home correta para o país %s", (country, location) => {
+    const request = new NextRequest("https://www.reveraprotesecapilar.com/", {
+      headers: { "x-vercel-ip-country": country },
+    });
+    expect(middleware(request).headers.get("location")).toBe(location);
+  });
+
+  it("preserva uma escolha manual mesmo quando difere do país", () => {
+    const escolha = middleware(new NextRequest("https://www.reveraprotesecapilar.com/pt"));
+    expect(escolha.headers.get("set-cookie")).toContain(`${LOCALE_MANUAL_COOKIE}=1`);
+
+    const proximaVisita = new NextRequest("https://www.reveraprotesecapilar.com/", {
+      headers: { "x-vercel-ip-country": "US" },
+    });
+    proximaVisita.cookies.set(LOCALE_COOKIE, "pt");
+    proximaVisita.cookies.set(LOCALE_MANUAL_COOKIE, "1");
+
+    const response = middleware(proximaVisita);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("pt");
+  });
+
+  it("não transforma redirecionamento geográfico em escolha manual permanente", () => {
+    const entrada = new NextRequest("https://www.reveraprotesecapilar.com/", {
+      headers: { "x-vercel-ip-country": "DE" },
+    });
+    const redirect = middleware(entrada);
+    expect(redirect.headers.get("location")).toBe("https://www.reveraprotesecapilar.com/de");
+    expect(redirect.headers.get("set-cookie")).toContain(`${LOCALE_GEO_PENDING_COOKIE}=1`);
+
+    const paginaAposRedirect = new NextRequest("https://www.reveraprotesecapilar.com/de");
+    paginaAposRedirect.cookies.set(LOCALE_GEO_PENDING_COOKIE, "1");
+    const pagina = middleware(paginaAposRedirect);
+    expect(pagina.headers.get("set-cookie")).not.toContain(`${LOCALE_MANUAL_COOKIE}=1`);
+
+    const voltaAoBrasil = new NextRequest("https://www.reveraprotesecapilar.com/", {
+      headers: { "x-vercel-ip-country": "BR" },
+    });
+    voltaAoBrasil.cookies.set(LOCALE_COOKIE, "de");
+    const brasileira = middleware(voltaAoBrasil);
+    expect(brasileira.headers.get("location")).toBeNull();
+    expect(brasileira.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("pt");
   });
 
   it("middleware preserva rotas localizadas diretas que ainda existem", () => {
