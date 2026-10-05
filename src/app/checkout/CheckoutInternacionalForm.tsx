@@ -5,7 +5,6 @@ import { lerAtribuicao } from "@/lib/tracking/atribuicao";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Toast } from "@/components/ui/Toast";
-import { formatarDinheiroParaComprador } from "@/lib/internacional/moeda";
 import { textos, type Idioma } from "@/lib/internacional/idioma";
 import {
   criarPedidoInternacionalAction,
@@ -45,16 +44,7 @@ export interface ResumoInternacional {
     postalExemplo: string;
   };
   moeda: string;
-  itens: Array<{ nome: string; quantidade: number; subtotalCents: number }>;
-  subtotalCents: number;
-  frete: {
-    carrier: string;
-    serviceName: string;
-    priceCents: number;
-    etaDiasMin: number | null;
-    etaDiasMax: number | null;
-  };
-  totalCents: number;
+  itens: Array<{ nome: string; quantidade: number }>;
   avisoImpostosTitulo: string;
   avisoImpostosTexto: string;
   aceiteTexto: string;
@@ -93,9 +83,6 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
   function atualizar(campo: keyof FormState, valor: string) {
     setCampos((atual) => ({ ...atual, [campo]: valor }));
   }
-
-  const na = (cents: number) =>
-    formatarDinheiroParaComprador(cents, resumo.moeda, resumo.locale);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -284,34 +271,16 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
               <span>
                 {item.nome} · {item.quantidade}×
               </span>
-              <span>{na(item.subtotalCents)}</span>
             </li>
           ))}
         </ul>
-        <div className="flex justify-between text-sm text-ink/80">
-          <span>{t.resumoProdutos}</span>
-          <span>{na(resumo.subtotalCents)}</span>
-        </div>
-        <div className="flex justify-between text-sm text-ink/80">
-          <span>
-            {t.resumoFrete(resumo.frete.carrier)}
-            {resumo.frete.etaDiasMin
-              ? t.resumoPrazo(resumo.frete.etaDiasMin, resumo.frete.etaDiasMax)
-              : ""}
-          </span>
-          <span>{na(resumo.frete.priceCents)}</span>
-        </div>
-        <div className="flex justify-between border-t border-sand pt-2 font-medium text-ink">
-          <span>{t.resumoTotal}</span>
-          {/*
-            Sem o código ISO ao lado. Cheguei a pôr ("US$ 1,820.00 USD") pelo
-            argumento de casar com a fatura do cartão — e na tela ficou
-            redundante, porque a nossa tabela de símbolos já distingue US$,
-            A$ e CA$, que era o problema que o código resolveria.
-          */}
-          <span>{na(resumo.totalCents)}</span>
-        </div>
-        <p className="text-xs text-ink/60">{t.resumoRessalvaPrazo}</p>
+        <p className="border-t border-sand pt-3 text-sm text-ink/70">
+          {resumo.idioma === "en"
+            ? "After you enter the address, we convert the current Brazilian price and request a live DHL quote. You will review the exact total before paying."
+            : resumo.idioma === "es"
+              ? "Después de informar la dirección, convertimos el precio actual de Brasil y solicitamos la tarifa DHL en vivo. Verás el total exacto antes de pagar."
+              : "Depois do endereço, convertemos o preço atual do Brasil e consultamos a DHL ao vivo. Você confere o total exato antes de pagar."}
+        </p>
       </section>
 
       <section className="flex flex-col gap-3 rounded-lg border border-sand/70 bg-paper p-4">

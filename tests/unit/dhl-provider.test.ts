@@ -275,4 +275,17 @@ describe("resposta DHL rating", () => {
     expect(quotes).toHaveLength(1);
     expect(quotes[0]).toMatchObject({ currency: "USD", priceCents: 7250 });
   });
+
+  it("escolhe a moeda pedida entre os totais BILLC, PULCL e BASEC", () => {
+    const quotes = interpretarDhlRates(
+      { products: [{ productCode: "8", productName: "EXPRESS EASY", totalPrice: [
+        { currencyType: "BILLC", priceCurrency: "USD", price: 66 },
+        { currencyType: "PULCL", priceCurrency: "BRL", price: 341.94 },
+        { currencyType: "BASEC", priceCurrency: "EUR", price: 58.13 },
+      ] }] },
+      "2026-10-01T10:00:00GMT-03:00",
+      "EUR"
+    );
+    expect(quotes[0]).toMatchObject({ currency: "EUR", priceCents: 5813 });
+  });
 });

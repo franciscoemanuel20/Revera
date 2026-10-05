@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { reveraInternationalCheckoutDisponivel } from "@/lib/payments/revera";
 import { ehMoedaSuportada, type Moeda } from "./moeda";
 import { paisesDoCheckout, regraDoPais } from "./paises";
+import { converterCentavosBrl, type CotacaoPtax } from "./cambio-ptax";
 
 /**
  * Prontidão de um MERCADO internacional — a resposta honesta à pergunta
@@ -36,7 +37,7 @@ export interface CotacaoInternacional {
 }
 
 export type ProntidaoMercado =
-  | { aberto: true; moeda: Moeda; frete: CotacaoInternacional }
+  | { aberto: true; moeda: Moeda }
   | { aberto: false; motivo: string; codigo?: "pais" | "pagamento" | "frete" | "precos" };
 
 /**
@@ -86,13 +87,22 @@ export async function cotacaoFreteInternacional(
   };
 }
 
-export async function pedidoInternacionalPagavel(pais: string, moeda: string, cotacaoId: string | null, freteContratado: number): Promise<boolean> {
+export async function pedidoInternacionalPagavel(pais: string, moeda: string, pedidoId: string, freteContratado: number): Promise<boolean> {
   const mercado = await prontidaoDoMercado(pais);
-  if (!mercado.aberto || mercado.moeda !== moeda || !cotacaoId) return false;
-  // O pedido mantém seu preço contratado. Revalida a cotação referenciada,
-  // não exige que ela seja a mais recente nem reprifica pedidos em aberto.
-  const cotacao = await cotacaoFreteInternacional(pais, mercado.moeda, cotacaoId);
-  return cotacao !== null && cotacao.priceCents === freteContratado;
+  if (!mercado.aberto || mercado.moeda !== moeda || !pedidoId) return false;
+  const { data, error } = await createAdminClient().from("shipping_quotes")
+    .select("carrier, price_cents, raw_response, created_at")
+    .eq("order_id", pedidoId).eq("carrier", "DHL")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error || !data || data.price_cents !== freteContratado) return false;
+  const criadoEm = Date.parse(data.created_at as string);
+  // A cotação vale 24 h, mas só emitimos uma cobrança nas primeiras 21 h.
+  // Stripe e PayPal expiram seus checkouts em até 3 h, portanto nenhum link
+  // emitido dentro desta janela sobrevive à validade econômica do frete.
+  if (!Number.isFinite(criadoEm) || Date.now() - criadoEm > 21 * 60 * 60_000) return false;
+  const raw = data.raw_response as Record<string, unknown> | null;
+  return raw?.source === "mydhl-production" && raw?.environment === "producao" &&
+    raw?.country === pais.toUpperCase() && raw?.currency === moeda;
 }
 
 export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado> {
@@ -112,20 +122,7 @@ export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado
     return { aberto: false, motivo: "Pagamento internacional indisponível.", codigo: "pagamento" };
   }
 
-  const frete = await cotacaoFreteInternacional(iso, regra.moedaPadrao);
-  if (!frete) {
-    return {
-      aberto: false,
-      motivo: "Frete internacional não configurado para este destino.",
-      codigo: "frete",
-    };
-  }
-
-  if (!(await catalogoCompletoNoMercado(regra.moedaPadrao))) {
-    return { aberto: false, motivo: "Faltam preços ativos no catálogo deste mercado.", codigo: "precos" };
-  }
-
-  return { aberto: true, moeda: regra.moedaPadrao, frete };
+  return { aberto: true, moeda: regra.moedaPadrao };
 }
 
 /**
@@ -173,16 +170,16 @@ export type PrecosDoMercado =
  * Preço dos itens do carrinho NA MOEDA do mercado, lido de variant_prices.
  *
  * Regras deliberadas:
- *  - preço internacional é DEFINIDO pelo Francisco por mercado, nunca
- *    convertido do BRL. Variante sem linha ativa em variant_prices →
- *    mercado bloqueado para aquele carrinho ("PREÇO NÃO CONFIGURADO");
+ *  - preço internacional é o preço brasileiro atual convertido pela PTAX;
+ *    variant_prices define somente quais variantes podem ser exportadas;
  *  - desconto por quantidade NÃO se aplica ao internacional: a escada
  *    650/620/600 é regra comercial do mercado brasileiro. Se um dia houver
  *    escada internacional, ela nasce como dado próprio, não como herança.
  */
 export async function precosDoCarrinhoNoMercado(
-  itens: Array<{ variantId: string; quantity: number }>,
-  moeda: Moeda
+  itens: Array<{ variantId: string; quantity: number; basePriceCents: number }>,
+  moeda: Moeda,
+  cotacao: CotacaoPtax
 ): Promise<PrecosDoMercado> {
   if (itens.length === 0) return { ok: true, itens: [], subtotalCents: 0 };
 
@@ -210,7 +207,9 @@ export async function precosDoCarrinhoNoMercado(
   if (semPreco.length > 0) return { ok: false, semPreco };
 
   const precificados = itens.map((i) => {
-    const unit = precoPorVariante.get(i.variantId) as number;
+    // variant_prices é a lista de produtos aprovados para exportação. O
+    // valor cobrado nasce do preço brasileiro atual convertido pela PTAX.
+    const unit = converterCentavosBrl(i.basePriceCents, cotacao.reaisPorUnidade);
     return {
       variantId: i.variantId,
       quantity: i.quantity,

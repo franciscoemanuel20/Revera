@@ -5,10 +5,7 @@ import { CheckoutInternacionalForm, type ResumoInternacional } from "./CheckoutI
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { lerCarrinhoCompleto } from "@/lib/cart/store";
 import { aceiteInternacional } from "@/lib/internacional/aceite";
-import {
-  precosDoCarrinhoNoMercado,
-  prontidaoDoMercado,
-} from "@/lib/internacional/mercado";
+import { prontidaoDoMercado } from "@/lib/internacional/mercado";
 import {
   bandeira,
   idiomaDoPais,
@@ -131,17 +128,6 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
     return <p className="max-w-2xl text-ink/70">{t.sacolaVazia}</p>;
   }
 
-  const precos = await precosDoCarrinhoNoMercado(
-    carrinho.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-    mercado.moeda
-  );
-  if (!precos.ok) {
-    // Preço é decisão comercial: sem preço definido para o mercado, o
-    // honesto é dizer isso — nunca converter do real por conta própria.
-    return <IndisponivelInternacional pais={pais} motivo={t.semPrecoNoMercado} />;
-  }
-
-  const porVariante = new Map(precos.itens.map((i) => [i.variantId, i]));
   const aceite = aceiteInternacional(idioma);
   const resumo: ResumoInternacional = {
     idioma,
@@ -160,17 +146,7 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
     itens: carrinho.items.map((item) => ({
       nome: item.productName,
       quantidade: item.quantity,
-      subtotalCents: porVariante.get(item.variantId)?.subtotalCents ?? 0,
     })),
-    subtotalCents: precos.subtotalCents,
-    frete: {
-      carrier: mercado.frete.carrier,
-      serviceName: mercado.frete.serviceName,
-      priceCents: mercado.frete.priceCents,
-      etaDiasMin: mercado.frete.etaDiasMin,
-      etaDiasMax: mercado.frete.etaDiasMax,
-    },
-    totalCents: precos.subtotalCents + mercado.frete.priceCents,
     avisoImpostosTitulo: aceite.avisoTitulo,
     avisoImpostosTexto: aceite.avisoTexto,
     aceiteTexto: aceite.aceite,
@@ -180,7 +156,7 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
     <div className="flex flex-col gap-6">
       <section className="max-w-2xl rounded-lg border border-sand bg-paper p-4 text-sm text-ink/80">
         <h2 className="mb-2 font-display text-lg text-ink">
-          {t.envioPorTitulo(mercado.frete.carrier)}
+          {t.envioPorTitulo("DHL")}
         </h2>
         <ul className="list-inside list-disc space-y-1 text-xs leading-relaxed">
           <li>{t.envioBulletPortaAPorta}</li>

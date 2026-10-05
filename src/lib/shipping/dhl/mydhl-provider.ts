@@ -160,9 +160,18 @@ function primeiroNumero(...valores: unknown[]): number | null {
   return null;
 }
 
-function precoTotalProdutoDhl(produto: Record<string, unknown>): { price: number; currency: string } | null {
+function precoTotalProdutoDhl(produto: Record<string, unknown>, moedaPreferida?: string): { price: number; currency: string } | null {
   const totalPrice = produto.totalPrice;
   const entradas = Array.isArray(totalPrice) ? totalPrice : [totalPrice];
+
+  if (moedaPreferida) {
+    for (const entrada of entradas) {
+      const total = asRecord(entrada);
+      const price = primeiroNumero(total.price, total.priceValue);
+      const currency = primeiroTexto(total.currency, total.priceCurrency);
+      if (price !== null && currency === moedaPreferida) return { price, currency };
+    }
+  }
 
   for (const entrada of entradas) {
     const total = asRecord(entrada);
@@ -176,14 +185,14 @@ function precoTotalProdutoDhl(produto: Record<string, unknown>): { price: number
   return price !== null && currency ? { price, currency } : null;
 }
 
-export function interpretarDhlRates(resposta: unknown, plannedShippingDate: string): DhlQuote[] {
+export function interpretarDhlRates(resposta: unknown, plannedShippingDate: string, moedaPreferida?: string): DhlQuote[] {
   const raiz = asRecord(resposta);
   const produtos = Array.isArray(raiz.products) ? raiz.products : [];
   return produtos.flatMap((produto): DhlQuote[] => {
     const p = asRecord(produto);
     const productCode = primeiroTexto(p.productCode, p.localProductCode);
     const productName = primeiroTexto(p.productName, p.localProductName);
-    const total = precoTotalProdutoDhl(p);
+    const total = precoTotalProdutoDhl(p, moedaPreferida);
     if (!productCode || !productName || !total) return [];
 
     const delivery = asRecord(p.deliveryCapabilities);
@@ -245,7 +254,7 @@ export class MyDhlProvider {
       throw new ShippingUnavailable(`DHL devolveu resposta não-JSON: ${texto.slice(0, 200)}`);
     }
 
-    const cotacoes = interpretarDhlRates(json, input.plannedShippingDate);
+    const cotacoes = interpretarDhlRates(json, input.plannedShippingDate, input.currency);
     if (cotacoes.length === 0) {
       throw new ShippingUnavailable("DHL não retornou produtos cotáveis para este envio.");
     }

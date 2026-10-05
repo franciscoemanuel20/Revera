@@ -271,6 +271,7 @@ export class StripeProvider implements PaymentProvider {
       // sessão — {CHECKOUT_SESSION_ID} é preenchido pela própria Stripe.
       success_url: `${charge.redirectUrl}${charge.redirectUrl.includes("?") ? "&" : "?"}cs={CHECKOUT_SESSION_ID}`,
       cancel_url: charge.redirectUrl,
+      expires_at: charge.expiresAt ? Math.floor(charge.expiresAt.getTime() / 1000) : undefined,
       customer_email: charge.customerEmail,
       metadata: {
         order_id: charge.orderId,

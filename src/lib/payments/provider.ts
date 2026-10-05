@@ -77,6 +77,8 @@ export interface PaymentCharge {
    * brasileira e não recebe idioma.
    */
   locale?: string;
+  /** Expiração absoluta do checkout hospedado, quando o gateway permite. */
+  expiresAt?: Date;
   /**
    * Preferencia explicita da tela. Hoje só "apple_pay": nome histórico do
    * pedido BRL que deve abrir Stripe Checkout para exibir carteiras digitais

@@ -21,7 +21,9 @@ vi.mock("@/lib/supabase/server", () => ({createAdminClient: () => ({from: (table
   const filtrosGt: Array<[string, number]> = [];
   const q = { select: () => q, eq: (key: string, value: string) => { if(key === "id") id=value; return q; }, gt: (key: string, value: number) => { filtrosGt.push([key, value]); return q; },
     lte:()=>q,gte:()=>q,order:()=>q,limit:()=>q,
-    maybeSingle:async()=>({data:{id:id??"cotacao-nova",carrier:"DHL",service_name:"Express",currency:"USD",price_cents:id?6600:6800,valid_until:"2026-10-02"},error:null}),
+    maybeSingle:async()=>({data:table === "shipping_quotes"
+      ? {carrier:"DHL",price_cents:6600,created_at:new Date().toISOString(),raw_response:{source:"mydhl-production",environment:"producao",country:"US",currency:"USD"}}
+      : {id:id??"cotacao-nova",carrier:"DHL",service_name:"Express",currency:"USD",price_cents:id?6600:6800,valid_until:"2026-10-02"},error:null}),
     then: (resolve: (x: unknown) => unknown) => {
       if (table !== "product_variants") return Promise.resolve(resolve(resposta.precos));
       const data = resposta.variantes.data.filter((linha) =>
@@ -96,16 +98,23 @@ it("não toma consulta truncada como catálogo completo",async()=>{
   expect(await catalogoCompletoNoMercado("USD")).toBe(false);
 });
 
-it("pedido mantém a cotação original vigente quando um frete novo é publicado",async()=>{
+it("pedido só paga com recibo DHL ao vivo vinculado ao próprio pedido",async()=>{
   vi.stubEnv("CHECKOUT_PAISES","BR,US");
   vi.stubEnv("STRIPE_SECRET_KEY","sk_test_fixture");vi.stubEnv("STRIPE_WEBHOOK_SECRET","whsec_fixture");
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({charges_enabled:true,capabilities:{card_payments:"active"}}))));
   const {pedidoInternacionalPagavel,cotacaoFreteInternacional} = await import("@/lib/internacional/mercado");
   expect((await cotacaoFreteInternacional("US","USD"))?.priceCents).toBe(6800);
   expect((await cotacaoFreteInternacional("US","USD","cotacao-original"))?.priceCents).toBe(6600);
-  expect(await pedidoInternacionalPagavel("US","USD","cotacao-original",6600)).toBe(true);
-  expect(await pedidoInternacionalPagavel("US","EUR","cotacao-original",6600)).toBe(false);
-  expect(await pedidoInternacionalPagavel("US","USD","cotacao-original",6800)).toBe(false);
+  expect(await pedidoInternacionalPagavel("US","USD","pedido-1",6600)).toBe(true);
+  expect(await pedidoInternacionalPagavel("US","EUR","pedido-1",6600)).toBe(false);
+  expect(await pedidoInternacionalPagavel("US","USD","pedido-1",6800)).toBe(false);
+});
+
+it("converte o preço brasileiro pela PTAX sem repetir o número", async () => {
+  const { converterCentavosBrl } = await import("@/lib/internacional/cambio-ptax");
+  expect(converterCentavosBrl(65000, 5.2238)).toBe(12444);
+  expect(converterCentavosBrl(65000, 1)).toBe(65000);
+  expect(() => converterCentavosBrl(65000, 0)).toThrow();
 });
 
 it("conta suspensa, chave inválida ou indisponibilidade bloqueiam pagamento", async () => {

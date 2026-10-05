@@ -113,7 +113,7 @@ export default async function PagamentoPage({
       .eq("id", pedido.address_id).maybeSingle();
     // Revalida antes de criar OU reaproveitar uma sessão: um pedido antigo
     // não contorna país fechado, cotação vencida ou catálogo incompleto.
-    if (!(await pedidoInternacionalPagavel(endereco?.country ?? "", pedido.currency, pedido.intl_shipping_quote_id, pedido.shipping_cents))) {
+    if (!(await pedidoInternacionalPagavel(endereco?.country ?? "", pedido.currency, pedido.id, pedido.shipping_cents))) {
       return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
         motivo: "internacional_indisponivel",
       });
@@ -400,6 +400,7 @@ export default async function PagamentoPage({
       currency: pedido.currency as string,
       preferredMethod: pedido.payment_preference === "apple_pay" ? "apple_pay" : undefined,
       locale: idiomaPagamento,
+      expiresAt: pedido.currency !== "BRL" ? new Date(Date.now() + 3 * 60 * 60_000) : undefined,
       customerName: cliente?.full_name ?? undefined,
       customerEmail: cliente?.email ?? undefined,
       customerPhone: cliente?.phone ?? undefined,

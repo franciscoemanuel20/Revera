@@ -38,6 +38,9 @@ import {
 import { ACEITE_INTERNACIONAL_VERSAO } from "@/lib/internacional/aceite";
 import { idiomaDoPais } from "@/lib/internacional/paises";
 import { textos, type Idioma } from "@/lib/internacional/idioma";
+import { obterCotacaoPtax } from "@/lib/internacional/cambio-ptax";
+import { cotarDhlOperacional } from "@/lib/shipping/dhl/admin-quote";
+import type { DhlQuote } from "@/lib/shipping/dhl/types";
 import { avisarPedidoPendentePorEmail } from "@/lib/notificacoes/email-operacional";
 import type { CheckoutResult } from "./actions";
 
@@ -166,6 +169,7 @@ export async function criarPedidoInternacionalAction(
   if (endereco.endereco.pais === "BR") {
     return { erro: t.erroEnderecoBrasileiro };
   }
+  const linha = paraLinha(endereco.endereco);
 
   /**
    * Prontidão RECONFERIDA aqui, não herdada da tela: gateway, país aberto
@@ -183,16 +187,66 @@ export async function criarPedidoInternacionalAction(
     return { erro: t.sacolaVazia };
   }
 
-  // Preço do MERCADO para cada item — sem preço configurado, sem venda.
+  let cambio;
+  try {
+    cambio = await obterCotacaoPtax(mercado.moeda);
+  } catch (erro) {
+    console.error("[checkout-intl] falha ao obter PTAX", erro);
+    return { erro: "Não foi possível calcular o câmbio agora. Tente novamente em instantes." };
+  }
+
+  // A linha ativa em variant_prices funciona como autorização de exportação;
+  // o preço vem do BRL atual do carrinho convertido pela PTAX de venda.
   const precos = await precosDoCarrinhoNoMercado(
-    carrinho.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-    mercado.moeda
+    carrinho.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity, basePriceCents: i.basePriceCents })),
+    mercado.moeda,
+    cambio
   );
   if (!precos.ok) {
     return {
       erro:
         t.semPrecoNoMercado,
     };
+  }
+
+  const quantidadeTotal = carrinho.items.reduce((soma, item) => soma + item.quantity, 0);
+  // Cada prótese ocupa a embalagem operacional de 20×19×9 cm e 1 kg
+  // tarifável. Para várias unidades, empilhamos a altura e somamos o peso;
+  // acima de 10 volumes o checkout para, pois exige embalagem manual.
+  if (quantidadeTotal < 1 || quantidadeTotal > 10) {
+    return { erro: "Este carrinho precisa de uma cotação DHL feita pela nossa equipe." };
+  }
+
+  let cotacaoDhl: Awaited<ReturnType<typeof cotarDhlOperacional>>;
+  try {
+    cotacaoDhl = await cotarDhlOperacional({
+      country: endereco.endereco.pais,
+      postalCode: linha.postal_code,
+      cityName: endereco.endereco.cidade,
+      provinceCode: linha.region,
+      addressLine1: linha.line1,
+      currency: mercado.moeda,
+      declaredValueCents: precos.subtotalCents,
+      // Embalagem operacional já usada pela Reverá para uma prótese.
+      weightGrams: 1000 * quantidadeTotal,
+      lengthCm: 20,
+      widthCm: 19,
+      heightCm: 9 * quantidadeTotal,
+    });
+  } catch (erro) {
+    console.error("[checkout-intl] falha ao cotar DHL", erro);
+    return { erro: "A DHL não conseguiu calcular o frete para este endereço agora. Confira os dados ou tente novamente." };
+  }
+  const escolher = (quotes: DhlQuote[]) =>
+    quotes.find((q) => q.productCode === "8" && q.currency === mercado.moeda) ??
+    quotes.find((q) => q.productCode === "P" && q.currency === mercado.moeda);
+  const frete = escolher(cotacaoDhl.quotes);
+  if (!frete || frete.priceCents <= 0) {
+    return { erro: "A DHL não retornou um serviço de envio compatível para este endereço." };
+  }
+  if (cotacaoDhl.ambiente !== "producao") {
+    console.error("[checkout-intl] cotação recusada fora da produção DHL");
+    return { erro: "O frete internacional está temporariamente indisponível para pagamento." };
   }
 
   // Trava do duplo clique — idêntica ao nacional, mesma função.
@@ -204,13 +258,61 @@ export async function criarPedidoInternacionalAction(
   }
 
   const admin = createAdminClient();
+  let pedidoPersistido = false;
+  const quoteId = randomUUID();
+  const customerId = randomUUID();
 
   async function falhar(mensagem: string): Promise<CheckoutResult> {
-    await devolverCarrinhoParaAberto(carrinho.cartId as string);
+    // Depois que o pedido existe, reabrir o carrinho permitiria criar um
+    // segundo pedido pagável para a mesma compra. Mantemos a trava e o
+    // pedido fica fail-closed para reconciliação operacional.
+    if (!pedidoPersistido) {
+      // IDs são gerados antes das inserções: apagar por eles é seguro tanto
+      // quando a linha existe quanto quando a inserção falhou antes de criar.
+      const [{ error: erroQuote }, { error: erroCustomer }] = await Promise.all([
+        admin.from("shipping_quotes").delete().eq("id", quoteId),
+        admin.from("customers").delete().eq("id", customerId),
+      ]);
+      if (!erroQuote && !erroCustomer) {
+        await devolverCarrinhoParaAberto(carrinho.cartId as string);
+      } else {
+        console.error("[checkout-intl] limpeza pré-pedido incompleta; carrinho mantido travado", {
+          quote: erroQuote?.code,
+          customer: erroCustomer?.code,
+        });
+      }
+    }
     return { erro: mensagem };
   }
 
-  const customerId = randomUUID();
+  const reciboDhl = {
+    source: "mydhl-production",
+    environment: cotacaoDhl.ambiente,
+    country: endereco.endereco.pais,
+    currency: mercado.moeda,
+    product_code: frete.productCode,
+    delivery_date: frete.deliveryDate,
+    quoted_at: new Date().toISOString(),
+    exchange_rate: cambio.reaisPorUnidade,
+    exchange_rate_source: cambio.fonte,
+    exchange_rate_date: cambio.data,
+    package: { quantity: quantidadeTotal, weight_grams: 1000 * quantidadeTotal, length_cm: 20, width_cm: 19, height_cm: 9 * quantidadeTotal },
+  };
+  const { error: erroCotacaoInicial } = await admin.from("shipping_quotes").insert({
+    id: quoteId,
+    order_id: null,
+    cart_id: carrinho.cartId,
+    service_name: frete.productName,
+    carrier: "DHL",
+    price_cents: frete.priceCents,
+    eta_days: frete.etaDays,
+    raw_response: reciboDhl,
+  });
+  if (erroCotacaoInicial) {
+    console.error("[checkout-intl] falha ao gravar cotação DHL", erroCotacaoInicial);
+    return falhar("Não foi possível confirmar a cotação DHL. Tente novamente.");
+  }
+
   const { error: erroCustomer } = await admin.from("customers").insert({
     id: customerId,
     full_name: dados.name,
@@ -226,7 +328,6 @@ export async function criarPedidoInternacionalAction(
     return falhar(t.erroRegistrarDados);
   }
 
-  const linha = paraLinha(endereco.endereco);
   const addressId = randomUUID();
   const { error: erroAddress } = await admin.from("addresses").insert({
     id: addressId,
@@ -245,7 +346,7 @@ export async function criarPedidoInternacionalAction(
   }
 
   const subtotalCents = precos.subtotalCents;
-  const shippingCents = mercado.frete.priceCents;
+  const shippingCents = frete.priceCents;
   // tax_cents = 0 NÃO significa "sem imposto no destino" — significa "a
   // Reverá não cobrou imposto no checkout" (estrutura §4). O aviso e o
   // aceite comunicam a diferença ao cliente.
@@ -272,6 +373,31 @@ export async function criarPedidoInternacionalAction(
   const orderId = randomUUID();
   const accessToken = randomUUID();
 
+  async function desfazerPedidoParcial(mensagem: string): Promise<CheckoutResult> {
+    // Compensação explícita: order_items e quote ligada caem por cascade;
+    // customer remove o endereço. Só reabrimos o carrinho se TODA a
+    // compensação confirmou sucesso, evitando pedido duplicado.
+    const { error: erroOrder } = await admin.from("orders").delete().eq("id", orderId);
+    const [{ error: erroQuote }, { error: erroCustomer }] = erroOrder
+      ? [{ error: null }, { error: null }]
+      : await Promise.all([
+          admin.from("shipping_quotes").delete().eq("id", quoteId),
+          admin.from("customers").delete().eq("id", customerId),
+        ]);
+    if (!erroOrder && !erroQuote && !erroCustomer) {
+      pedidoPersistido = false;
+      await devolverCarrinhoParaAberto(carrinho.cartId as string);
+    } else {
+      console.error("[checkout-intl] compensação incompleta; carrinho mantido travado", {
+        orderId,
+        order: erroOrder?.code,
+        quote: erroQuote?.code,
+        customer: erroCustomer?.code,
+      });
+    }
+    return { erro: mensagem };
+  }
+
   let orderNumber = gerarNumeroPedido();
   let pedidoCriado = false;
   for (let tentativa = 0; tentativa < 3 && !pedidoCriado; tentativa += 1) {
@@ -293,13 +419,16 @@ export async function criarPedidoInternacionalAction(
       // "true"; quem data é a gente.
       terms_version: ACEITE_INTERNACIONAL_VERSAO,
       terms_accepted_at: new Date().toISOString(),
-      // Qual cotação congelou este frete (estrutura §2/§8).
-      intl_shipping_quote_id: mercado.frete.id,
+      intl_shipping_quote_id: null,
+      exchange_rate: cambio.reaisPorUnidade,
+      exchange_rate_source: cambio.fonte,
+      exchange_rate_date: cambio.data,
       ...atribuicao,
     });
 
     if (!error) {
       pedidoCriado = true;
+      pedidoPersistido = true;
     } else if (error.code === "23505") {
       orderNumber = gerarNumeroPedido();
     } else {
@@ -328,7 +457,15 @@ export async function criarPedidoInternacionalAction(
 
   const { error: erroItens } = await admin.from("order_items").insert(itensPayload);
   if (erroItens) {
-    return falhar("Não foi possível registrar os itens do pedido. Tente novamente.");
+    return desfazerPedidoParcial("Não foi possível registrar os itens do pedido. Tente novamente.");
+  }
+
+  const { error: erroCotacao } = await admin.from("shipping_quotes")
+    .update({ order_id: orderId }).eq("id", quoteId).is("order_id", null)
+    .select("id").single();
+  if (erroCotacao) {
+    console.error("[checkout-intl] falha ao gravar recibo DHL", erroCotacao);
+    return desfazerPedidoParcial("Não foi possível confirmar a cotação DHL. Tente novamente.");
   }
 
   const avisoEmail = await avisarPedidoPendentePorEmail({
