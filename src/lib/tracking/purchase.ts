@@ -131,6 +131,18 @@ export async function consumirPurchaseParaNavegador(
     return null;
   }
 
+  // O navegador tardio precisa usar exatamente o mesmo snapshot imutável
+  // entregue pela CAPI. Relendo total/moeda atuais de orders, uma correção
+  // administrativa posterior poderia fazer os dois lados compartilharem o
+  // event_id, mas divergirem em receita — e a Meta escolheria um valor pela
+  // ordem de chegada. Pedidos anteriores à outbox mantêm o fallback legado.
+  const { data: snapshot, error: snapshotError } = await supabase
+    .from("purchase_outbox")
+    .select("currency, value_cents")
+    .eq("order_id", orderId)
+    .maybeSingle();
+  if (snapshotError) return null;
+
   // Marca como enviado só se ainda não estava. O `.eq("sent_web", false)`
   // é o que torna isto seguro contra duas abas simultâneas: a segunda não
   // encontra linha para atualizar e recebe null.
@@ -163,8 +175,8 @@ export async function consumirPurchaseParaNavegador(
      * dependeria de qual chegou primeiro — receita instável por sorte de
      * corrida. Ver valorDasPecas em src/lib/tracking/despachar.ts.
      */
-    valueCents: valorDasPecas(pedido),
-    currency: (pedido.currency ?? "BRL") as Moeda,
+    valueCents: snapshot?.value_cents ?? valorDasPecas(pedido),
+    currency: (snapshot?.currency ?? pedido.currency ?? "BRL") as Moeda,
     orderId,
     orderNumber: pedido.order_number,
     contentIds: linhas.map((i) => i.variant_id as string),

@@ -32,6 +32,34 @@ describe('recuperação durável de Purchase',()=>{
   expect(enviarPurchaseGa4).toHaveBeenCalledWith(expect.objectContaining({eventId:id,eventTimeSegundos:1790848800,currency:'BRL'}));
   expect(c.rpc).toHaveBeenLastCalledWith('finish_purchase_outbox',expect.objectContaining({p_order_id:id,p_lease_token:'lease-test',p_delivered:true}));
  });
+ it('preserva ID, hora, valor e USD entre duas tentativas reais do dispatcher',async()=>{
+  vi.stubEnv('VERCEL_ENV','production');
+  vi.mocked(enviarPurchaseMeta)
+    .mockResolvedValueOnce({sucesso:false,httpStatus:503})
+    .mockResolvedValueOnce({sucesso:true,httpStatus:200,resposta:{events_received:1}});
+  vi.mocked(enviarPurchaseGa4)
+    .mockResolvedValueOnce({sucesso:false,httpStatus:503})
+    .mockResolvedValueOnce({sucesso:true});
+  const c=db();
+  const snapshot={...job,currency:'USD',value_cents:19900};
+  c.rpc.mockReset()
+    .mockResolvedValueOnce({data:[snapshot],error:null})
+    .mockResolvedValueOnce({data:true,error:null})
+    .mockResolvedValueOnce({data:[{...snapshot,lease_token:'lease-retry'}],error:null})
+    .mockResolvedValueOnce({data:true,error:null});
+
+  await processarPurchasePendente(c as any,id);
+  await processarPurchasePendente(c as any,id);
+
+  expect(enviarPurchaseMeta).toHaveBeenCalledTimes(2);
+  expect(enviarPurchaseGa4).toHaveBeenCalledTimes(2);
+  for(const [payload] of vi.mocked(enviarPurchaseMeta).mock.calls){
+   expect(payload).toEqual(expect.objectContaining({eventId:id,eventTimeSegundos:1790848800,valorCents:19900,currency:'USD'}));
+  }
+  for(const [payload] of vi.mocked(enviarPurchaseGa4).mock.calls){
+   expect(payload).toEqual(expect.objectContaining({eventId:id,eventTimeSegundos:1790848800,currency:'USD'}));
+  }
+ });
  it('mantém tentativa pendente quando a Meta não aceitou',async()=>{
   vi.stubEnv('VERCEL_ENV','production');
   vi.mocked(enviarPurchaseMeta).mockResolvedValue({sucesso:false,httpStatus:503});

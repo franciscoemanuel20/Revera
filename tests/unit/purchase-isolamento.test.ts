@@ -62,6 +62,7 @@ function bancoComPedidoPago(provider: string, status = "paid") {
           sent_ga4: false,
         },
       ],
+      purchase_outbox: [],
     },
     UNICOS_REAIS
   );
@@ -199,6 +200,27 @@ describe("CENÁRIO 7 — pagamento confirmado gera exatamente um Purchase", () =
     expect(p?.numItems).toBe(1);
     // event_id = orders.id é o que deduplica navegador × CAPI na Meta.
     expect(p?.eventId).toBe(p?.orderId);
+    expect(await consumirPurchaseParaNavegador(cliente(db), PEDIDO)).toBeNull();
+  });
+
+  it("retorno tardio do navegador usa o mesmo ID mesmo após a CAPI já ter sido aceita", async () => {
+    const db = bancoComPedidoPago("infinitepay");
+    db.tabela("pixel_event_log")[0]!.sent_capi = true;
+    db.tabela("purchase_outbox").push({
+      order_id: PEDIDO,
+      currency: "USD",
+      value_cents: 15900,
+    });
+
+    const payload = await consumirPurchaseParaNavegador(cliente(db), PEDIDO);
+
+    expect(payload?.eventId).toBe(PEDIDO);
+    expect(payload?.orderId).toBe(PEDIDO);
+    expect(payload?.currency).toBe("USD");
+    expect(payload?.valueCents).toBe(15900);
+    expect(db.tabela("pixel_event_log")[0]).toEqual(
+      expect.objectContaining({ sent_capi: true, sent_web: true })
+    );
     expect(await consumirPurchaseParaNavegador(cliente(db), PEDIDO)).toBeNull();
   });
 });
