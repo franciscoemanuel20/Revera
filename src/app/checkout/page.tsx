@@ -17,6 +17,7 @@ import {
 } from "@/lib/internacional/paises";
 import { LANG_HTML, textos, type Idioma } from "@/lib/internacional/idioma";
 import { GEO_COUNTRY_COOKIE, GEO_COUNTRY_HEADER } from "@/lib/i18n/site";
+import { produtoTraduzido } from "@/lib/i18n/produtos";
 import { reveraApplePayDisponivel } from "@/lib/payments/revera";
 import { obterCotacaoPtax } from "@/lib/internacional/cambio-ptax";
 
@@ -185,7 +186,7 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
     moeda: mercado.moeda,
     itens: carrinho.items.map((item) => ({
       variantId: item.variantId,
-      nome: item.productName,
+      nome: produtoTraduzido(item.productSlug, idioma, item.productName).nome,
       quantidade: item.quantity,
       precoUnitarioCents: precoPorVariante.get(item.variantId)?.unitPriceCents ?? 0,
     })),

@@ -20,6 +20,7 @@ export interface CartItemView {
   // manipula).
   cartItemId: string;
   variantId: string;
+  productSlug: string;
   productName: string;
   // Combinação de cor/tamanho/nível de grisalho que identifica a variante,
   // já pronta para exibir — ver montarLabelVariante em store.ts. Nula

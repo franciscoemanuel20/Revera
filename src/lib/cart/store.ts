@@ -355,7 +355,7 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
 
   const [{ data: produtos }, resultadoCores, { data: tamanhos }, { data: niveisGrisalho }, regrasPorProduto] =
     await Promise.all([
-      productIds.length > 0 ? admin().from("products").select("id, name").in("id", productIds) : Promise.resolve({ data: [] }),
+      productIds.length > 0 ? admin().from("products").select("id, name, slug").in("id", productIds) : Promise.resolve({ data: [] }),
       colorIds.length > 0 ? admin().from("colors").select("id, name, photo_url, is_active").in("id", colorIds) : Promise.resolve({ data: [] }),
       sizeIds.length > 0 ? admin().from("sizes").select("id, label").in("id", sizeIds) : Promise.resolve({ data: [] }),
       grayLevelIds.length > 0
@@ -369,7 +369,7 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
   // Mantemos ambos os ramos explícitos para não confundir esse caso normal
   // com uma falha real da consulta ao Supabase.
   const erroCores = "error" in resultadoCores ? resultadoCores.error : null;
-  const produtosPorId = new Map((produtos ?? []).map((p) => [p.id as string, p.name as string]));
+  const produtosPorId = new Map((produtos ?? []).map((p) => [p.id as string, { name: p.name as string, slug: p.slug as string }]));
   const coresPorId = new Map((cores ?? []).map((c) => [c.id as string, c]));
   const tamanhosPorId = new Map((tamanhos ?? []).map((s) => [s.id as string, s.label as string]));
   const niveisPorId = new Map((niveisGrisalho ?? []).map((g) => [g.id as string, g.label as string]));
@@ -466,7 +466,8 @@ export async function lerCarrinhoCompleto(): Promise<CartView> {
       {
         cartItemId: linha.id as string,
         variantId: variante.id as string,
-        productName: produtosPorId.get(variante.product_id as string) ?? "Produto",
+        productSlug: produtosPorId.get(variante.product_id as string)?.slug ?? "",
+        productName: produtosPorId.get(variante.product_id as string)?.name ?? "Produto",
         variantLabel: montarLabelVariante({
           colorName: (cor?.name as string | undefined) ?? null,
           sizeLabel: variante.size_id ? tamanhosPorId.get(variante.size_id as string) ?? null : null,
