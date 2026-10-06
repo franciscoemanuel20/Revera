@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase/server", () => ({createAdminClient: () => ({from: (table
   const q = { select: () => q, eq: (key: string, value: string) => { if(key === "id") id=value; return q; }, gt: (key: string, value: number) => { filtrosGt.push([key, value]); return q; },
     lte:()=>q,gte:()=>q,order:()=>q,limit:()=>q,
     maybeSingle:async()=>({data:table === "shipping_quotes"
-      ? {carrier:"DHL",price_cents:6600,created_at:new Date().toISOString(),raw_response:{source:"mydhl-production",environment:"producao",country:"US",currency:"USD"}}
+      ? {id:"quote-1",order_id:"pedido-1",carrier:"DHL",price_cents:6600,service_name:"Express",eta_days:4,created_at:new Date().toISOString(),raw_response:{source:"mydhl-production",environment:"producao",country:"US",currency:"USD",product_code:"8",service_name:"Express",eta_days:4,delivery_date:null,quoted_at:new Date().toISOString()}}
       : {id:id??"cotacao-nova",carrier:"DHL",service_name:"Express",currency:"USD",price_cents:id?6600:6800,valid_until:"2026-10-02"},error:null}),
     then: (resolve: (x: unknown) => unknown) => {
       if (table !== "product_variants") return Promise.resolve(resolve(resposta.precos));
@@ -105,9 +105,22 @@ it("pedido só paga com recibo DHL ao vivo vinculado ao próprio pedido",async()
   const {pedidoInternacionalPagavel,cotacaoFreteInternacional} = await import("@/lib/internacional/mercado");
   expect((await cotacaoFreteInternacional("US","USD"))?.priceCents).toBe(6800);
   expect((await cotacaoFreteInternacional("US","USD","cotacao-original"))?.priceCents).toBe(6600);
-  expect(await pedidoInternacionalPagavel("US","USD","pedido-1",6600)).toBe(true);
-  expect(await pedidoInternacionalPagavel("US","EUR","pedido-1",6600)).toBe(false);
-  expect(await pedidoInternacionalPagavel("US","USD","pedido-1",6800)).toBe(false);
+  expect((await pedidoInternacionalPagavel("US","USD","pedido-1",6600,"quote-1")).pagavel).toBe(true);
+  expect((await pedidoInternacionalPagavel("US","EUR","pedido-1",6600,"quote-1")).pagavel).toBe(false);
+  expect((await pedidoInternacionalPagavel("US","USD","pedido-1",6800,"quote-1")).pagavel).toBe(false);
+  expect((await pedidoInternacionalPagavel("US","USD","other-order",6600,"quote-1")).pagavel).toBe(false);
+});
+
+it("reserva 3 h para iniciar PayPal, a chamada do gateway e 3 h para a ordem expirar", async () => {
+  const { cotacaoPermiteNovoPayPal, JANELA_MAXIMA_PAGAMENTO_INTERNACIONAL_MS } = await import("@/lib/internacional/mercado");
+  const cotadaEm = new Date("2026-10-06T12:00:00.000Z");
+  expect(JANELA_MAXIMA_PAGAMENTO_INTERNACIONAL_MS).toBe(6 * 60 * 60_000 + 20_000);
+  expect(cotacaoPermiteNovoPayPal(cotadaEm, cotadaEm.getTime())).toBe(true);
+  expect(cotacaoPermiteNovoPayPal(cotadaEm, cotadaEm.getTime() + 60 * 60_000)).toBe(true);
+  expect(cotacaoPermiteNovoPayPal(cotadaEm, cotadaEm.getTime() + 2 * 60 * 60_000 + 58 * 60_000)).toBe(true);
+  expect(cotacaoPermiteNovoPayPal(cotadaEm, cotadaEm.getTime() + 3 * 60 * 60_000 - 60_000)).toBe(true);
+  expect(cotacaoPermiteNovoPayPal(cotadaEm, cotadaEm.getTime() + 3 * 60 * 60_000 - 59_999)).toBe(false);
+  expect(cotacaoPermiteNovoPayPal(cotadaEm, cotadaEm.getTime() - 30_001)).toBe(false);
 });
 
 it("converte o preço brasileiro pela PTAX sem repetir o número", async () => {

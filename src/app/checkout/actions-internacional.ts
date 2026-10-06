@@ -10,8 +10,8 @@
  * Diferenças de fundo:
  *  - preço vem de variant_prices NA MOEDA do mercado (nunca convertido,
  *    nunca com a escada de desconto brasileira) — precosDoCarrinhoNoMercado;
- *  - frete vem de cotação MANUAL cadastrada (intl_shipping_quotes), com
- *    validade — sem cotação vigente o mercado nem abre;
+ *  - frete vem de cotação DHL em tempo real para o endereço informado; o
+ *    comprador vê e confirma o total antes de qualquer pedido nascer;
  *  - endereço valida por validarEndereco() (única porta de validação
  *    internacional), não pelo schema brasileiro;
  *  - o pedido só nasce com o ACEITE internacional marcado, e grava
@@ -23,6 +23,12 @@ import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { consumirLimiteDhlCompartilhado } from "@/lib/http/limite-dhl-compartilhado";
+import {
+  emitirConfirmacaoCotacao,
+  hashCheckout,
+  validarConfirmacaoCotacao,
+} from "@/lib/internacional/cotacao-confirmacao";
 import {
   devolverCarrinhoParaAberto,
   lerCarrinhoCompleto,
@@ -38,6 +44,14 @@ import {
 import { ACEITE_INTERNACIONAL_VERSAO } from "@/lib/internacional/aceite";
 import { idiomaDoPais } from "@/lib/internacional/paises";
 import { textos, type Idioma } from "@/lib/internacional/idioma";
+
+const ERROS_COTACAO: Record<Idioma, { indisponivel: string; limite: (segundos: number) => string; mudou: string; manual: string }> = {
+  pt: { indisponivel: "A consulta de frete está temporariamente indisponível. Tente novamente mais tarde.", limite: (s) => `Muitas consultas de frete. Aguarde ${s} segundos e tente novamente.`, mudou: "A cotação expirou ou mudou na nova consulta da DHL. Confira as condições atualizadas e confirme novamente.", manual: "Este carrinho precisa de uma cotação DHL feita pela nossa equipe." },
+  en: { indisponivel: "Shipping quotes are temporarily unavailable. Please try again later.", limite: (s) => `Too many shipping quote requests. Wait ${s} seconds and try again.`, mudou: "The quote expired or changed after the DHL recheck. Review the updated shipping conditions and confirm again.", manual: "This cart requires a DHL quote prepared by our team." },
+  es: { indisponivel: "Las cotizaciones de envío no están disponibles temporalmente. Inténtalo más tarde.", limite: (s) => `Hay demasiadas consultas de envío. Espera ${s} segundos e inténtalo de nuevo.`, mudou: "La cotización venció o cambió al volver a consultar DHL. Revisa las condiciones actualizadas y confirma de nuevo.", manual: "Este carrito necesita una cotización DHL preparada por nuestro equipo." },
+  fr: { indisponivel: "Les tarifs de livraison sont temporairement indisponibles. Réessayez plus tard.", limite: (s) => `Trop de demandes de tarif. Attendez ${s} secondes puis réessayez.`, mudou: "Le tarif a expiré ou changé après la nouvelle vérification DHL. Vérifiez les conditions mises à jour et confirmez à nouveau.", manual: "Ce panier nécessite un tarif DHL préparé par notre équipe." },
+  de: { indisponivel: "Versandangebote sind vorübergehend nicht verfügbar. Versuchen Sie es später erneut.", limite: (s) => `Zu viele Versandanfragen. Warten Sie ${s} Sekunden und versuchen Sie es erneut.`, mudou: "Das Angebot ist abgelaufen oder hat sich nach der erneuten DHL-Prüfung geändert. Prüfen Sie die aktualisierten Bedingungen und bestätigen Sie erneut.", manual: "Für diesen Warenkorb muss unser Team ein DHL-Angebot erstellen." },
+};
 import { obterCotacaoPtax } from "@/lib/internacional/cambio-ptax";
 import { cotarDhlOperacional } from "@/lib/shipping/dhl/admin-quote";
 import type { DhlQuote } from "@/lib/shipping/dhl/types";
@@ -70,14 +84,8 @@ function construirSchema(idioma: Idioma) {
   // Alguns destinos não têm código postal. A validação de endereço decide
   // se ele é obrigatório conforme o país, depois de ler o payload.
   codigoPostal: z.string().trim().default(""),
-  /**
-   * O aceite é OBRIGATÓRIO e específico (estrutura §6). `literal(true)`:
-   * não existe pedido internacional sem ele, nem por payload adulterado —
-   * o botão desabilitado na tela é cortesia, a trava é esta.
-   */
-  aceite: z.literal(true, {
-    errorMap: () => ({ message: t.aceiteObrigatorio }),
-  }),
+  /** O aceite só é exigido na confirmação que pode criar o pedido. */
+  aceite: z.boolean().optional().default(false),
   atribuicao: z
     .object({
       fbp: textoCurto,
@@ -94,6 +102,7 @@ function construirSchema(idioma: Idioma) {
     .nullable()
     .optional()
     .catch(null),
+  confirmarCotacao: z.string().min(20).max(4096).optional().nullable(),
   });
 }
 
@@ -145,6 +154,9 @@ export async function criarPedidoInternacionalAction(
     return { erro: t.erroConfiraCampos, camposComErro };
   }
   const dados = parsed.data;
+  if (dados.confirmarCotacao && !dados.aceite) {
+    return { erro: t.aceiteObrigatorio };
+  }
 
   // A única porta de validação de endereço internacional — inclui a regra
   // por país (código postal, região obrigatória onde for).
@@ -214,7 +226,17 @@ export async function criarPedidoInternacionalAction(
   // tarifável. Para várias unidades, empilhamos a altura e somamos o peso;
   // acima de 10 volumes o checkout para, pois exige embalagem manual.
   if (quantidadeTotal < 1 || quantidadeTotal > 10) {
-    return { erro: "Este carrinho precisa de uma cotação DHL feita pela nossa equipe." };
+    return { erro: ERROS_COTACAO[idioma].manual };
+  }
+
+  const cabecalhos = await headers();
+  const limiteCotacao = await consumirLimiteDhlCompartilhado(cabecalhos, carrinho.cartId);
+  if (!limiteCotacao.permitido) {
+    return {
+      erro: limiteCotacao.indisponivel
+        ? ERROS_COTACAO[idioma].indisponivel
+        : ERROS_COTACAO[idioma].limite(limiteCotacao.retryAfterSeconds),
+    };
   }
 
   let cotacaoDhl: Awaited<ReturnType<typeof cotarDhlOperacional>>;
@@ -234,7 +256,9 @@ export async function criarPedidoInternacionalAction(
       heightCm: 9 * quantidadeTotal,
     });
   } catch (erro) {
-    console.error("[checkout-intl] falha ao cotar DHL", erro);
+    console.error("[checkout-intl] falha ao cotar DHL", {
+      errorName: erro instanceof Error ? erro.name : "unknown",
+    });
     return { erro: "A DHL não conseguiu calcular o frete para este endereço agora. Confira os dados ou tente novamente." };
   }
   const escolher = (quotes: DhlQuote[]) =>
@@ -247,6 +271,85 @@ export async function criarPedidoInternacionalAction(
   if (cotacaoDhl.ambiente !== "producao") {
     console.error("[checkout-intl] cotação recusada fora da produção DHL");
     return { erro: "O frete internacional está temporariamente indisponível para pagamento." };
+  }
+
+  const subtotalCents = precos.subtotalCents;
+  const shippingCents = frete.priceCents;
+  const taxCents = 0;
+  const totalCents = subtotalCents + shippingCents + taxCents;
+  const cotacao = {
+    currency: mercado.moeda,
+    subtotalCents,
+    shippingCents,
+    totalCents,
+    serviceName: frete.productName,
+    etaDays: frete.etaDays,
+    deliveryDate: frete.deliveryDate ?? null,
+  };
+  const enderecamentoHash = hashCheckout({
+    pais: endereco.endereco.pais,
+    linha1: linha.line1,
+    linha2: linha.line2,
+    cidade: linha.city,
+    regiao: linha.region,
+    codigoPostal: linha.postal_code,
+    empresa: linha.company,
+  });
+  const carrinhoHash = hashCheckout(carrinho.items
+    .map((item) => ({
+      variantId: item.variantId,
+      quantity: item.quantity,
+      basePriceCents: item.basePriceCents,
+      productName: item.productName,
+      variantLabel: item.variantLabel,
+    }))
+    .sort((a, b) => a.variantId.localeCompare(b.variantId)));
+  const payloadConfirmacao = {
+    cartId: carrinho.cartId,
+    carrinhoHash,
+    enderecoHash: enderecamentoHash,
+    moeda: mercado.moeda,
+    subtotalCentavos: subtotalCents,
+    freteCentavos: shippingCents,
+    totalCentavos: totalCents,
+    codigoServico: frete.productCode,
+    nomeServico: frete.productName,
+    prazoDias: frete.etaDays,
+    dataEntrega: frete.deliveryDate ?? null,
+    termosVersao: ACEITE_INTERNACIONAL_VERSAO,
+  };
+  let tokenCotacao: string;
+  try {
+    tokenCotacao = emitirConfirmacaoCotacao(payloadConfirmacao);
+  } catch {
+    console.error("[checkout-intl] não foi possível assinar a cotação", { errorCode: "signing-key-unavailable" });
+    return { erro: "Não foi possível validar a cotação. Tente novamente em instantes." };
+  }
+  const cotacaoComToken = { ...cotacao, token: tokenCotacao };
+
+  // Primeiro mostramos a tarifa ao comprador sem criar pedido, reserva ou
+  // cobrança. Na confirmação, o servidor recota e compara os valores.
+  const confirmada = dados.confirmarCotacao;
+  if (!confirmada) return { cotacao: cotacaoComToken };
+  const snapshotConfirmado = validarConfirmacaoCotacao(confirmada);
+  const cotacaoConfere = snapshotConfirmado &&
+    snapshotConfirmado.cartId === payloadConfirmacao.cartId &&
+    snapshotConfirmado.carrinhoHash === payloadConfirmacao.carrinhoHash &&
+    snapshotConfirmado.enderecoHash === payloadConfirmacao.enderecoHash &&
+    snapshotConfirmado.moeda === payloadConfirmacao.moeda &&
+    snapshotConfirmado.subtotalCentavos === payloadConfirmacao.subtotalCentavos &&
+    snapshotConfirmado.freteCentavos === payloadConfirmacao.freteCentavos &&
+    snapshotConfirmado.totalCentavos === payloadConfirmacao.totalCentavos &&
+    snapshotConfirmado.codigoServico === payloadConfirmacao.codigoServico &&
+    snapshotConfirmado.nomeServico === payloadConfirmacao.nomeServico &&
+    snapshotConfirmado.prazoDias === payloadConfirmacao.prazoDias &&
+    snapshotConfirmado.dataEntrega === payloadConfirmacao.dataEntrega &&
+    snapshotConfirmado.termosVersao === payloadConfirmacao.termosVersao;
+  if (!cotacaoConfere) {
+    return {
+      erro: ERROS_COTACAO[idioma].mudou,
+      cotacao: cotacaoComToken,
+    };
   }
 
   // Trava do duplo clique — idêntica ao nacional, mesma função.
@@ -291,7 +394,9 @@ export async function criarPedidoInternacionalAction(
     country: endereco.endereco.pais,
     currency: mercado.moeda,
     product_code: frete.productCode,
-    delivery_date: frete.deliveryDate,
+    service_name: frete.productName,
+    eta_days: frete.etaDays,
+    delivery_date: frete.deliveryDate ?? null,
     quoted_at: new Date().toISOString(),
     exchange_rate: cambio.reaisPorUnidade,
     exchange_rate_source: cambio.fonte,
@@ -345,15 +450,10 @@ export async function criarPedidoInternacionalAction(
     return falhar(t.erroRegistrarEndereco);
   }
 
-  const subtotalCents = precos.subtotalCents;
-  const shippingCents = frete.priceCents;
   // tax_cents = 0 NÃO significa "sem imposto no destino" — significa "a
   // Reverá não cobrou imposto no checkout" (estrutura §4). O aviso e o
   // aceite comunicam a diferença ao cliente.
-  const taxCents = 0;
-  const totalCents = subtotalCents + shippingCents + taxCents;
 
-  const cabecalhos = await headers();
   const encadeado = cabecalhos.get("x-forwarded-for")?.split(",")[0]?.trim();
   const atribuicao = {
     fbp: dados.atribuicao?.fbp ?? null,
@@ -420,6 +520,7 @@ export async function criarPedidoInternacionalAction(
       terms_version: ACEITE_INTERNACIONAL_VERSAO,
       terms_accepted_at: new Date().toISOString(),
       intl_shipping_quote_id: null,
+      shipping_quote_id: quoteId,
       exchange_rate: cambio.reaisPorUnidade,
       exchange_rate_source: cambio.fonte,
       exchange_rate_date: cambio.data,

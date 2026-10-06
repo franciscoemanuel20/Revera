@@ -192,6 +192,8 @@ export function localeDaStripe(locale: string | undefined): string {
   // ela não conhece faz a criação da sessão falhar — não é degradação
   // silenciosa, é o pagamento que não abre. Por isso manda-se "es" seco.
   if (l.startsWith("es")) return "es";
+  if (l.startsWith("fr")) return "fr";
+  if (l.startsWith("de")) return "de";
   return "auto";
 }
 

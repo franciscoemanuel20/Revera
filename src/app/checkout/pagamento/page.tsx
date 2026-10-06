@@ -9,7 +9,7 @@ import { confirmarPagamento } from "@/lib/payments/confirmar";
 import { urlDoWebhook } from "@/lib/payments/webhook-url";
 import { baseUrl } from "@/lib/config/urls";
 import { idiomaDoPais } from "@/lib/internacional/paises";
-import { pedidoInternacionalPagavel } from "@/lib/internacional/mercado";
+import { cotacaoPermiteNovoPayPal, pedidoInternacionalPagavel } from "@/lib/internacional/mercado";
 import { urlCheckoutStripeSegura } from "@/lib/payments/stripe-provider";
 import { urlCheckoutPayPalSegura } from "@/lib/payments/paypal-provider";
 import { montarItensDoPagamento } from "@/lib/payments/itens";
@@ -70,7 +70,7 @@ export default async function PagamentoPage({
   const { data: pedido } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, payment_status, total_cents, shipping_cents, discount_cents, currency, payment_preference, access_token, customer_id, address_id, intl_shipping_quote_id"
+      "id, order_number, status, payment_status, total_cents, shipping_cents, discount_cents, currency, payment_preference, access_token, customer_id, address_id, intl_shipping_quote_id, shipping_quote_id"
     )
     .eq("access_token", accessToken)
     .maybeSingle();
@@ -107,17 +107,28 @@ export default async function PagamentoPage({
     redirect(`/pedido/${accessToken}`);
   }
 
-  let idiomaPagamento: "pt" | "en" | "es" = "pt";
+  let idiomaPagamento = idiomaDoPais("BR");
+  let expiraEmCotacaoInternacional: Date | undefined;
+  let cotadaEmInternacional: Date | undefined;
   if (pedido.currency !== "BRL") {
     const { data: endereco } = await supabase.from("addresses").select("country")
       .eq("id", pedido.address_id).maybeSingle();
     // Revalida antes de criar OU reaproveitar uma sessão: um pedido antigo
     // não contorna país fechado, cotação vencida ou catálogo incompleto.
-    if (!(await pedidoInternacionalPagavel(endereco?.country ?? "", pedido.currency, pedido.id, pedido.shipping_cents))) {
+    const validacaoFrete = await pedidoInternacionalPagavel(
+      endereco?.country ?? "",
+      pedido.currency,
+      pedido.id,
+      pedido.shipping_cents,
+      pedido.shipping_quote_id ?? null
+    );
+    if (!validacaoFrete.pagavel || !validacaoFrete.expiraEm) {
       return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
         motivo: "internacional_indisponivel",
       });
     }
+    expiraEmCotacaoInternacional = validacaoFrete.expiraEm;
+    cotadaEmInternacional = validacaoFrete.cotadaEm;
     idiomaPagamento = idiomaDoPais(endereco!.country);
   }
   const linkPermitido = (url: string) => pedido.currency === "BRL" || urlCheckoutStripeSegura(url) || urlCheckoutPayPalSegura(url);
@@ -173,11 +184,18 @@ export default async function PagamentoPage({
 
   const urlGuardada = (pagamentoExistente?.raw_response as { checkout_url?: string } | null)
     ?.checkout_url;
+  const linkPayPalExpirado = pagamentoExistente?.provider === "paypal" &&
+    Date.now() - new Date(pagamentoExistente.created_at as string).getTime() >= 3 * 60 * 60_000 - 60_000;
   if (urlGuardada) {
     if (!linkPermitido(urlGuardada)) {
       return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
         motivo: "link_bloqueado",
         checkout: pagamentoExistente?.provider === "infinitepay" ? "infinitepay" : "generico",
+      });
+    }
+    if (linkPayPalExpirado) {
+      return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+        motivo: "internacional_indisponivel",
       });
     }
     redirect(urlGuardada);
@@ -205,6 +223,11 @@ export default async function PagamentoPage({
         return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
           motivo: "link_bloqueado",
           checkout: pagamentoExistente.provider === "infinitepay" ? "infinitepay" : "generico",
+        });
+      }
+      if (linkPayPalExpirado) {
+        return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+          motivo: "internacional_indisponivel",
         });
       }
       const { error: erroRestaurar } = await supabase
@@ -286,6 +309,30 @@ export default async function PagamentoPage({
     console.error("[pagamento] pagamento não configurado", erro);
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
       motivo: "metodo_indisponivel",
+    });
+  }
+  // Stripe exige pelo menos 30 minutos para expirar uma Checkout Session.
+  // A sessão recebe o limite operacional contado da cotação DHL.
+  if (
+    provider.name === "stripe" &&
+    pedido.currency !== "BRL" &&
+    (!expiraEmCotacaoInternacional || expiraEmCotacaoInternacional.getTime() - Date.now() < 31 * 60_000)
+  ) {
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+      motivo: "internacional_indisponivel",
+    });
+  }
+  if (
+    provider.name === "paypal" &&
+    pedido.currency !== "BRL" &&
+    (!cotadaEmInternacional || !cotacaoPermiteNovoPayPal(cotadaEmInternacional))
+  ) {
+    // PayPal Orders v2 não recebe um expires_at por pedido; ele usa o prazo
+    // padrão de 3 h após a criação. Só iniciamos a criação nos primeiros
+    // 2 h 59 min da janela operacional; os 20 s máximos da chamada e o TTL
+    // de 3 h cabem antes do limite, com margem adicional.
+    return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+      motivo: "internacional_indisponivel",
     });
   }
 
@@ -400,7 +447,7 @@ export default async function PagamentoPage({
       currency: pedido.currency as string,
       preferredMethod: pedido.payment_preference === "apple_pay" ? "apple_pay" : undefined,
       locale: idiomaPagamento,
-      expiresAt: pedido.currency !== "BRL" ? new Date(Date.now() + 3 * 60 * 60_000) : undefined,
+      expiresAt: pedido.currency !== "BRL" ? expiraEmCotacaoInternacional : undefined,
       customerName: cliente?.full_name ?? undefined,
       customerEmail: cliente?.email ?? undefined,
       customerPhone: cliente?.phone ?? undefined,

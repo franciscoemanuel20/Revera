@@ -32,7 +32,7 @@
  * exige, e não numa regra "é BR? então português".
  */
 
-export type Idioma = "pt" | "en" | "es";
+export type Idioma = "pt" | "en" | "es" | "fr" | "de";
 
 export interface Dicionario {
   /* --- casca do checkout --- */
@@ -517,7 +517,79 @@ const ES: Dicionario = {
   suporteTelefoneRotulo: "Teléfono de soporte",
 };
 
-export const TEXTOS: Record<Idioma, Dicionario> = { pt: PT, en: EN, es: ES };
+const FR: Dicionario = {
+  ...EN,
+  checkoutEyebrow: "Presque terminé",
+  checkoutTitulo: "Finaliser la commande",
+  navPaisLabel: "Pays de livraison",
+  envioPorTitulo: (t) => `Votre commande sera expédiée par ${t}`,
+  envioBulletPortaAPorta: "Livraison porte à porte, avec suivi et preuve de livraison.",
+  envioBulletPrazo: "Le délai estimé est confirmé lors de la réservation de l’envoi.",
+  envioBulletImpostos: "Le colis peut être soumis à des droits et taxes d’importation dans le pays de destination (détails ci-dessous avant de finaliser).",
+  indisponivelTitulo: (p) => `${p} — actuellement indisponible`,
+  indisponivelAlternativa: "Vous pouvez toujours commander avec une livraison au Brésil ou revenir plus tard.",
+  indisponivelLinkBR: "Accéder au paiement pour le Brésil",
+  indisponivelGenerico: "Indisponible.",
+  semPrecoNoMercado: "Un article de votre panier n’a pas encore de prix défini pour ce pays.",
+  sacolaVazia: "Votre panier est vide — ajoutez un article avant de finaliser.",
+  secaoSeusDados: "Vos coordonnées",
+  secaoEndereco: (p) => `Adresse de livraison — ${p}`,
+  labelNome: "Nom complet", labelEmail: "E-mail", labelTelefone: "Téléphone",
+  hintTelefone: (ddi) => `Avec l’indicatif du pays (+${ddi}).`,
+  labelEndereco: "Adresse (rue et numéro)", labelComplemento: "Complément d’adresse",
+  labelEmpresa: "Entreprise", labelCidade: "Ville", labelRegiaoPadrao: "Région",
+  hintOpcional: "Facultatif.", hintExemplo: (e) => `Exemple : ${e}`,
+  resumoTitulo: "Récapitulatif", resumoProdutos: "Articles",
+  resumoFrete: (t) => `Livraison internationale — ${t}`,
+  resumoPrazo: (min, max) => ` · ${min}${max && max !== min ? `–${max}` : ""} jours ouvrés estimés par le transporteur`,
+  resumoTotal: "Total",
+  resumoRessalvaPrazo: "Le délai est estimé par le transporteur et n’inclut ni la préparation ni le dédouanement. Nous ne garantissons pas de date de livraison pour les envois internationaux.",
+  aceiteObrigatorio: "Veuillez accepter les conditions d’expédition internationale.",
+  botaoContinuar: "Continuer vers le paiement", botaoEnviando: "Création de votre commande…",
+  erroConfiraCampos: "Vérifiez les champs indiqués ci-dessous.", erroNome: "Indiquez votre nom complet.",
+  erroEmail: "Adresse e-mail invalide.", erroTelefone: "Indiquez votre téléphone.",
+  erroEnderecoObrigatorio: "Indiquez votre adresse.", erroCidadeObrigatoria: "Indiquez votre ville.",
+  erroPostalObrigatorio: "Indiquez votre code postal.",
+  erroPostalInvalido: (r, e) => `${r} invalide — exemple : ${e}.`,
+  erroRegiaoObrigatoria: (r) => `Indiquez ${r}.`, erroPaisNaoAtendido: "Nous ne livrons pas encore dans ce pays.",
+  erroEnderecoBrasileiro: "Une adresse au Brésil utilise le paiement brésilien.",
+  erroPedidoEmAndamento: "Cette commande est déjà en cours de finalisation. Patientez un instant et vérifiez votre e-mail avant de réessayer.",
+  erroRegistrarDados: "Impossible d’enregistrer vos coordonnées. Réessayez.",
+  erroRegistrarEndereco: "Impossible d’enregistrer l’adresse. Réessayez.",
+  pedidoTituloAba: "Votre commande — Reverá", pedidoPago: "Paiement confirmé", pedidoEstornado: "Paiement remboursé", pedidoAguardando: "Paiement en attente",
+  pedidoTextoPago: "Nous avons reçu votre commande et nous nous en occupons déjà.",
+  pedidoTextoAguardando: "Cette page sera mise à jour dès que le paiement sera confirmé.",
+  pedidoTextoEstornado: "Cette commande a été remboursée. Contactez-nous si vous avez une question.",
+  pedidoPassoRecebido: "Commande reçue", pedidoPassoPago: "Paiement confirmé", pedidoPassoPreparando: "Préparation", pedidoPassoEtiqueta: "Étiquette prête", pedidoPassoEnviado: "Expédiée", pedidoPassoEntregue: "Livrée", pedidoRastreamento: "Suivi",
+  pedidoNumero: (n) => `Commande ${n}`, pedidoCancelado: "Cette commande a été annulée.", pedidoItens: "Articles", pedidoSubtotal: "Sous-total", pedidoDesconto: "Remise", pedidoFrete: "Livraison", pedidoFreteACombinar: "à confirmer", pedidoTotal: "Total", pedidoEntrega: "Adresse de livraison",
+  suporteTitulo: "Une question ?", suporteTexto: "Contactez notre équipe au sujet de cette commande — nous répondons pendant les heures ouvrées au Brésil.",
+  suporteBotao: (n) => `Question sur la commande ${n}`, suporteMensagem: (n) => `Bonjour ! J’ai une question sur la commande ${n}.`,
+  recompraBotao: "Commander à nouveau", recompraMensagem: (n) => `Bonjour ! J’ai passé la commande ${n} et je souhaite commander à nouveau.`,
+  suporteTituloPendente: "Besoin d’aide pour le paiement ?", suporteTextoPendente: "Si le paiement a échoué ou si vous avez une question avant de payer, contactez notre équipe — nous répondons pendant les heures ouvrées au Brésil.",
+  suporteBotaoPendente: "Nous contacter sur WhatsApp", suporteMensagemPendente: (n) => `Bonjour ! J’ai besoin d’aide pour le paiement de la commande ${n}.`, suporteTelefoneRotulo: "Téléphone d’assistance",
+};
+
+const DE: Dicionario = {
+  ...EN,
+  checkoutEyebrow: "Fast geschafft", checkoutTitulo: "Bestellung abschließen", navPaisLabel: "Lieferland",
+  envioPorTitulo: (t) => `Ihre Bestellung wird mit ${t} versandt`,
+  envioBulletPortaAPorta: "Lieferung von Tür zu Tür mit Sendungsverfolgung und Zustellnachweis.",
+  envioBulletPrazo: "Die voraussichtliche Laufzeit wird bei der Versandbuchung bestätigt.",
+  envioBulletImpostos: "Die Sendung kann im Zielland Einfuhrzöllen und Steuern unterliegen (Einzelheiten unten vor dem Abschluss).",
+  indisponivelTitulo: (p) => `${p} — derzeit nicht verfügbar`, indisponivelAlternativa: "Sie können weiterhin mit Lieferung innerhalb Brasiliens bestellen oder später wiederkommen.", indisponivelLinkBR: "Zum brasilianischen Checkout", indisponivelGenerico: "Nicht verfügbar.",
+  semPrecoNoMercado: "Für einen Artikel im Warenkorb ist für dieses Land noch kein Preis festgelegt.", sacolaVazia: "Ihr Warenkorb ist leer — fügen Sie vor dem Checkout einen Artikel hinzu.",
+  secaoSeusDados: "Ihre Angaben", secaoEndereco: (p) => `Lieferadresse — ${p}`, labelNome: "Vollständiger Name", labelEmail: "E-Mail", labelTelefone: "Telefon",
+  hintTelefone: (ddi) => `Mit Ländervorwahl (+${ddi}).`, labelEndereco: "Adresse (Straße und Hausnummer)", labelComplemento: "Adresszusatz", labelEmpresa: "Unternehmen", labelCidade: "Ort", labelRegiaoPadrao: "Region", hintOpcional: "Optional.", hintExemplo: (e) => `Beispiel: ${e}`,
+  resumoTitulo: "Bestellübersicht", resumoProdutos: "Artikel", resumoFrete: (t) => `Internationaler Versand — ${t}`,
+  resumoPrazo: (min, max) => ` · ${min}${max && max !== min ? `–${max}` : ""} vom Versanddienstleister geschätzte Werktage`, resumoTotal: "Gesamt",
+  resumoRessalvaPrazo: "Die Laufzeit wird vom Versanddienstleister geschätzt und umfasst weder die Vorbereitung noch die Zollabfertigung. Für internationale Sendungen garantieren wir kein Lieferdatum.",
+  aceiteObrigatorio: "Bitte stimmen Sie den internationalen Versandbedingungen zu.", botaoContinuar: "Weiter zur Zahlung", botaoEnviando: "Bestellung wird erstellt…",
+  erroConfiraCampos: "Bitte prüfen Sie die markierten Felder.", erroNome: "Geben Sie Ihren vollständigen Namen ein.", erroEmail: "Ungültige E-Mail-Adresse.", erroTelefone: "Geben Sie Ihre Telefonnummer ein.", erroEnderecoObrigatorio: "Geben Sie Ihre Adresse ein.", erroCidadeObrigatoria: "Geben Sie Ihren Ort ein.", erroPostalObrigatorio: "Geben Sie Ihre Postleitzahl ein.", erroPostalInvalido: (r, e) => `${r} ungültig — Beispiel: ${e}.`, erroRegiaoObrigatoria: (r) => `Geben Sie ${r} ein.`, erroPaisNaoAtendido: "Wir liefern noch nicht in dieses Land.", erroEnderecoBrasileiro: "Eine brasilianische Adresse nutzt den brasilianischen Checkout.", erroPedidoEmAndamento: "Diese Bestellung wird bereits abgeschlossen. Warten Sie einen Moment und prüfen Sie Ihre E-Mail, bevor Sie es erneut versuchen.", erroRegistrarDados: "Ihre Angaben konnten nicht gespeichert werden. Versuchen Sie es erneut.", erroRegistrarEndereco: "Die Adresse konnte nicht gespeichert werden. Versuchen Sie es erneut.",
+  pedidoTituloAba: "Ihre Bestellung — Reverá", pedidoPago: "Zahlung bestätigt", pedidoEstornado: "Zahlung erstattet", pedidoAguardando: "Zahlung ausstehend", pedidoTextoPago: "Wir haben Ihre Bestellung erhalten und bearbeiten sie bereits.", pedidoTextoAguardando: "Diese Seite wird aktualisiert, sobald die Zahlung bestätigt ist.", pedidoTextoEstornado: "Diese Bestellung wurde erstattet. Kontaktieren Sie uns bei Fragen.", pedidoPassoRecebido: "Bestellung eingegangen", pedidoPassoPago: "Zahlung bestätigt", pedidoPassoPreparando: "In Vorbereitung", pedidoPassoEtiqueta: "Versandetikett erstellt", pedidoPassoEnviado: "Versandt", pedidoPassoEntregue: "Zugestellt", pedidoRastreamento: "Sendungsverfolgung", pedidoNumero: (n) => `Bestellung ${n}`, pedidoCancelado: "Diese Bestellung wurde storniert.", pedidoItens: "Artikel", pedidoSubtotal: "Zwischensumme", pedidoDesconto: "Rabatt", pedidoFrete: "Versand", pedidoFreteACombinar: "wird bestätigt", pedidoTotal: "Gesamt", pedidoEntrega: "Lieferadresse",
+  suporteTitulo: "Haben Sie Fragen?", suporteTexto: "Kontaktieren Sie unser Team zu dieser Bestellung — wir antworten während der brasilianischen Geschäftszeiten.", suporteBotao: (n) => `Frage zu Bestellung ${n}`, suporteMensagem: (n) => `Hallo! Ich habe eine Frage zu Bestellung ${n}.`, recompraBotao: "Erneut bestellen", recompraMensagem: (n) => `Hallo! Ich habe Bestellung ${n} aufgegeben und möchte erneut bestellen.`, suporteTituloPendente: "Benötigen Sie Hilfe bei der Zahlung?", suporteTextoPendente: "Wenn die Zahlung nicht funktioniert hat oder Sie vor der Zahlung eine Frage haben, kontaktieren Sie unser Team — wir antworten während der brasilianischen Geschäftszeiten.", suporteBotaoPendente: "Über WhatsApp kontaktieren", suporteMensagemPendente: (n) => `Hallo! Ich benötige Hilfe bei der Zahlung für Bestellung ${n}.`, suporteTelefoneRotulo: "Support-Telefon",
+};
+
+export const TEXTOS: Record<Idioma, Dicionario> = { pt: PT, en: EN, es: ES, fr: FR, de: DE };
 
 export function textos(idioma: Idioma): Dicionario {
   return TEXTOS[idioma] ?? PT;
@@ -541,4 +613,6 @@ export const LANG_HTML: Record<Idioma, string> = {
   pt: "pt-BR",
   en: "en",
   es: "es",
+  fr: "fr",
+  de: "de",
 };

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies, headers } from "next/headers";
 import { CheckoutForm } from "./CheckoutForm";
 import { CheckoutInternacionalForm, type ResumoInternacional } from "./CheckoutInternacionalForm";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
@@ -13,7 +14,8 @@ import {
   paisesDoCheckout,
   regraDoPais,
 } from "@/lib/internacional/paises";
-import { LANG_HTML, textos } from "@/lib/internacional/idioma";
+import { LANG_HTML, textos, type Idioma } from "@/lib/internacional/idioma";
+import { GEO_COUNTRY_COOKIE, GEO_COUNTRY_HEADER } from "@/lib/i18n/site";
 import { reveraApplePayDisponivel } from "@/lib/payments/revera";
 
 export const metadata: Metadata = {
@@ -25,11 +27,10 @@ export const metadata: Metadata = {
  *
  *  - Brasil (padrão e único caso enquanto CHECKOUT_PAISES não abrir mais
  *    países): o CheckoutForm de sempre, intocado.
- *  - País internacional ABERTO (env + Stripe + cotação de frete vigente +
- *    preço do mercado para cada item): o formulário internacional, com
- *    frete e total calculados AQUI, no servidor.
- *  - País internacional com perna faltando: mensagem honesta de
- *    indisponibilidade — nunca um formulário que quebra no fim.
+ *  - País internacional ABERTO (env + Stripe): o formulário internacional;
+ *    o subtotal e a cotação DHL serão mostrados antes de criar um pedido.
+ *  - País internacional sem gateway disponível: mensagem honesta de
+ *    indisponibilidade — a tarifa DHL depende do endereço informado.
  *
  * O seletor de país só aparece quando existe mais de um país aberto —
  * a loja 100% nacional não ganha UI nova nenhuma.
@@ -41,8 +42,12 @@ export default async function CheckoutPage({
 }) {
   const sp = await searchParams;
   const paises = paisesDoCheckout();
-  const paisPedido = (sp.pais ?? "BR").toUpperCase();
-  const pais = regraDoPais(paisPedido) ? paisPedido : "BR";
+  const paisDetectado = (
+    (await headers()).get(GEO_COUNTRY_HEADER) ??
+    (await cookies()).get(GEO_COUNTRY_COOKIE)?.value
+  )?.toUpperCase();
+  const paisPedido = (sp.pais ?? paisDetectado ?? "BR").toUpperCase();
+  const pais = paises.includes(paisPedido) && regraDoPais(paisPedido) ? paisPedido : "BR";
 
   // O idioma sai do PAÍS ESCOLHIDO, não do cabeçalho do navegador. Um
   // brasileiro com o Chrome em inglês comprando para o Brasil continua
@@ -86,7 +91,7 @@ export default async function CheckoutPage({
           {paises.map((iso) => (
             <Link
               key={iso}
-              href={iso === "BR" ? "/checkout" : `/checkout?pais=${iso}`}
+              href={`/checkout?pais=${iso}`}
               className={`rounded-full border px-4 py-2 text-sm ${
                 iso === pais
                   ? "border-ink bg-ink text-paper"
@@ -169,11 +174,13 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
   );
 }
 
-function mensagemDeBloqueio(codigo: string | undefined, idioma: "pt" | "en" | "es"): string {
+function mensagemDeBloqueio(codigo: string | undefined, idioma: Idioma): string {
   const mensagens = {
     pt: { frete: "Ainda não há cotação DHL vigente para este destino. O pagamento está indisponível.", precos: "Os preços deste mercado ainda estão em preparação. O pagamento está indisponível.", pagamento: "O pagamento internacional está indisponível no momento. Tente novamente mais tarde.", pais: "As vendas para este destino ainda não estão disponíveis." },
     en: { frete: "There is no valid DHL shipping quote for this destination yet. Payment is unavailable.", precos: "Prices for this market are still being prepared. Payment is unavailable.", pagamento: "International payment is currently unavailable. Please try again later.", pais: "Sales to this destination are not available yet." },
     es: { frete: "Todavía no hay una cotización DHL vigente para este destino. El pago no está disponible.", precos: "Los precios de este mercado todavía están en preparación. El pago no está disponible.", pagamento: "El pago internacional no está disponible en este momento. Inténtalo más tarde.", pais: "Las ventas a este destino todavía no están disponibles." },
+    fr: { frete: "Aucun tarif DHL valide n’est encore disponible pour cette destination. Le paiement est indisponible.", precos: "Les prix pour ce marché sont encore en préparation. Le paiement est indisponible.", pagamento: "Le paiement international est actuellement indisponible. Réessayez plus tard.", pais: "Les ventes vers cette destination ne sont pas encore disponibles." },
+    de: { frete: "Für dieses Ziel liegt noch kein gültiges DHL-Angebot vor. Die Zahlung ist nicht verfügbar.", precos: "Die Preise für diesen Markt werden noch vorbereitet. Die Zahlung ist nicht verfügbar.", pagamento: "Die internationale Zahlung ist derzeit nicht verfügbar. Versuchen Sie es später erneut.", pais: "Verkäufe in dieses Zielland sind noch nicht verfügbar." },
   };
   const chave = codigo && codigo in mensagens[idioma] ? codigo as keyof typeof mensagens.pt : "pais";
   return mensagens[idioma][chave];
@@ -192,7 +199,7 @@ function IndisponivelInternacional({ pais, motivo }: { pais: string; motivo: str
       </h2>
       <p className="mt-2 text-sm text-ink/70">{motivo}</p>
       <p className="mt-4 text-sm text-ink/70">{t.indisponivelAlternativa}</p>
-      <Link href="/checkout" className="mt-4 inline-block text-sm text-ink underline">
+      <Link href="/checkout?pais=BR" className="mt-4 inline-block text-sm text-ink underline">
         {t.indisponivelLinkBR}
       </Link>
     </div>

@@ -115,12 +115,67 @@ describe("PayPalProvider", () => {
         currency: "USD",
         redirectUrl: "https://revera.test/pedido/t",
         webhookUrl: "https://revera.test/api/webhooks/pagamento/s",
+        expiresAt: new Date(Date.now() + 6 * 60 * 60_000 + 20_000),
         items: [{ description: "Micropele", quantity: 1, priceCents: 97000 }],
       })
     ).resolves.toEqual({
       providerPaymentId: "PAYPAL-ORDER-1",
       checkoutUrl: "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-1",
     });
+  });
+
+  it("aceita prazo total da cotação de 6 h 20 min para a ordem de 3 h do PayPal", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+      return new Response(JSON.stringify({ id: "PAYPAL-ORDER-1", status: "CREATED", links: [{ rel: "approve", href: "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-1" }] }), { status: 201 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await provider();
+    await expect(p.createCharge({
+      orderId: ORDER,
+      orderNumber: "REV-X",
+      amountCents: 1000,
+      currency: "USD",
+      redirectUrl: "https://revera.test/pedido/t",
+      webhookUrl: "https://revera.test/api/webhooks/pagamento/s",
+      expiresAt: new Date(Date.now() + 6 * 60 * 60_000 + 20_000),
+      items: [{ description: "Produto", quantity: 1, priceCents: 1000 }],
+    })).resolves.toMatchObject({ providerPaymentId: "PAYPAL-ORDER-1" });
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("recusa iniciar PayPal sem as 3 h e o teto de criação dentro da cotação", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await provider();
+    await expect(p.createCharge({
+      orderId: ORDER,
+      orderNumber: "REV-X",
+      amountCents: 1000,
+      currency: "USD",
+      redirectUrl: "https://revera.test/pedido/t",
+      webhookUrl: "https://revera.test/api/webhooks/pagamento/s",
+      expiresAt: new Date(Date.now() + 3 * 60 * 60_000 + 10_000),
+      items: [{ description: "Produto", quantity: 1, priceCents: 1000 }],
+    })).rejects.toThrow(/cotação/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("recusa ordem sem expiresAt antes de qualquer chamada ao PayPal", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await provider();
+    await expect(p.createCharge({
+      orderId: ORDER,
+      orderNumber: "REV-X",
+      amountCents: 1000,
+      currency: "USD",
+      redirectUrl: "https://revera.test/pedido/t",
+      webhookUrl: "https://revera.test/api/webhooks/pagamento/s",
+      expiresAt: undefined,
+      items: [{ description: "Produto", quantity: 1, priceCents: 1000 }],
+    })).rejects.toThrow(/ausente ou inválida/i);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("captura order aprovada e confirma valor/moeda", async () => {

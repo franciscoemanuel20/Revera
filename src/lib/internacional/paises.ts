@@ -203,10 +203,7 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     nomeEn: "France",
     nomeEs: "Francia",
     moedaPadrao: "EUR",
-    // O conteúdo público já existe em francês, mas o checkout transacional
-    // ainda possui dicionários pt/en/es. Inglês é o fallback explícito até
-    // o contrato completo do checkout ganhar francês.
-    idioma: "en",
+    idioma: "fr",
     locale: "fr-FR",
     ddi: "33",
     exigeRegiao: false,
@@ -225,7 +222,7 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
   PA: { iso: "PA", nomePt: "Panamá", nomeEn: "Panama", nomeEs: "Panamá", moedaPadrao: "USD", idioma: "es", locale: "es-PA", ddi: "507", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^\d{4}$/, postalExemplo: "0801" },
   CR: { iso: "CR", nomePt: "Costa Rica", nomeEn: "Costa Rica", nomeEs: "Costa Rica", moedaPadrao: "USD", idioma: "es", locale: "es-CR", ddi: "506", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^\d{5}$/, postalExemplo: "10101" },
   DO: { iso: "DO", nomePt: "República Dominicana", nomeEn: "Dominican Republic", nomeEs: "República Dominicana", moedaPadrao: "USD", idioma: "es", locale: "es-DO", ddi: "1", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^\d{5}$/, postalExemplo: "10101" },
-  DE: { iso: "DE", nomePt: "Alemanha", nomeEn: "Germany", nomeEs: "Alemania", moedaPadrao: "EUR", idioma: "en", locale: "de-DE", ddi: "49", exigeRegiao: false, rotuloRegiao: "State", rotuloPostal: "Postcode", postalRegex: /^\d{5}$/, postalExemplo: "10115" },
+  DE: { iso: "DE", nomePt: "Alemanha", nomeEn: "Germany", nomeEs: "Alemania", moedaPadrao: "EUR", idioma: "de", locale: "de-DE", ddi: "49", exigeRegiao: false, rotuloRegiao: "Bundesland", rotuloPostal: "Postleitzahl", postalRegex: /^\d{5}$/, postalExemplo: "10115" },
   NL: { iso: "NL", nomePt: "Holanda", nomeEn: "Netherlands", nomeEs: "Países Bajos", moedaPadrao: "EUR", idioma: "en", locale: "nl-NL", ddi: "31", exigeRegiao: false, rotuloRegiao: "Province", rotuloPostal: "Postcode", postalRegex: /^\d{4}\s?[A-Z]{2}$/i, postalExemplo: "1012 JS" },
   IE: { iso: "IE", nomePt: "Irlanda", nomeEn: "Ireland", nomeEs: "Irlanda", moedaPadrao: "EUR", idioma: "en", locale: "en-IE", ddi: "353", exigeRegiao: false, rotuloRegiao: "County", rotuloPostal: "Eircode", postalRegex: /^[A-Z]\d{2}\s?[A-Z0-9]{4}$/i, postalExemplo: "D02 X285" },
   IN: { iso: "IN", nomePt: "Índia", nomeEn: "India", nomeEs: "India", moedaPadrao: "USD", idioma: "en", locale: "en-IN", ddi: "91", exigeRegiao: true, rotuloRegiao: "State", rotuloPostal: "PIN Code", postalRegex: /^\d{6}$/, postalExemplo: "110001" },
@@ -255,6 +252,13 @@ export function nomeDoPais(iso: string, idioma: Idioma = "pt"): string {
   // errado na primeira linha do endereço dele.
   if (idioma === "en") return regra.nomeEn;
   if (idioma === "es") return regra.nomeEs;
+  if (idioma === "fr" || idioma === "de") {
+    try {
+      return new Intl.DisplayNames([idioma], { type: "region" }).of(regra.iso) ?? regra.nomeEn;
+    } catch {
+      return regra.nomeEn;
+    }
+  }
   return regra.nomePt;
 }
 

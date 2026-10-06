@@ -11,6 +11,15 @@ import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { Toast } from "@/components/ui/Toast";
 import { formatarBRL } from "@/lib/format/money";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
+import { localizePath, type SiteLocale } from "@/lib/i18n/site";
+
+const COPY: Record<SiteLocale, { eyebrow: string; titulo: string; carregando: string; vazio: string; produtos: string; unidade: string; remover: string; economizou: string; subtotal: string; desconto: string; frete: string; freteInfo: string; total: string; checkout: string }> = {
+  pt: { eyebrow: "Sua sacola", titulo: "Carrinho", carregando: "Carregando sua sacola…", vazio: "Sua sacola está vazia.", produtos: "Ver produtos", unidade: "unidade", remover: "remover", economizou: "Economizou", subtotal: "Subtotal", desconto: "Desconto por quantidade", frete: "Frete", freteInfo: "calculado na próxima etapa", total: "Total", checkout: "Ir para o checkout" },
+  en: { eyebrow: "Your bag", titulo: "Cart", carregando: "Loading your bag…", vazio: "Your bag is empty.", produtos: "View products", unidade: "unit", remover: "remove", economizou: "You saved", subtotal: "Subtotal", desconto: "Quantity discount", frete: "Shipping", freteInfo: "calculated at the next step", total: "Total", checkout: "Continue to checkout" },
+  es: { eyebrow: "Tu bolsa", titulo: "Carrito", carregando: "Cargando tu bolsa…", vazio: "Tu bolsa está vacía.", produtos: "Ver productos", unidade: "unidad", remover: "eliminar", economizou: "Has ahorrado", subtotal: "Subtotal", desconto: "Descuento por cantidad", frete: "Envío", freteInfo: "calculado en el siguiente paso", total: "Total", checkout: "Ir al checkout" },
+  fr: { eyebrow: "Votre panier", titulo: "Panier", carregando: "Chargement de votre panier…", vazio: "Votre panier est vide.", produtos: "Voir les produits", unidade: "unité", remover: "supprimer", economizou: "Vous économisez", subtotal: "Sous-total", desconto: "Remise sur quantité", frete: "Livraison", freteInfo: "calculée à l’étape suivante", total: "Total", checkout: "Continuer vers le paiement" },
+  de: { eyebrow: "Ihr Warenkorb", titulo: "Warenkorb", carregando: "Warenkorb wird geladen…", vazio: "Ihr Warenkorb ist leer.", produtos: "Produkte ansehen", unidade: "Stück", remover: "entfernen", economizou: "Sie sparen", subtotal: "Zwischensumme", desconto: "Mengenrabatt", frete: "Versand", freteInfo: "wird im nächsten Schritt berechnet", total: "Gesamt", checkout: "Weiter zur Kasse" },
+};
 
 // Página completa do carrinho — o drawer (CartDrawer, no Header) é o
 // resumo rápido; esta página é a revisão de verdade antes do checkout,
@@ -18,7 +27,8 @@ import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 // desconto por item e o resumo com subtotal/desconto/frete/total. Cliente
 // puro (useCart) porque o estado já vive no CartProvider do layout raiz —
 // ver comentário em page.tsx sobre não duplicar a leitura.
-export function CarrinhoPageClient() {
+export function CarrinhoPageClient({ locale = "pt" }: { locale?: SiteLocale }) {
+  const copy = COPY[locale];
   const { cart, carregando, pendente, alterarQuantidade, removerItem } = useCart();
   const [erro, setErro] = useState<string | null>(null);
 
@@ -38,19 +48,19 @@ export function CarrinhoPageClient() {
       style={{ paddingTop: HEADER_HEIGHT_PX + 32 }}
     >
       <div className="flex flex-col gap-2">
-        <span className="eyebrow-ink">Sua sacola</span>
-        <h1 className="font-display text-3xl text-ink">Carrinho</h1>
+        <span className="eyebrow-ink">{copy.eyebrow}</span>
+        <h1 className="font-display text-3xl text-ink">{copy.titulo}</h1>
       </div>
 
       {erro ? <Toast message={erro} variant="error" onClose={() => setErro(null)} /> : null}
 
       {carregando ? (
-        <p className="text-ink/60">Carregando sua sacola…</p>
+        <p className="text-ink/60">{copy.carregando}</p>
       ) : cart.items.length === 0 ? (
         <div className="flex flex-col items-start gap-4 rounded-lg border border-sand p-8">
-          <p className="text-ink/70">Sua sacola está vazia.</p>
-          <Link href="/">
-            <Button variant="secondary">Ver produtos</Button>
+          <p className="text-ink/70">{copy.vazio}</p>
+          <Link href={localizePath("/produtos", locale)}>
+            <Button variant="secondary">{copy.produtos}</Button>
           </Link>
         </div>
       ) : (
@@ -80,7 +90,7 @@ export function CarrinhoPageClient() {
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <p className="font-medium text-ink">{item.productName}</p>
                     {item.variantLabel ? <p className="text-sm text-ink/60">{item.variantLabel}</p> : null}
-                    <p className="text-sm text-ink/60">{formatarBRL(item.unitPriceCents)} / unidade</p>
+                    <p className="text-sm text-ink/60">{formatarBRL(item.unitPriceCents)} / {copy.unidade}</p>
 
                     <div className="mt-2 flex flex-wrap items-center gap-4">
                       <QuantitySelector
@@ -94,7 +104,7 @@ export function CarrinhoPageClient() {
                         disabled={pendente}
                         className="min-h-toque text-sm text-ink/60 underline disabled:opacity-50"
                       >
-                        remover
+                        {copy.remover}
                       </button>
                     </div>
                   </div>
@@ -103,7 +113,7 @@ export function CarrinhoPageClient() {
                     <Price cents={item.subtotalCents} />
                     {item.discountCents > 0 ? (
                       <p className="mt-1 text-xs font-semibold text-gold-deep">
-                        Economizou {formatarBRL(item.discountCents)}
+                        {copy.economizou} {formatarBRL(item.discountCents)}
                       </p>
                     ) : null}
                   </div>
@@ -121,20 +131,20 @@ export function CarrinhoPageClient() {
           <aside className="flex flex-col gap-4 rounded-lg border border-sand p-6">
             <dl className="flex flex-col gap-2">
               <div className="flex justify-between text-ink/80">
-                <dt>Subtotal</dt>
+                <dt>{copy.subtotal}</dt>
                 <dd>
                   <Price cents={cart.subtotalSemDescontoCents} />
                 </dd>
               </div>
               {cart.discountCents > 0 ? (
                 <div className="flex justify-between text-gold-deep">
-                  <dt>Desconto por quantidade</dt>
+                  <dt>{copy.desconto}</dt>
                   <dd>−{formatarBRL(cart.discountCents)}</dd>
                 </div>
               ) : null}
               <div className="flex justify-between text-ink/80">
-                <dt>Frete</dt>
-                <dd className="text-ink/60">calculado na próxima etapa</dd>
+                <dt>{copy.frete}</dt>
+                <dd className="text-ink/60">{copy.freteInfo}</dd>
               </div>
               {/* aria-live: o total muda a cada alteração de quantidade —
                   quem usa leitor de tela precisa ouvir isso sem navegar até
@@ -143,7 +153,7 @@ export function CarrinhoPageClient() {
                 className="flex justify-between border-t border-sand pt-2 text-lg font-semibold text-ink"
                 aria-live="polite"
               >
-                <dt>Total</dt>
+                <dt>{copy.total}</dt>
                 <dd>
                   <Price cents={cart.totalCents} />
                 </dd>
@@ -152,7 +162,7 @@ export function CarrinhoPageClient() {
 
             <Link href="/checkout">
               <Button size="lg" className="w-full">
-                Ir para o checkout
+                {copy.checkout}
               </Button>
             </Link>
           </aside>

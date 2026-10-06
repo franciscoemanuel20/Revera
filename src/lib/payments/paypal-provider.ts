@@ -167,13 +167,17 @@ export class PayPalProvider implements PaymentProvider {
         `Linhas somam ${somaItens} e o pedido diz ${charge.amountCents} — cobrança PayPal abortada.`
       );
     }
-    // Orders v2 do PayPal expiram em 3 horas. O chamador internacional usa
-    // exatamente essa janela e só emite dentro da validade da cotação DHL.
-    if (charge.expiresAt) {
-      const restante = charge.expiresAt.getTime() - Date.now();
-      if (restante <= 0 || restante > 3 * 60 * 60_000 + 60_000) {
-        throw new Error("Validade do checkout PayPal incompatível com a cotação.");
-      }
+    // Orders v2 do PayPal expiram em 3 horas. `expiresAt` é o limite total
+    // da cotação; deve restar o TTL integral do PayPal mais o teto de criação
+    // para que a ordem expire antes da janela operacional da loja.
+    if (!charge.expiresAt || !Number.isFinite(charge.expiresAt.getTime())) {
+      throw new Error("Validade do checkout PayPal ausente ou inválida.");
+    }
+    const restante = charge.expiresAt.getTime() - Date.now();
+    const minimo = 3 * 60 * 60_000 + TIMEOUT_CRIACAO_MS;
+    const maximo = 6 * 60 * 60_000 + TIMEOUT_CRIACAO_MS + 30_000;
+    if (restante < minimo || restante > maximo) {
+      throw new Error("Validade do checkout PayPal incompatível com a cotação.");
     }
 
     assertAmbientePermitido();

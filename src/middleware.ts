@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   DEFAULT_SITE_LOCALE,
+  GEO_COUNTRY_COOKIE,
+  GEO_COUNTRY_HEADER,
   LOCALE_COOKIE,
   LOCALE_GEO_PENDING_COOKIE,
   LOCALE_MANUAL_COOKIE,
@@ -11,6 +13,14 @@ import {
   normalizeSiteLocale,
   stripLocaleFromPath,
 } from "@/lib/i18n/site";
+
+function registrarPais(response: NextResponse, request: NextRequest): NextResponse {
+  const pais = request.headers.get("x-vercel-ip-country")?.trim().toUpperCase();
+  if (pais && /^[A-Z]{2}$/.test(pais) && pais !== "XX") {
+    response.cookies.set(GEO_COUNTRY_COOKIE, pais, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 });
+  }
+  return response;
+}
 
 function shouldIgnore(pathname: string): boolean {
   return (
@@ -48,13 +58,17 @@ export function middleware(request: NextRequest) {
         path: "/",
         sameSite: "lax",
       });
-      return response;
+      return registrarPais(response, request);
     }
 
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set(LOCALE_HEADER, locale);
+    const paisAtual = request.headers.get("x-vercel-ip-country")?.trim().toUpperCase();
+    if (paisAtual && /^[A-Z]{2}$/.test(paisAtual) && paisAtual !== "XX") {
+      requestHeaders.set(GEO_COUNTRY_HEADER, paisAtual);
+    }
 
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    return registrarPais(NextResponse.next({ request: { headers: requestHeaders } }), request);
   }
 
   const strippedPath = stripLocaleFromPath(pathname);
@@ -82,7 +96,7 @@ export function middleware(request: NextRequest) {
         sameSite: "lax",
       });
     }
-    return response;
+    return registrarPais(response, request);
   }
 
   const requestHeaders = new Headers(request.headers);
@@ -101,7 +115,7 @@ export function middleware(request: NextRequest) {
       sameSite: "lax",
     });
   }
-  return response;
+  return registrarPais(response, request);
 }
 
 export const config = {

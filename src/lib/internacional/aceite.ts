@@ -141,6 +141,20 @@ const ACEITE: Record<Idioma, TextosDoAceite> = {
       "garantizar de antemano si habrá tributación ni indicar el importe exacto de " +
       "esos cargos.",
   },
+  fr: {
+    aceite:
+      "Je comprends qu’il s’agit d’un achat international, avec des frais de livraison internationale facturés séparément ; que le délai de livraison peut être affecté par le dédouanement ; que la commande peut être soumise à des droits, taxes douanières et autres frais d’importation dans le pays de destination, qui sont à ma charge ; que ces frais dépendent des règles du pays de destination et du mode d’expédition ; que je suis responsable de l’exactitude du nom, de l’adresse et du téléphone fournis ; et que la douane peut me demander des documents ou informations supplémentaires pour libérer le colis.",
+    avisoTitulo: "Information importante sur les droits d’importation",
+    avisoTexto:
+      "La livraison internationale n’inclut pas nécessairement les droits, taxes douanières ou autres frais appliqués dans le pays de destination. Ces frais sont déterminés par les autorités du pays de destination et/ou le transporteur et restent à la charge de l’acheteur. Reverá ne peut garantir à l’avance leur application ni leur montant exact.",
+  },
+  de: {
+    aceite:
+      "Mir ist bewusst, dass es sich um einen internationalen Kauf handelt und der internationale Versand separat berechnet wird; dass die Lieferzeit durch die Zollabfertigung beeinflusst werden kann; dass die Bestellung im Zielland Einfuhrzöllen, Zollgebühren und weiteren Einfuhrabgaben unterliegen kann, für die ich verantwortlich bin; dass diese Kosten von den Vorschriften des Ziellandes und der Versandart abhängen; dass ich für die Richtigkeit des angegebenen Namens, der Lieferadresse und der Telefonnummer verantwortlich bin; und dass der Zoll zusätzliche Dokumente oder Angaben von mir verlangen kann, um die Sendung freizugeben.",
+    avisoTitulo: "Wichtige Informationen zu Einfuhrabgaben",
+    avisoTexto:
+      "Der internationale Versand umfasst nicht zwangsläufig Zölle, Zollgebühren oder andere im Zielland erhobene Abgaben. Etwaige Einfuhrabgaben werden von den Behörden des Ziellandes und/oder dem Versanddienstleister festgelegt und sind vom Käufer zu tragen. Reverá kann weder im Voraus garantieren, ob solche Abgaben anfallen, noch deren genaue Höhe angeben.",
+  },
 };
 
 export function aceiteInternacional(idioma: Idioma): TextosDoAceite {

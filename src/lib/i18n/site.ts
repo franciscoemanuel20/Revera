@@ -7,6 +7,8 @@ export const LOCALE_COOKIE = "revera_locale";
 export const LOCALE_MANUAL_COOKIE = "revera_locale_manual";
 export const LOCALE_GEO_PENDING_COOKIE = "revera_locale_geo_pending";
 export const LOCALE_HEADER = "x-revera-locale";
+export const GEO_COUNTRY_COOKIE = "revera_country";
+export const GEO_COUNTRY_HEADER = "x-revera-country";
 
 const LOCALE_SET = new Set<string>(SITE_LOCALES);
 
@@ -88,7 +90,7 @@ export function localizePath(pathname: string, locale: SiteLocale): string {
 
 export function isFullyLocalizedPath(pathname: string): boolean {
   const cleanPath = stripLocaleFromPath(pathname);
-  return cleanPath === "/" || cleanPath === "/produtos" || cleanPath === "/garantia" || cleanPath === "/por-que-revera";
+  return cleanPath === "/" || cleanPath === "/produtos" || cleanPath === "/carrinho" || cleanPath === "/garantia" || cleanPath === "/por-que-revera";
 }
 
 /**

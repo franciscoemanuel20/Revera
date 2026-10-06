@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ConsentimentoCookies } from "@/components/privacy/ConsentimentoCookies";
 import { rastreamentoAtivoNesteAmbiente } from "@/lib/tracking/permissao";
@@ -7,6 +8,7 @@ import { Footer } from "@/components/ui/Footer";
 import { Header } from "@/components/ui/Header";
 import { baseUrl } from "@/lib/config/urls";
 import { aparenciaDoSite } from "@/lib/site/aparencia";
+import { LANG_BY_SITE_LOCALE, LOCALE_HEADER, normalizeSiteLocale } from "@/lib/i18n/site";
 import "./globals.css";
 
 // Tipografia inspirada no sistema da Hotmart: sans moderna, comercial e
@@ -84,12 +86,13 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const site = await aparenciaDoSite();
+  const locale = normalizeSiteLocale((await headers()).get(LOCALE_HEADER)) ?? "pt";
   return (
-    <html lang="pt-BR" className={hotmartLike.variable}>
+    <html lang={LANG_BY_SITE_LOCALE[locale]} className={hotmartLike.variable}>
       <body className="flex min-h-screen flex-col">
         {/* Os pixels só entram após escolha explícita por cookies opcionais.
             A atribuição de compra continua local, sem envio a terceiros. */}
-        <ConsentimentoCookies rastreamentoAtivo={rastreamentoAtivoNesteAmbiente()} />
+        <ConsentimentoCookies locale={locale} rastreamentoAtivo={rastreamentoAtivoNesteAmbiente()} />
 
         {/* CartProvider por fora de Header/Footer: o contador de itens do
             Header, o drawer (renderizado dentro do próprio Provider, ver
@@ -103,6 +106,7 @@ export default async function RootLayout({
               padding-top próprio (HEADER_HEIGHT_PX), igual o hero da home já
               fazia antes de o header existir. */}
           <Header
+            locale={locale}
             logo={site.logoUrl}
             brandName={site.brandName}
             menuPrincipal={site.menuPrincipal}
@@ -111,6 +115,7 @@ export default async function RootLayout({
           />
           <div className="flex-1">{children}</div>
           <Footer
+            locale={locale}
             logo={site.logoUrl}
             brandName={site.brandName}
             instagramUrl={site.instagramUrl}

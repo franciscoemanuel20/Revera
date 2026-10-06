@@ -60,9 +60,19 @@ import { linkWhatsApp } from "@/lib/config/whatsapp";
 import { checkoutSchema } from "./schema";
 
 export interface CheckoutResult {
-  erro: string;
+  erro?: string;
   camposComErro?: Record<string, string>;
   suporteWhatsAppUrl?: string;
+  cotacao?: {
+    currency: string;
+    subtotalCents: number;
+    shippingCents: number;
+    totalCents: number;
+    serviceName: string;
+    etaDays: number | null;
+    deliveryDate: string | null;
+    token: string;
+  };
 }
 
 // order_number legível e curto, mas NÃO sequencial nem previsível: 8

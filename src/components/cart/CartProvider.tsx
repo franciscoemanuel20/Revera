@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useTransition, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { CartDrawer, type CartDrawerItem } from "@/components/ui/CartDrawer";
 import {
   adicionarAoCarrinhoAction,
@@ -10,6 +10,7 @@ import {
   removerDoCarrinhoAction,
 } from "@/lib/cart/actions";
 import { CARRINHO_VAZIO, type CartView } from "@/lib/cart/types";
+import { localeFromPath, localizePath } from "@/lib/i18n/site";
 
 interface CartContextValue {
   cart: CartView;
@@ -46,6 +47,8 @@ const CartContext = createContext<CartContextValue | null>(null);
  */
 export function CartProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const locale = localeFromPath(pathname) ?? "pt";
   const [cart, setCart] = useState<CartView>(CARRINHO_VAZIO);
   const [carregando, setCarregando] = useState(true);
   const [pendente, iniciarTransicao] = useTransition();
@@ -127,6 +130,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     >
       {children}
       <CartDrawer
+        locale={locale}
         open={drawerAberto}
         onClose={() => setDrawerAberto(false)}
         items={itensDoDrawer}
@@ -141,7 +145,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }}
         onCheckout={() => {
           setDrawerAberto(false);
-          router.push("/carrinho");
+          router.push(localizePath("/carrinho", locale));
         }}
       />
     </CartContext.Provider>

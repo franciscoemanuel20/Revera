@@ -71,11 +71,13 @@ describe("dicionário de idioma", () => {
    * `lang="pt-BR"` numa página em espanhol. É o atributo que o leitor de
    * tela usa para escolher a pronúncia.
    */
-  it("o lang do HTML existe para as três línguas e nenhuma herda o pt-BR", () => {
+  it("o lang do HTML existe para todas as línguas e nenhuma herda o pt-BR", () => {
     expect(LANG_HTML.pt).toBe("pt-BR");
     expect(LANG_HTML.en).toBe("en");
     expect(LANG_HTML.es).toBe("es");
-    expect(Object.keys(LANG_HTML).sort()).toEqual(["en", "es", "pt"]);
+    expect(LANG_HTML.fr).toBe("fr");
+    expect(LANG_HTML.de).toBe("de");
+    expect(Object.keys(LANG_HTML).sort()).toEqual(["de", "en", "es", "fr", "pt"]);
   });
 });
 
@@ -107,6 +109,11 @@ describe("idioma vem do país de entrega", () => {
     expect(localeDoPais("ES")).toBe("es-ES");
   });
 
+  it("França e Alemanha exibem o nome do país no idioma do comprador", () => {
+    expect(nomeDoPais("FR", "fr")).toBe("France");
+    expect(nomeDoPais("DE", "de")).toBe("Deutschland");
+  });
+
   it("mercados hispanofalantes usam espanhol e dólar, sem confundir idioma com moeda", () => {
     for (const iso of ["MX", "CL", "AR", "CO", "VE", "EC", "GT", "PA", "CR", "DO"]) {
       expect(idiomaDoPais(iso), iso).toBe("es");
@@ -124,7 +131,7 @@ describe("idioma vem do país de entrega", () => {
 
   it("todo país da tabela tem idioma e locale", () => {
     for (const [iso, regra] of Object.entries(PAISES)) {
-      expect(["pt", "en", "es"], iso).toContain(regra.idioma);
+      expect(["pt", "en", "es", "fr", "de"], iso).toContain(regra.idioma);
       expect(regra.locale, iso).toMatch(/^[a-z]{2}-[A-Z]{2}$/);
     }
   });

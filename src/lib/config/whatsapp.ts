@@ -94,7 +94,7 @@ export function linkWhatsApp(mensagem: string): string {
 export const MENSAGEM_PAGAMENTO_CONFIRMADO =
   "Olá! Meu pagamento foi confirmado e gostaria de receber o código de rastreio do meu pedido, por favor.";
 
-export type IdiomaDaMensagemWhatsApp = "pt" | "en" | "es";
+export type IdiomaDaMensagemWhatsApp = "pt" | "en" | "es" | "fr" | "de";
 
 /** Mantém a conversa pós-pagamento no idioma de entrega do pedido. */
 export function mensagemPagamentoConfirmado(idioma: IdiomaDaMensagemWhatsApp = "pt"): string {
@@ -103,6 +103,12 @@ export function mensagemPagamentoConfirmado(idioma: IdiomaDaMensagemWhatsApp = "
   }
   if (idioma === "es") {
     return "Hola! Mi pago fue confirmado y me gustaría recibir el código de seguimiento de mi pedido, por favor.";
+  }
+  if (idioma === "fr") {
+    return "Bonjour ! Mon paiement a été confirmé et je souhaite recevoir le numéro de suivi de ma commande, s’il vous plaît.";
+  }
+  if (idioma === "de") {
+    return "Hallo! Meine Zahlung wurde bestätigt. Bitte senden Sie mir die Sendungsnummer meiner Bestellung.";
   }
   return MENSAGEM_PAGAMENTO_CONFIRMADO;
 }

@@ -6,6 +6,15 @@ import { QuantitySelector } from "./QuantitySelector";
 import { Button } from "./Button";
 import { Toast } from "./Toast";
 import { activateDialogFocus, isTopDialog } from "@/lib/ui/dialog-focus";
+import type { SiteLocale } from "@/lib/i18n/site";
+
+const COPY: Record<SiteLocale, { titulo: string; fechar: string; vazio: string; remover: string; subtotal: string; checkout: string }> = {
+  pt: { titulo: "Sua sacola", fechar: "Fechar carrinho", vazio: "Sua sacola está vazia.", remover: "remover", subtotal: "Subtotal", checkout: "Finalizar compra" },
+  en: { titulo: "Your bag", fechar: "Close cart", vazio: "Your bag is empty.", remover: "remove", subtotal: "Subtotal", checkout: "Checkout" },
+  es: { titulo: "Tu bolsa", fechar: "Cerrar carrito", vazio: "Tu bolsa está vacía.", remover: "eliminar", subtotal: "Subtotal", checkout: "Finalizar compra" },
+  fr: { titulo: "Votre panier", fechar: "Fermer le panier", vazio: "Votre panier est vide.", remover: "supprimer", subtotal: "Sous-total", checkout: "Finaliser la commande" },
+  de: { titulo: "Ihr Warenkorb", fechar: "Warenkorb schließen", vazio: "Ihr Warenkorb ist leer.", remover: "entfernen", subtotal: "Zwischensumme", checkout: "Zur Kasse" },
+};
 
 export interface CartDrawerItem {
   id: string;
@@ -17,6 +26,7 @@ export interface CartDrawerItem {
 }
 
 export interface CartDrawerProps {
+  locale?: SiteLocale;
   open: boolean;
   onClose: () => void;
   items: CartDrawerItem[];
@@ -37,6 +47,7 @@ export interface CartDrawerProps {
 // de estoque nem de desconto por quantidade aqui: subtotalCents já vem
 // calculado (ver src/lib/pricing/discount.ts) de quem monta o carrinho.
 export function CartDrawer({
+  locale = "pt",
   open,
   onClose,
   items,
@@ -47,6 +58,7 @@ export function CartDrawer({
   erro,
   onDismissErro,
 }: CartDrawerProps) {
+  const copy = COPY[locale];
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -94,8 +106,8 @@ export function CartDrawer({
     >
       <div className="flex h-full w-full max-w-md flex-col gap-4 bg-paper p-6">
         <div className="flex items-center justify-between">
-          <h2 id={titleId} className="font-display text-xl text-ink">Sua sacola</h2>
-          <button type="button" onClick={onClose} aria-label="Fechar carrinho" className="min-h-toque min-w-toque">
+          <h2 id={titleId} className="font-display text-xl text-ink">{copy.titulo}</h2>
+          <button type="button" onClick={onClose} aria-label={copy.fechar} className="min-h-toque min-w-toque">
             ✕
           </button>
         </div>
@@ -104,7 +116,7 @@ export function CartDrawer({
 
         <ul className="flex flex-1 flex-col gap-4 overflow-y-auto">
           {items.length === 0 ? (
-            <li className="text-ink/60">Sua sacola está vazia.</li>
+            <li className="text-ink/60">{copy.vazio}</li>
           ) : (
             items.map((item) => (
               /* `flex-wrap` + `min-w-0` + `ml-auto` (30/09/2026): no celular
@@ -142,7 +154,7 @@ export function CartDrawer({
                       onChange={(next) => onQuantityChange(item.id, next)}
                     />
                     <button type="button" onClick={() => onRemove(item.id)} className="text-sm text-ink/60 underline">
-                      remover
+                      {copy.remover}
                     </button>
                   </div>
                 </div>
@@ -159,11 +171,11 @@ export function CartDrawer({
               que uma quantidade muda, sem precisar navegar até aqui de
               novo para descobrir o valor atualizado. */}
           <div className="flex justify-between font-semibold text-ink" aria-live="polite">
-            <span>Subtotal</span>
+            <span>{copy.subtotal}</span>
             <Price cents={subtotalCents} />
           </div>
           <Button onClick={onCheckout} disabled={items.length === 0}>
-            Finalizar compra
+            {copy.checkout}
           </Button>
         </div>
       </div>

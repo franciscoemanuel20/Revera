@@ -1,3 +1,5 @@
+import type { Idioma } from "@/lib/internacional/idioma";
+
 export function montarItensDoPagamento({
   itens,
   shippingCents,
@@ -12,7 +14,7 @@ export function montarItensDoPagamento({
   }>;
   shippingCents: number;
   discountCents: number;
-  idiomaPagamento: "pt" | "en" | "es";
+  idiomaPagamento: Idioma;
 }) {
   const linhas = itens.map((item) => ({
     description: [item.product_name_snapshot, item.variant_label_snapshot]
@@ -60,6 +62,10 @@ export function montarItensDoPagamento({
                 ? "DHL shipping"
                 : idiomaPagamento === "es"
                   ? "Envio DHL"
+                  : idiomaPagamento === "fr"
+                    ? "Livraison DHL"
+                    : idiomaPagamento === "de"
+                      ? "DHL-Versand"
                   : "Frete",
             quantity: 1,
             priceCents: shippingCents,

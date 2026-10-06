@@ -9,20 +9,14 @@ import { converterCentavosBrl, type CotacaoPtax } from "./cambio-ptax";
  * Prontidão de um MERCADO internacional — a resposta honesta à pergunta
  * "dá para vender para este país AGORA?".
  *
- * Um país só abre quando TODAS as pernas existem:
+ * O mercado só aparece quando as duas condições gerais existem:
  *   1. está em CHECKOUT_PAISES (decisão do Francisco, por env);
  *   2. há gateway internacional configurado (Stripe ou PayPal);
- *   3. há cotação de frete ATIVA e DENTRO DA VALIDADE para o país, na
- *      moeda do mercado (tabela intl_shipping_quotes — cotação manual,
- *      cadastrada pela operação; frete não se inventa);
- *   4. cada item do carrinho tem preço comercial NA MOEDA do mercado
- *      (variant_prices — preço não se converte, se decide).
  *
- * As pernas 1–3 são do mercado; a 4 é do carrinho. Por isso a checagem é
- * em duas funções: prontidaoDoMercado() para a tela decidir o que oferece,
- * e precosDoCarrinhoNoMercado() para o pedido nascer certo — as duas
- * rodam NO SERVIDOR, e a segunda roda de novo na Server Action, porque
- * tela não é fonte de verdade.
+ * O endereço do comprador é necessário para consultar a cotação DHL em
+ * tempo real; ela não pode ser pré-aprovada por país. `precosDoCarrinho`
+ * valida as variantes no servidor, e a Server Action repete preço e frete
+ * imediatamente antes de criar qualquer pedido.
  */
 
 export interface CotacaoInternacional {
@@ -87,22 +81,62 @@ export async function cotacaoFreteInternacional(
   };
 }
 
-export async function pedidoInternacionalPagavel(pais: string, moeda: string, pedidoId: string, freteContratado: number): Promise<boolean> {
+export interface PedidoInternacionalPagavel {
+  pagavel: boolean;
+  expiraEm?: Date;
+  cotadaEm?: Date;
+}
+
+// Janela operacional da loja: até 3 h para iniciar pagamento, 20 s para a
+// chamada ao gateway e mais 3 h para concluir a ordem PayPal. Não é prazo
+// garantido pela DHL.
+export const JANELA_MAXIMA_PAGAMENTO_INTERNACIONAL_MS = 6 * 60 * 60_000 + 20_000;
+export const JANELA_MAXIMA_INICIO_PAYPAL_MS = 3 * 60 * 60_000 - 60_000;
+
+export function cotacaoPermiteNovoPayPal(cotadaEm: Date, agora = Date.now()): boolean {
+  const idade = agora - cotadaEm.getTime();
+  return Number.isFinite(idade) && idade >= -30_000 && idade <= JANELA_MAXIMA_INICIO_PAYPAL_MS;
+}
+
+export async function pedidoInternacionalPagavel(
+  pais: string,
+  moeda: string,
+  pedidoId: string,
+  freteContratado: number,
+  shippingQuoteId: string | null
+): Promise<PedidoInternacionalPagavel> {
   const mercado = await prontidaoDoMercado(pais);
-  if (!mercado.aberto || mercado.moeda !== moeda || !pedidoId) return false;
+  if (!mercado.aberto || mercado.moeda !== moeda || !pedidoId || !shippingQuoteId) return { pagavel: false };
   const { data, error } = await createAdminClient().from("shipping_quotes")
-    .select("carrier, price_cents, raw_response, created_at")
-    .eq("order_id", pedidoId).eq("carrier", "DHL")
-    .order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (error || !data || data.price_cents !== freteContratado) return false;
-  const criadoEm = Date.parse(data.created_at as string);
-  // A cotação vale 24 h, mas só emitimos uma cobrança nas primeiras 21 h.
-  // Stripe e PayPal expiram seus checkouts em até 3 h, portanto nenhum link
-  // emitido dentro desta janela sobrevive à validade econômica do frete.
-  if (!Number.isFinite(criadoEm) || Date.now() - criadoEm > 21 * 60 * 60_000) return false;
+    .select("id, order_id, carrier, price_cents, service_name, eta_days, raw_response, created_at")
+    .eq("id", shippingQuoteId).eq("order_id", pedidoId).eq("carrier", "DHL")
+    .maybeSingle();
+  if (error || !data || data.id !== shippingQuoteId || data.order_id !== pedidoId || data.price_cents !== freteContratado) {
+    return { pagavel: false };
+  }
   const raw = data.raw_response as Record<string, unknown> | null;
-  return raw?.source === "mydhl-production" && raw?.environment === "producao" &&
-    raw?.country === pais.toUpperCase() && raw?.currency === moeda;
+  const produtoDhl = raw?.product_code;
+  const reciboCoerente = raw?.source === "mydhl-production" && raw?.environment === "producao" &&
+    raw?.country === pais.toUpperCase() && raw?.currency === moeda &&
+    (produtoDhl === "8" || produtoDhl === "P") &&
+    typeof data.service_name === "string" && data.service_name.length > 0 &&
+    raw?.service_name === data.service_name &&
+    raw?.eta_days === data.eta_days &&
+    (raw?.delivery_date === null || typeof raw?.delivery_date === "string");
+  if (!reciboCoerente) return { pagavel: false };
+  const cotadaEm = Date.parse(String(raw?.quoted_at ?? ""));
+  const idadeDaCotacao = Date.now() - cotadaEm;
+  // A validade abaixo limita a vida do link ao período operacional definido
+  // pela loja; não representa validade garantida pela DHL. A Rating oficial
+  // é indicativa e a transportadora não garante divergência com a tarifa final.
+  if (!Number.isFinite(cotadaEm) || idadeDaCotacao < -30_000 || idadeDaCotacao > JANELA_MAXIMA_PAGAMENTO_INTERNACIONAL_MS) {
+    return { pagavel: false };
+  }
+  return {
+    pagavel: true,
+    expiraEm: new Date(cotadaEm + JANELA_MAXIMA_PAGAMENTO_INTERNACIONAL_MS),
+    cotadaEm: new Date(cotadaEm),
+  };
 }
 
 export async function prontidaoDoMercado(pais: string): Promise<ProntidaoMercado> {
