@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 // Página para barbeiros e profissionais — pedida pela auditoria de
 // 26/08/2026. A FAQ interna ainda marca "Vendemos para profissionais?"
 // como TODO (seeds/faq.json, sort_order 15, is_visible=false) — o
@@ -17,6 +18,15 @@ import {
   whatsappLegivel,
 } from "@/lib/config/whatsapp";
 import { ProfessionalLeadForm } from "./ProfessionalLeadForm";
+import { LOCALE_HEADER, normalizeSiteLocale } from "@/lib/i18n/site";
+
+const FORMULARIO_UI = {
+  pt: { enviando: "Enviando…", erroNome: "Informe seu nome.", erroTelefone: "Informe um telefone válido, com DDD.", erroEmail: "E-mail inválido." },
+  en: { enviando: "Sending…", erroNome: "Enter your name.", erroTelefone: "Enter a valid phone number with country/area code.", erroEmail: "Enter a valid email address." },
+  es: { enviando: "Enviando…", erroNome: "Ingresa tu nombre.", erroTelefone: "Ingresa un teléfono válido con código de país y área.", erroEmail: "Ingresa un correo electrónico válido." },
+  fr: { enviando: "Envoi…", erroNome: "Saisissez votre nom.", erroTelefone: "Saisissez un numéro valide avec indicatif du pays et de la région.", erroEmail: "Saisissez une adresse e-mail valide." },
+  de: { enviando: "Wird gesendet…", erroNome: "Geben Sie Ihren Namen ein.", erroTelefone: "Geben Sie eine gültige Telefonnummer mit Landes- und Ortsvorwahl ein.", erroEmail: "Geben Sie eine gültige E-Mail-Adresse ein." },
+} as const;
 
 /**
  * A mensagem que o cliente encontra já digitada. Fica aqui, e não no
@@ -49,7 +59,9 @@ export const metadata: Metadata = {
 };
 
 export default async function ParaProfissionaisPage() {
-  const t = await textosDaPagina("profissionais");
+  const locale = normalizeSiteLocale((await headers()).get(LOCALE_HEADER)) ?? "pt";
+  const t = await textosDaPagina("profissionais", locale);
+  const ui = FORMULARIO_UI[locale];
 
   return (
     <main
@@ -102,6 +114,10 @@ export default async function ParaProfissionaisPage() {
               whatsappBotao: t("profissionais.whatsapp.botao"),
               whatsappDica: t("profissionais.whatsapp.dica"),
               whatsappTelefoneRotulo: t("profissionais.whatsapp.telefoneRotulo"),
+              enviando: ui.enviando,
+              erroNome: ui.erroNome,
+              erroTelefone: ui.erroTelefone,
+              erroEmail: ui.erroEmail,
             }}
           />
         </section>

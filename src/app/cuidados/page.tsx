@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 // Página pública de cuidados — os quatro fatos reais confirmados no
 // material da marca (mesmos textos usados na FAQ, ver seeds/faq.json,
 // perguntas "Posso lavar normalmente?", "Posso usar secador?", "Posso usar
@@ -9,6 +10,7 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { textosDaPagina } from "@/lib/conteudo/textos";
+import { LOCALE_HEADER, normalizeSiteLocale } from "@/lib/i18n/site";
 
 /**
  * O texto destes blocos mudou de lugar em 30/08/2026: agora mora em
@@ -45,7 +47,8 @@ export const metadata: Metadata = {
 };
 
 export default async function CuidadosPage() {
-  const t = await textosDaPagina("cuidados");
+  const locale = normalizeSiteLocale((await headers()).get(LOCALE_HEADER)) ?? "pt";
+  const t = await textosDaPagina("cuidados", locale);
 
   return (
     <main

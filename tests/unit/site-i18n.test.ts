@@ -99,14 +99,32 @@ describe("i18n publico do site", () => {
     expect(traducaoDeConteudo("garantia.passo5.destaque", "de")).toBe("stoppen Sie hier");
   });
 
-  it("limita rotas que podem receber redirecionamento automatico de idioma", () => {
+  it("limita o redirecionamento automatico as rotas integralmente traduzidas", () => {
     expect(isFullyLocalizedPath("/")).toBe(true);
     expect(isFullyLocalizedPath("/produtos")).toBe(true);
     expect(isFullyLocalizedPath("/en/produtos")).toBe(true);
     expect(isFullyLocalizedPath("/garantia")).toBe(true);
     expect(isFullyLocalizedPath("/por-que-revera")).toBe(true);
-    expect(isFullyLocalizedPath("/cuidados")).toBe(false);
+    expect(isFullyLocalizedPath("/cuidados")).toBe(true);
+    expect(isFullyLocalizedPath("/naturalidade")).toBe(true);
+    expect(isFullyLocalizedPath("/sobre-as-proteses")).toBe(true);
+    expect(isFullyLocalizedPath("/para-profissionais")).toBe(true);
     expect(isFullyLocalizedPath("/produtos/micropele-008")).toBe(false);
+  });
+
+  it("tem o conteudo editorial principal em frances e alemao", () => {
+    for (const locale of ["fr", "de"] as const) {
+      for (const chave of [
+        "cuidados.titulo",
+        "naturalidade.titulo",
+        "sobre.titulo",
+        "profissionais.titulo",
+      ] as const) {
+        const valor = traducaoDeConteudo(chave, locale);
+        expect(valor, `${locale}.${chave}`).toBeTruthy();
+        expect(valor, `${locale}.${chave}`).not.toMatch(/prothese capilar|pr[oó]tese capilar/i);
+      }
+    }
   });
 
   it("middleware mantem o dominio sem prefixo em portugues por padrao", () => {

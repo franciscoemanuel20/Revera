@@ -37,6 +37,10 @@ export interface ProfessionalLeadFormTextos {
   whatsappBotao: string;
   whatsappDica: string;
   whatsappTelefoneRotulo: string;
+  enviando: string;
+  erroNome: string;
+  erroTelefone: string;
+  erroEmail: string;
 }
 
 export function ProfessionalLeadForm({
@@ -114,7 +118,14 @@ export function ProfessionalLeadForm({
     // o navegador não confere nada sozinho.
     const falta = conferirLead(dados);
     if (falta) {
-      setErro(falta);
+      const erroLocalizado = falta === "Informe seu nome."
+        ? textos.erroNome
+        : falta === "Informe um telefone válido, com DDD."
+          ? textos.erroTelefone
+          : falta === "E-mail inválido."
+            ? textos.erroEmail
+            : falta;
+      setErro(erroLocalizado);
       return;
     }
 
@@ -282,7 +293,7 @@ export function ProfessionalLeadForm({
       </FormField>
 
       <Button type="submit" disabled={enviando}>
-        {enviando ? "Enviando…" : textos.botaoEnviar}
+        {enviando ? textos.enviando : textos.botaoEnviar}
       </Button>
     </form>
   );

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 // Página educativa "o que é uma prótese capilar" — pedida pela auditoria de
 // 26/08/2026 (páginas públicas que faltavam). Segue o mesmo molde de
 // src/app/cuidados/page.tsx: blocos curtos com subtítulo, não parágrafo
@@ -33,6 +34,7 @@ import Image from "next/image";
 import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { textosDaPagina } from "@/lib/conteudo/textos";
+import { LOCALE_HEADER, normalizeSiteLocale } from "@/lib/i18n/site";
 
 /**
  * A página continua sendo gerada estaticamente — ler o banco a cada visita
@@ -57,7 +59,8 @@ export const metadata: Metadata = {
 };
 
 export default async function SobreAsProtesesPage() {
-  const t = await textosDaPagina("sobre");
+  const locale = normalizeSiteLocale((await headers()).get(LOCALE_HEADER)) ?? "pt";
+  const t = await textosDaPagina("sobre", locale);
 
   return (
     <main

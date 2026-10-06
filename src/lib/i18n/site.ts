@@ -90,7 +90,17 @@ export function localizePath(pathname: string, locale: SiteLocale): string {
 
 export function isFullyLocalizedPath(pathname: string): boolean {
   const cleanPath = stripLocaleFromPath(pathname);
-  return cleanPath === "/" || cleanPath === "/produtos" || cleanPath === "/carrinho" || cleanPath === "/garantia" || cleanPath === "/por-que-revera";
+  return [
+    "/",
+    "/produtos",
+    "/carrinho",
+    "/garantia",
+    "/por-que-revera",
+    "/cuidados",
+    "/naturalidade",
+    "/sobre-as-proteses",
+    "/para-profissionais",
+  ].includes(cleanPath);
 }
 
 /**

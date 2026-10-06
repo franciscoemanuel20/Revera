@@ -1,5 +1,6 @@
 import type { ChaveDeTexto } from "@/lib/conteudo/registro";
 import { DEFAULT_SITE_LOCALE, type SiteLocale } from "./site";
+import { DE_EDITORIAL, FR_EDITORIAL } from "./conteudo-editorial-fr-de";
 
 type TraducoesDeConteudo = Partial<Record<ChaveDeTexto, string>>;
 
@@ -386,6 +387,7 @@ const ES: TraducoesDeConteudo = {
 const FR: TraducoesDeConteudo = {
   "trustbar.item1": "Controle qualite avant expedition",
   "trustbar.item2": "Garantie de 7 jours ouvrables",
+  ...FR_EDITORIAL,
 
   "garantia.eyebrow": "Apres-vente",
   "garantia.titulo": "Garantie",
@@ -445,6 +447,7 @@ const FR: TraducoesDeConteudo = {
 const DE: TraducoesDeConteudo = {
   "trustbar.item1": "Qualitatskontrolle vor dem Versand",
   "trustbar.item2": "7 Werktage Garantie",
+  ...DE_EDITORIAL,
 
   "garantia.eyebrow": "Nach dem Kauf",
   "garantia.titulo": "Garantie",
