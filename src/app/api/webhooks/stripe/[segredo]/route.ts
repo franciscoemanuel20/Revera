@@ -201,7 +201,7 @@ async function marcarProcessado(
 async function encerrarTentativaPendente(
   supabase: ReturnType<typeof createAdminClient>,
   provider: string,
-  hint: { orderId: string; transactionId: string | null; eventId: string },
+  hint: { orderId: string; transactionId: string | null; eventId: string; transactionCreatedAt?: number | null; paymentReservationId?: string | null },
   expirado: boolean
 ): Promise<boolean> {
   if (!hint.transactionId) return false;
@@ -227,26 +227,10 @@ async function encerrarTentativaPendente(
   }
   if (atual.data) return true;
 
-  // A sessão pode ter disparado o webhook antes de a reserva persistir o id.
-  // Há no máximo um payment pendente por pedido; vincule só essa linha.
-  const semId = await supabase
-    .from("payments")
-    .update({ status: "failed", provider_payment_id: hint.transactionId, raw_response })
-    .eq("order_id", hint.orderId)
-    .eq("provider", provider)
-    .is("provider_payment_id", null)
-    .eq("status", "pending")
-    .select("id")
-    .maybeSingle();
-  if (semId.error) {
-    console.error("[stripe-webhook] falha ao vincular payment pendente", semId.error);
-    return false;
-  }
-  if (semId.data) return true;
-
-  // A mesma tentativa pode já ter sido encerrada por uma entrega concorrente
-  // ou aprovada por outro evento. Nunca insira um segundo payment para a mesma
-  // sessão; ausência ou estado ainda pending mantém o webhook recuperável.
+  // Antes de tocar numa reserva ainda sem ID, procure a sessão exata em
+  // qualquer tentativa histórica. Um webhook terminal pode chegar atrasado
+  // enquanto uma nova sessão do mesmo pedido está sendo criada; nesse caso
+  // ele pertence à linha antiga e nunca deve encerrar a reserva nova.
   const existente = await supabase
     .from("payments")
     .select("status")
@@ -259,7 +243,44 @@ async function encerrarTentativaPendente(
     console.error("[stripe-webhook] falha ao conferir payment terminal", existente.error);
     return false;
   }
-  return Boolean(existente.data && existente.data.status !== "pending");
+  if (existente.data) return existente.data.status !== "pending";
+
+  // A sessão pode ter disparado o webhook antes de a reserva persistir o id.
+  // Há no máximo um payment pendente por pedido. A sessão precisa ter sido
+  // criada depois dessa reserva (tolerância de 2 s para o epoch da Stripe),
+  // ou um evento antigo sem linha histórica poderia sequestrar a tentativa.
+  const reservaSemId = await supabase
+    .from("payments")
+    .select("id, created_at")
+    .eq("order_id", hint.orderId)
+    .eq("provider", provider)
+    .is("provider_payment_id", null)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (reservaSemId.error) return false;
+  const reservaCriadaEm = Date.parse(String(reservaSemId.data?.created_at ?? ""));
+  const sessaoCriadaEm = (hint.transactionCreatedAt ?? NaN) * 1000;
+  if (!reservaSemId.data || !Number.isFinite(reservaCriadaEm) || !Number.isFinite(sessaoCriadaEm)) return false;
+  if (!hint.paymentReservationId || hint.paymentReservationId !== reservaSemId.data.id) return true;
+  if (sessaoCriadaEm < reservaCriadaEm - 2_000) return true;
+
+  const semId = await supabase
+    .from("payments")
+    .update({ status: "failed", provider_payment_id: hint.transactionId, raw_response })
+    .eq("id", hint.paymentReservationId)
+    .eq("order_id", hint.orderId)
+    .eq("provider", provider)
+    .is("provider_payment_id", null)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (semId.error) {
+    console.error("[stripe-webhook] falha ao vincular payment pendente", semId.error);
+    return false;
+  }
+  if (semId.data) return true;
+
+  return false;
 }
 
 function parseSeguro(raw: string): unknown {

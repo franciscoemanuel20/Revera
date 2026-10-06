@@ -444,6 +444,7 @@ export default async function PagamentoPage({
       orderId: pedido.id,
       orderNumber: pedido.order_number,
       amountCents: pedido.total_cents,
+      paymentReservationId: reserva.id,
       currency: pedido.currency as string,
       preferredMethod: pedido.payment_preference === "apple_pay" ? "apple_pay" : undefined,
       locale: idiomaPagamento,
@@ -509,6 +510,7 @@ export default async function PagamentoPage({
           raw_response: { checkout_url: resultado.checkoutUrl },
         })
         .eq("id", reserva!.id)
+        .eq("status", "pending")
         .select("id")
         .maybeSingle();
 
@@ -518,6 +520,16 @@ export default async function PagamentoPage({
         break;
       }
       if (!error && !atualizada) {
+        const { data: reservaAtual } = await supabase
+          .from("payments")
+          .select("status")
+          .eq("id", reserva!.id)
+          .maybeSingle();
+        if (reservaAtual && reservaAtual.status !== "pending") {
+          return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
+            motivo: "em_preparacao",
+          });
+        }
         // Zero linhas, zero erro: a reserva não existe mais. Repetir o
         // mesmo UPDATE não muda nada — sai já para a recriação abaixo.
         linhaSumiu = true;

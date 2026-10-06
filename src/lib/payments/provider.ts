@@ -47,6 +47,8 @@ export interface PaymentCharge {
    * adapter.
    */
   currency: string;
+  /** ID da reserva payments já criada antes de chamar o gateway. */
+  paymentReservationId?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -128,6 +130,10 @@ export interface WebhookHint {
    * payment_events tem unique (provider, provider_event_id)).
    */
   eventId: string;
+  /** instante em que a transação/sessão nasceu no gateway, em epoch seconds */
+  transactionCreatedAt?: number | null;
+  /** reserva interna ecoada na metadata da sessão do gateway */
+  paymentReservationId?: string | null;
   /**
    * O que fazer com o aviso. Ausente = "pagamento", que é o comportamento
    * histórico — os adapters antigos não precisam mudar.

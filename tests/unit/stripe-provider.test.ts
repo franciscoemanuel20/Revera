@@ -134,10 +134,10 @@ describe("parseWebhookHint — semântica dos eventos", () => {
     const corpo = JSON.stringify({
       id: "evt_async_failed",
       type: "checkout.session.async_payment_failed",
-      data: { object: { id: "cs_test_abc", client_reference_id: ORDER, payment_status: "unpaid" } },
+      data: { object: { id: "cs_test_abc", created: 1_800_000_000, client_reference_id: ORDER, payment_status: "unpaid", metadata: { payment_reservation_id: "pay_1" } } },
     });
     const hint = p.parseWebhookHint(corpo, headersCom(assinar(corpo, Math.floor(Date.now() / 1000))));
-    expect(hint).toMatchObject({ orderId: ORDER, transactionId: "cs_test_abc", kind: "checkout_falhou" });
+    expect(hint).toMatchObject({ orderId: ORDER, transactionId: "cs_test_abc", transactionCreatedAt: 1_800_000_000, paymentReservationId: "pay_1", kind: "checkout_falhou" });
   });
 
   it("async_payment_failed sem id de sessão é recusado", async () => {
@@ -155,10 +155,10 @@ describe("parseWebhookHint — semântica dos eventos", () => {
     const corpo = JSON.stringify({
       id: "evt_expired",
       type: "checkout.session.expired",
-      data: { object: { id: "cs_test_abc", client_reference_id: ORDER } },
+      data: { object: { id: "cs_test_abc", created: 1_800_000_000, client_reference_id: ORDER, metadata: { payment_reservation_id: "pay_1" } } },
     });
     const hint = p.parseWebhookHint(corpo, headersCom(assinar(corpo, Math.floor(Date.now() / 1000))));
-    expect(hint).toMatchObject({ orderId: ORDER, transactionId: "cs_test_abc", kind: "checkout_expirado" });
+    expect(hint).toMatchObject({ orderId: ORDER, transactionId: "cs_test_abc", transactionCreatedAt: 1_800_000_000, paymentReservationId: "pay_1", kind: "checkout_expirado" });
   });
 
   it("charge.refunded vira kind=reembolso pela metadata do PaymentIntent", async () => {

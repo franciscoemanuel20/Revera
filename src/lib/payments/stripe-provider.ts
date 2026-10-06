@@ -163,6 +163,7 @@ export function assinaturaConfere(
 
 interface SessaoStripe {
   id?: string;
+  created?: number;
   object?: string;
   client_reference_id?: string | null;
   payment_status?: string;
@@ -278,6 +279,7 @@ export class StripeProvider implements PaymentProvider {
       metadata: {
         order_id: charge.orderId,
         order_number: charge.orderNumber,
+        payment_reservation_id: charge.paymentReservationId,
         payment_preference: charge.preferredMethod ?? "default",
       },
       // O PaymentIntent herda a referência: é por ela que um evento de
@@ -454,12 +456,14 @@ export class StripeProvider implements PaymentProvider {
       }
 
       case "checkout.session.async_payment_failed": {
-        if (!orderIdDaSessao || typeof objeto.id !== "string") return null;
+        if (!orderIdDaSessao || typeof objeto.id !== "string" || typeof objeto.created !== "number") return null;
         return {
           orderId: orderIdDaSessao,
           transactionId: typeof objeto.id === "string" ? objeto.id : null,
           invoiceSlug: null,
           eventId: evento.id,
+          transactionCreatedAt: objeto.created,
+          paymentReservationId: objeto.metadata?.payment_reservation_id ?? null,
           // A rota consulta esta sessão específica, mesmo se o pedido tiver
           // sido pago por outra tentativa, e encerra só esta tentativa.
           kind: "checkout_falhou",
@@ -467,12 +471,14 @@ export class StripeProvider implements PaymentProvider {
       }
 
       case "checkout.session.expired": {
-        if (!orderIdDaSessao || typeof objeto.id !== "string") return null;
+        if (!orderIdDaSessao || typeof objeto.id !== "string" || typeof objeto.created !== "number") return null;
         return {
           orderId: orderIdDaSessao,
           transactionId: objeto.id,
           invoiceSlug: null,
           eventId: evento.id,
+          transactionCreatedAt: objeto.created,
+          paymentReservationId: objeto.metadata?.payment_reservation_id ?? null,
           kind: "checkout_expirado",
         };
       }

@@ -84,19 +84,19 @@ function eventoReembolso(eventId = "evt_refund_1") {
   });
 }
 
-function eventoExpirado(eventId = "evt_expirado_1") {
+function eventoExpirado(eventId = "evt_expirado_1", reservaId = "pay_pendente") {
   return JSON.stringify({
     id: eventId,
     type: "checkout.session.expired",
-    data: { object: { id: "cs_test_e2e", client_reference_id: ORDER, payment_status: "unpaid" } },
+    data: { object: { id: "cs_test_e2e", created: 1_800_000_000, client_reference_id: ORDER, payment_status: "unpaid", metadata: { payment_reservation_id: reservaId } } },
   });
 }
 
-function eventoPagamentoAssincronoFalhou(eventId = "evt_async_falhou") {
+function eventoPagamentoAssincronoFalhou(eventId = "evt_async_falhou", reservaId = "pay_pendente") {
   return JSON.stringify({
     id: eventId,
     type: "checkout.session.async_payment_failed",
-    data: { object: { id: "cs_test_e2e", client_reference_id: ORDER, payment_status: "unpaid" } },
+    data: { object: { id: "cs_test_e2e", created: 1_800_000_000, client_reference_id: ORDER, payment_status: "unpaid", metadata: { payment_reservation_id: reservaId } } },
   });
 }
 
@@ -371,6 +371,111 @@ describe("fora de ordem e reembolso", () => {
       order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "failed",
     })]);
     expect(fake.tabela("payment_events")[0]?.processed_at).toBeTruthy();
+  });
+
+  it("evento atrasado de sessão histórica não encerra a reserva nova sem ID", async () => {
+    fake.tabela("payments").push(
+      {
+        id: "pay_antigo", order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "failed",
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "pay_novo", order_id: ORDER, provider: "stripe", provider_payment_id: null, status: "pending",
+        created_at: "2027-01-15T00:00:00.000Z",
+      }
+    );
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "expired", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+
+    const post = await rota();
+    const resposta = await post(eventoExpirado("evt_antigo_atrasado", "pay_antigo"));
+
+    expect(resposta.status).toBe(200);
+    expect(fake.tabela("payments")).toEqual([
+      expect.objectContaining({ id: "pay_antigo", status: "failed" }),
+      expect.objectContaining({ id: "pay_novo", provider_payment_id: null, status: "pending" }),
+    ]);
+  });
+
+  it("evento da sessão recém-criada pode encerrar somente sua reserva ainda sem ID", async () => {
+    fake.tabela("payments").push({
+      id: "pay_novo", order_id: ORDER, provider: "stripe", provider_payment_id: null, status: "pending",
+      created_at: "2027-01-15T07:59:59.000Z",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "expired", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+
+    const post = await rota();
+    const resposta = await post(eventoExpirado("evt_sessao_atual", "pay_novo"));
+
+    expect(resposta.status).toBe(200);
+    expect(fake.tabela("payments")).toEqual([
+      expect.objectContaining({ id: "pay_novo", provider_payment_id: "cs_test_e2e", status: "failed" }),
+    ]);
+  });
+
+  it("sessão histórica sem linha, mesmo dentro de 2 segundos, não captura a reserva nova", async () => {
+    fake.tabela("payments").push({
+      id: "pay_novo", order_id: ORDER, provider: "stripe", provider_payment_id: null, status: "pending",
+      created_at: "2027-01-15T07:59:59.000Z",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "expired", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+
+    const post = await rota();
+    const resposta = await post(eventoExpirado("evt_orfao_antigo", "reserva_que_nao_existe"));
+
+    expect(resposta.status).toBe(200);
+    expect(fake.tabela("payments")).toEqual([
+      expect.objectContaining({ id: "pay_novo", provider_payment_id: null, status: "pending" }),
+    ]);
+  });
+
+  it("evento terminal não captura uma reserva substituta criada entre leitura e update", async () => {
+    fake.tabela("payments").push({
+      id: "pay_validado", order_id: ORDER, provider: "stripe", provider_payment_id: null, status: "pending",
+      created_at: "2027-01-15T07:59:59.000Z",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "expired", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+
+    const fromOriginal = fake.from.bind(fake);
+    let updatesEmPayments = 0;
+    fake.from = ((nome: string) => {
+      const consulta = fromOriginal(nome);
+      if (nome !== "payments") return consulta;
+      const updateOriginal = consulta.update.bind(consulta);
+      consulta.update = ((patch: Record<string, unknown>) => {
+        updatesEmPayments += 1;
+        if (updatesEmPayments === 2) {
+          const pagamentos = fake.tabela("payments");
+          pagamentos.splice(0, pagamentos.length, {
+            id: "pay_substituto", order_id: ORDER, provider: "stripe", provider_payment_id: null, status: "pending",
+            created_at: "2027-01-15T08:00:00.000Z",
+          });
+        }
+        return updateOriginal(patch);
+      }) as typeof consulta.update;
+      return consulta;
+    }) as typeof fake.from;
+
+    const post = await rota();
+    const evento = eventoExpirado("evt_corrida_substituicao", "pay_validado");
+    const resposta = await post(evento);
+
+    // A disputa deixa o evento não processado para um retry seguro. No retry,
+    // o metadata antigo não corresponde à reserva substituta e o evento é
+    // consumido sem alterar a tentativa atual.
+    expect(resposta.status).toBe(503);
+    const retry = await post(evento);
+    expect(retry.status).toBe(200);
+    expect(fake.tabela("payments")).toEqual([
+      expect.objectContaining({ id: "pay_substituto", provider_payment_id: null, status: "pending" }),
+    ]);
   });
 
   it("async_payment_failed encerra só sua tentativa mesmo se outro checkout já pagou o pedido", async () => {
