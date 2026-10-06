@@ -62,11 +62,33 @@ function ehLeitura(request: NextRequest): boolean {
   return request.method === "GET" || request.method === "HEAD";
 }
 
+/**
+ * SÓ CARREGAMENTO DE PÁGINA GRAVA O IDIOMA (06/10/2026, depois do #4).
+ *
+ * Em produção o middleware NÃO recebe `next-router-prefetch` (curl com o
+ * cabeçalho em /fr/checkout?_rsc=x ainda volta com Set-Cookie fr), então
+ * `ehPreCarga()` sozinho não segura nada. Reproduzido: em /en, clicar em PT
+ * abria "/" em português, mas pré-cargas de /en/... ainda em voo terminavam
+ * depois e regravavam `revera_locale=en`; a próxima navegação sem prefixo
+ * voltava para /en/produtos.
+ *
+ * O que distingue de verdade é `sec-fetch-dest`, que o navegador põe sozinho
+ * e o Next não consegue mudar: `document` num carregamento de página, `empty`
+ * em pré-carga e em navegação RSC. Sem o cabeçalho (curl, testes, navegador
+ * muito antigo) conta como página. Por isso o seletor de idioma é um `<a>`
+ * comum (carrega a página inteira), não `<Link>`.
+ */
+function ehCarregamentoDePagina(request: NextRequest): boolean {
+  const destino = request.headers.get("sec-fetch-dest");
+  return destino === null || destino === "document";
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (shouldIgnore(pathname)) return NextResponse.next();
 
-  const gravaEscolha = ehLeitura(request) && !ehPreCarga(request);
+  const navegacao = ehLeitura(request) && !ehPreCarga(request);
+  const gravaEscolha = navegacao && ehCarregamentoDePagina(request);
 
   const localeInPath = localeFromPath(pathname);
 
@@ -81,7 +103,7 @@ export function middleware(request: NextRequest) {
     const locale = localeManual ?? localeFromCountry(request.headers.get("x-vercel-ip-country"));
     // Pré-carga não redireciona nem marca geolocalização pendente: o clique
     // de verdade é que decide, e chega sem o cabeçalho de pré-carga.
-    if (gravaEscolha && locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname)) {
+    if (navegacao && locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname)) {
       const url = request.nextUrl.clone();
       url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
       const response = NextResponse.redirect(url);
