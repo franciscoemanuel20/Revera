@@ -197,6 +197,24 @@ export const PAISES: Record<CodigoPais, RegraDePais> = {
     postalRegex: /^\d{5}$/,
     postalExemplo: "28013",
   },
+  FR: {
+    iso: "FR",
+    nomePt: "França",
+    nomeEn: "France",
+    nomeEs: "Francia",
+    moedaPadrao: "EUR",
+    // O conteúdo público já existe em francês, mas o checkout transacional
+    // ainda possui dicionários pt/en/es. Inglês é o fallback explícito até
+    // o contrato completo do checkout ganhar francês.
+    idioma: "en",
+    locale: "fr-FR",
+    ddi: "33",
+    exigeRegiao: false,
+    rotuloRegiao: "Région",
+    rotuloPostal: "Code postal",
+    postalRegex: /^\d{5}$/,
+    postalExemplo: "75001",
+  },
   MX: { iso: "MX", nomePt: "México", nomeEn: "Mexico", nomeEs: "México", moedaPadrao: "USD", idioma: "es", locale: "es-MX", ddi: "52", exigeRegiao: true, rotuloRegiao: "Estado", rotuloPostal: "Código Postal", postalRegex: /^\d{5}$/, postalExemplo: "06000" },
   CL: { iso: "CL", nomePt: "Chile", nomeEn: "Chile", nomeEs: "Chile", moedaPadrao: "USD", idioma: "es", locale: "es-CL", ddi: "56", exigeRegiao: false, rotuloRegiao: "Región", rotuloPostal: "Código Postal", postalRegex: /^\d{7}$/, postalExemplo: "8320000" },
   AR: { iso: "AR", nomePt: "Argentina", nomeEn: "Argentina", nomeEs: "Argentina", moedaPadrao: "USD", idioma: "es", locale: "es-AR", ddi: "54", exigeRegiao: false, rotuloRegiao: "Provincia", rotuloPostal: "Código Postal", postalRegex: /^(?:[A-Z]\d{4}[A-Z]{0,3}|\d{4})$/i, postalExemplo: "C1000" },
