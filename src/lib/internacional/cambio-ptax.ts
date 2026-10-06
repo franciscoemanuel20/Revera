@@ -47,7 +47,11 @@ export async function obterCotacaoPtax(moeda: Moeda): Promise<CotacaoPtax> {
     "$orderby": "dataHoraCotacao desc",
   });
 
-  const resposta = await fetch(`${base}?${params}`, {
+  // URLSearchParams representa espaço como `+`. O endpoint OData do Banco
+  // Central não decodifica esse `+` dentro de $orderby e responde 400 para
+  // `dataHoraCotacao+desc`; ele exige `%20`.
+  const query = params.toString().replace(/\+/g, "%20");
+  const resposta = await fetch(`${base}?${query}`, {
     cache: "no-store",
     signal: AbortSignal.timeout(PTAX_TIMEOUT_MS),
   });
