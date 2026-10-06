@@ -108,7 +108,7 @@ export interface PaymentResult {
  * "ignorar" registra o evento (auditoria + idempotência) e para — para os
  * muitos eventos que um gateway manda e não mudam pedido nenhum.
  */
-export type TipoDeAviso = "pagamento" | "reembolso" | "ignorar" | "checkout_expirado";
+export type TipoDeAviso = "pagamento" | "reembolso" | "ignorar" | "checkout_expirado" | "checkout_falhou";
 
 /** Superfície mínima dos cabeçalhos HTTP que um adapter pode precisar ler. */
 export interface CabecalhosWebhook {
@@ -226,4 +226,7 @@ export interface PaymentProvider {
    * reserva pendente depois de uma consulta ativa ao gateway confirmar isso.
    */
   confirmCheckoutExpired?(hint: WebhookHint): Promise<boolean>;
+
+  /** Confirma ativamente que uma sessão de pagamento assíncrono falhou. */
+  confirmCheckoutFailed?(hint: WebhookHint): Promise<boolean>;
 }

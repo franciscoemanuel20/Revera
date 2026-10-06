@@ -84,6 +84,22 @@ function eventoReembolso(eventId = "evt_refund_1") {
   });
 }
 
+function eventoExpirado(eventId = "evt_expirado_1") {
+  return JSON.stringify({
+    id: eventId,
+    type: "checkout.session.expired",
+    data: { object: { id: "cs_test_e2e", client_reference_id: ORDER, payment_status: "unpaid" } },
+  });
+}
+
+function eventoPagamentoAssincronoFalhou(eventId = "evt_async_falhou") {
+  return JSON.stringify({
+    id: eventId,
+    type: "checkout.session.async_payment_failed",
+    data: { object: { id: "cs_test_e2e", client_reference_id: ORDER, payment_status: "unpaid" } },
+  });
+}
+
 /** O que a "Stripe" responde quando confirmPayment pergunta pela sessão. */
 function stripeResponde(sessao: Record<string, unknown>) {
   vi.stubGlobal(
@@ -321,17 +337,132 @@ describe("fora de ordem e reembolso", () => {
     expect(fake.tabela("payments").filter((p) => p.status === "refunded")).toHaveLength(1);
   });
 
-  it("evento 'ignorar' (expired etc.) registra e não toca o pedido", async () => {
-    const post = await rota();
-    const corpo = JSON.stringify({
-      id: "evt_exp",
-      type: "checkout.session.expired",
-      data: { object: { id: "cs_x", client_reference_id: ORDER, payment_status: "unpaid" } },
+  it("expiração confirmada pela Stripe encerra o payment pendente sem alterar o pedido", async () => {
+    fake.tabela("payments").push({
+      id: "pay_pendente", order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "pending",
     });
-    const r = await (await post(corpo)).json();
-    expect(r).toMatchObject({ ok: true, ignorado: true });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "expired", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const post = await rota();
+    const resposta = await post(eventoExpirado());
+    const r = await resposta.json();
+    expect(resposta.status).toBe(200);
+    expect(r).toMatchObject({ ok: true, checkout_expirado: true });
     expect(pedidoAtual().payment_status).toBe("pending");
+    expect(fake.tabela("payments")[0]?.status).toBe("failed");
     expect(fake.tabela("payment_events")).toHaveLength(1);
+    expect(fake.tabela("payment_events")[0]?.processed_at).toBeTruthy();
+  });
+
+  it("evento async_payment_failed consulta a Stripe e registra tentativa não paga", async () => {
+    fake.tabela("payments").push({
+      id: "pay_pendente", order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "pending",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "complete", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const post = await rota();
+    const resposta = await post(eventoPagamentoAssincronoFalhou());
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({ ok: true, checkout_falhou: true });
+    expect(pedidoAtual().payment_status).toBe("pending");
+    expect(fake.tabela("payments")).toEqual([expect.objectContaining({
+      order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "failed",
+    })]);
+    expect(fake.tabela("payment_events")[0]?.processed_at).toBeTruthy();
+  });
+
+  it("async_payment_failed encerra só sua tentativa mesmo se outro checkout já pagou o pedido", async () => {
+    pedidoAtual().status = "paid";
+    pedidoAtual().payment_status = "paid";
+    fake.tabela("payments").push({
+      id: "pay_falhou", order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "pending",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "complete", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const post = await rota();
+    const resposta = await post(eventoPagamentoAssincronoFalhou());
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({ ok: true, checkout_falhou: true });
+    expect(fake.tabela("payments")).toEqual([expect.objectContaining({
+      provider_payment_id: "cs_test_e2e", status: "failed",
+    })]);
+    expect(pedidoAtual().payment_status).toBe("paid");
+  });
+
+  it("falha ao salvar async_payment_failed continua recuperável após falha ao apagar evento", async () => {
+    fake.tabela("payments").push({
+      id: "pay_pendente", order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "pending",
+    });
+    fake.falharProxima("payments", "update");
+    fake.falharProxima("payment_events", "delete");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "complete", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const post = await rota();
+    const primeira = await post(eventoPagamentoAssincronoFalhou());
+    expect(primeira.status).toBe(503);
+    expect(fake.tabela("payments")[0]?.status).toBe("pending");
+    expect(fake.tabela("payment_events")[0]?.processed_at).toBeFalsy();
+
+    const retry = await post(eventoPagamentoAssincronoFalhou());
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ ok: true, checkout_falhou: true });
+    expect(fake.tabela("payments")[0]?.status).toBe("failed");
+    expect(fake.tabela("payment_events")[0]?.processed_at).toBeTruthy();
+  });
+
+  it("duas entregas concorrentes de async_payment_failed encerram uma única tentativa", async () => {
+    fake.tabela("payments").push({
+      id: "pay_pendente", order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "pending",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "complete", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const post = await rota();
+    const respostas = await Promise.all([
+      post(eventoPagamentoAssincronoFalhou()),
+      post(eventoPagamentoAssincronoFalhou()),
+    ]);
+    expect(respostas.every((r) => r.status === 200)).toBe(true);
+    expect(fake.tabela("payments")).toHaveLength(1);
+    expect(fake.tabela("payments")[0]?.status).toBe("failed");
+    expect(fake.tabela("payment_events")).toHaveLength(1);
+    expect(fake.tabela("payment_events")[0]?.processed_at).toBeTruthy();
+  });
+
+  it("expiração não confirmada não encerra o payment nem consome o evento", async () => {
+    fake.tabela("payments").push({
+      id: "pay_pendente", order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "pending",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "open", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const post = await rota();
+    const resposta = await post(eventoExpirado());
+    expect(resposta.status).toBe(503);
+    expect(fake.tabela("payments")[0]?.status).toBe("pending");
+    expect(fake.tabela("payment_events")).toHaveLength(0);
+  });
+
+  it("retoma uma duplicata cujo evento anterior ficou sem processed_at", async () => {
+    fake.tabela("payments").push({
+      id: "pay_pendente", order_id: ORDER, provider: "stripe", provider_payment_id: "cs_test_e2e", status: "pending",
+    });
+    fake.tabela("payment_events").push({
+      id: "evt_incompleto", provider: "stripe", provider_event_id: "evt_expirado_1", processed_at: null,
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_e2e", status: "expired", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const post = await rota();
+    const resposta = await post(eventoExpirado());
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({ ok: true, checkout_expirado: true });
+    expect(fake.tabela("payments")[0]?.status).toBe("failed");
+    expect(fake.tabela("payment_events")[0]?.processed_at).toBeTruthy();
   });
 });
 

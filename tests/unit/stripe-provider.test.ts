@@ -129,6 +129,38 @@ describe("parseWebhookHint — semântica dos eventos", () => {
     expect(hint?.kind).toBe("ignorar");
   });
 
+  it("async_payment_failed vira pagamento para reconfirmação ativa", async () => {
+    const p = await provider();
+    const corpo = JSON.stringify({
+      id: "evt_async_failed",
+      type: "checkout.session.async_payment_failed",
+      data: { object: { id: "cs_test_abc", client_reference_id: ORDER, payment_status: "unpaid" } },
+    });
+    const hint = p.parseWebhookHint(corpo, headersCom(assinar(corpo, Math.floor(Date.now() / 1000))));
+    expect(hint).toMatchObject({ orderId: ORDER, transactionId: "cs_test_abc", kind: "checkout_falhou" });
+  });
+
+  it("async_payment_failed sem id de sessão é recusado", async () => {
+    const p = await provider();
+    const corpo = JSON.stringify({
+      id: "evt_async_failed_sem_sessao",
+      type: "checkout.session.async_payment_failed",
+      data: { object: { client_reference_id: ORDER, payment_status: "unpaid" } },
+    });
+    expect(p.parseWebhookHint(corpo, headersCom(assinar(corpo, Math.floor(Date.now() / 1000))))).toBeNull();
+  });
+
+  it("checkout.session.expired pede confirmação ativa antes de liberar a reserva", async () => {
+    const p = await provider();
+    const corpo = JSON.stringify({
+      id: "evt_expired",
+      type: "checkout.session.expired",
+      data: { object: { id: "cs_test_abc", client_reference_id: ORDER } },
+    });
+    const hint = p.parseWebhookHint(corpo, headersCom(assinar(corpo, Math.floor(Date.now() / 1000))));
+    expect(hint).toMatchObject({ orderId: ORDER, transactionId: "cs_test_abc", kind: "checkout_expirado" });
+  });
+
   it("charge.refunded vira kind=reembolso pela metadata do PaymentIntent", async () => {
     const p = await provider();
     const corpo = JSON.stringify({
@@ -158,6 +190,76 @@ describe("parseWebhookHint — semântica dos eventos", () => {
     const p = await provider();
     const corpo = eventoSessaoPaga();
     expect(p.parseWebhookHint(corpo, headersCom(assinar(corpo, Math.floor(Date.now() / 1000))))).toBeNull();
+  });
+});
+
+describe("confirmCheckoutExpired — estado consultado na Stripe", () => {
+  it("aceita apenas sessão expirada, não paga e vinculada ao mesmo pedido", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request) => new Response(JSON.stringify({
+      id: "cs_test_abc", status: "expired", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await provider();
+    const hint = { orderId: ORDER, transactionId: "cs_test_abc", invoiceSlug: null, eventId: "evt_x", kind: "checkout_expirado" as const };
+
+    await expect(p.confirmCheckoutExpired(hint)).resolves.toBe(true);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/v1/checkout/sessions/cs_test_abc");
+  });
+
+  it.each([
+    [{ id: "cs_test_abc", status: "expired", payment_status: "paid", client_reference_id: ORDER }],
+    [{ id: "cs_test_abc", status: "expired", payment_status: "unpaid", client_reference_id: "outro-pedido" }],
+  ])("recusa sessão paga ou de outro pedido", async (sessao) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(sessao), { status: 200 })));
+    const p = await provider();
+    await expect(p.confirmCheckoutExpired({
+      orderId: ORDER, transactionId: "cs_test_abc", invoiceSlug: null, eventId: "evt_x", kind: "checkout_expirado",
+    })).resolves.toBe(false);
+  });
+
+  it("pede retry quando a sessão ainda está aberta", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_abc", status: "open", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const p = await provider();
+    await expect(p.confirmCheckoutExpired({
+      orderId: ORDER, transactionId: "cs_test_abc", invoiceSlug: null, eventId: "evt_x", kind: "checkout_expirado",
+    })).rejects.toThrow(/ainda está aberta/);
+  });
+});
+
+describe("confirmCheckoutFailed — sessão assíncrona consultada na Stripe", () => {
+  it("aceita sessão concluída, não paga e vinculada ao pedido", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_abc", status: "complete", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const p = await provider();
+    await expect(p.confirmCheckoutFailed({
+      orderId: ORDER, transactionId: "cs_test_abc", invoiceSlug: null, eventId: "evt_x", kind: "checkout_falhou",
+    })).resolves.toBe(true);
+  });
+
+  it("não encerra sessão paga ou de outro pedido", async () => {
+    const p = await provider();
+    for (const sessao of [
+      { id: "cs_test_abc", status: "complete", payment_status: "paid", client_reference_id: ORDER },
+      { id: "cs_test_abc", status: "complete", payment_status: "unpaid", client_reference_id: "outro-pedido" },
+    ]) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(sessao), { status: 200 })));
+      await expect(p.confirmCheckoutFailed({
+        orderId: ORDER, transactionId: "cs_test_abc", invoiceSlug: null, eventId: "evt_x", kind: "checkout_falhou",
+      })).resolves.toBe(false);
+    }
+  });
+
+  it("pede retry quando a sessão continua aberta", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "cs_test_abc", status: "open", payment_status: "unpaid", client_reference_id: ORDER,
+    }), { status: 200 })));
+    const p = await provider();
+    await expect(p.confirmCheckoutFailed({
+      orderId: ORDER, transactionId: "cs_test_abc", invoiceSlug: null, eventId: "evt_x", kind: "checkout_falhou",
+    })).rejects.toThrow(/ainda está aberta/);
   });
 });
 

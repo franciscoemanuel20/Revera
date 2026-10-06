@@ -30,6 +30,7 @@ interface Unico {
 export class FakeSupabase {
   private dados: Record<string, Linha[]> = {};
   private unicos: Unico[] = [];
+  private falhas: Array<{ tabela: string; operacao: Operacao; error: { code: string; message: string } }> = [];
 
   constructor(dados: Record<string, Linha[]> = {}, unicos: Unico[] = []) {
     this.dados = JSON.parse(JSON.stringify(dados));
@@ -40,17 +41,26 @@ export class FakeSupabase {
     return this.dados[nome] ?? [];
   }
 
+  falharProxima(tabela: string, operacao: Operacao, error = { code: "timeout", message: "falha simulada" }) {
+    this.falhas.push({ tabela, operacao, error });
+  }
+
   from(nome: string) {
     if (!this.dados[nome]) this.dados[nome] = [];
-    return new Consulta(this.dados[nome], nome, this.unicos);
+    return new Consulta(this.dados[nome], nome, this.unicos, (tabela, operacao) => {
+      const indice = this.falhas.findIndex((falha) => falha.tabela === tabela && falha.operacao === operacao);
+      if (indice < 0) return null;
+      return this.falhas.splice(indice, 1)[0]?.error ?? null;
+    });
   }
 }
 
 type Filtro = { coluna: string; valor: unknown };
+type Operacao = "select" | "insert" | "update" | "delete";
 
 class Consulta {
   private filtros: Filtro[] = [];
-  private operacao: "select" | "insert" | "update" | "delete" = "select";
+  private operacao: Operacao = "select";
   private patch: Linha | null = null;
   private paraInserir: Linha[] = [];
   private limite: number | null = null;
@@ -58,7 +68,8 @@ class Consulta {
   constructor(
     private linhas: Linha[],
     private nome: string,
-    private unicos: Unico[]
+    private unicos: Unico[],
+    private consumirFalha: (tabela: string, operacao: Operacao) => { code: string; message: string } | null
   ) {}
 
   select(_colunas?: string) {
@@ -119,6 +130,9 @@ class Consulta {
   }
 
   private executar(): { data: Linha[] | null; error: { code: string; message: string } | null } {
+    const falha = this.consumirFalha(this.nome, this.operacao);
+    if (falha) return { data: null, error: falha };
+
     if (this.operacao === "insert") {
       for (const linha of this.paraInserir) {
         if (this.violaUnico(linha)) {

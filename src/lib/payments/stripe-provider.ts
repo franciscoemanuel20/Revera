@@ -451,6 +451,30 @@ export class StripeProvider implements PaymentProvider {
         };
       }
 
+      case "checkout.session.async_payment_failed": {
+        if (!orderIdDaSessao || typeof objeto.id !== "string") return null;
+        return {
+          orderId: orderIdDaSessao,
+          transactionId: typeof objeto.id === "string" ? objeto.id : null,
+          invoiceSlug: null,
+          eventId: evento.id,
+          // A rota consulta esta sessão específica, mesmo se o pedido tiver
+          // sido pago por outra tentativa, e encerra só esta tentativa.
+          kind: "checkout_falhou",
+        };
+      }
+
+      case "checkout.session.expired": {
+        if (!orderIdDaSessao || typeof objeto.id !== "string") return null;
+        return {
+          orderId: orderIdDaSessao,
+          transactionId: objeto.id,
+          invoiceSlug: null,
+          eventId: evento.id,
+          kind: "checkout_expirado",
+        };
+      }
+
       case "charge.refunded": {
         const orderIdDoRefund = objeto.metadata?.order_id ?? null;
         if (!orderIdDoRefund) return null;
@@ -465,7 +489,7 @@ export class StripeProvider implements PaymentProvider {
 
       default: {
         // Evento assinado e legítimo que não muda pedido nenhum
-        // (payment_intent.created, charge.succeeded, session.expired...).
+        // (payment_intent.created, charge.succeeded etc.).
         // Registrado para auditoria, nada executado.
         return {
           orderId: orderIdDaSessao ?? "",
@@ -559,6 +583,58 @@ export class StripeProvider implements PaymentProvider {
       installments: null,
       raw: pago,
     };
+  }
+
+  /**
+   * Expiração só libera a reserva depois de reler a sessão autenticadamente.
+   * O webhook assinado é uma pista; a consulta confirma estado e vínculo ao pedido.
+   */
+  async confirmCheckoutExpired(hint: WebhookHint): Promise<boolean> {
+    if (!hint.transactionId) return false;
+    const res = await this.chamar(
+      `/v1/checkout/sessions/${encodeURIComponent(hint.transactionId)}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[stripe] consulta de sessão expirada falhou", res.status, detalhe);
+      throw new Error("Não foi possível verificar a expiração do checkout na Stripe.");
+    }
+    const sessao = (await res.json()) as SessaoStripe;
+    const orderId = sessao.client_reference_id || sessao.metadata?.order_id;
+    if (sessao.id !== hint.transactionId || orderId !== hint.orderId || sessao.payment_status === "paid") {
+      return false;
+    }
+    if (sessao.status === "open") {
+      // A Stripe ainda pode estar propagando a expiração. Falhar com erro
+      // mantém o evento reprocessável; não encerra uma sessão aberta.
+      throw new Error("A sessão Stripe ainda está aberta após o aviso de expiração.");
+    }
+    return sessao.status === "expired" && sessao.payment_status !== "paid";
+  }
+
+  /** Confirma uma falha assíncrona na sessão Stripe vinculada ao pedido. */
+  async confirmCheckoutFailed(hint: WebhookHint): Promise<boolean> {
+    if (!hint.transactionId) return false;
+    const res = await this.chamar(
+      `/v1/checkout/sessions/${encodeURIComponent(hint.transactionId)}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[stripe] consulta de sessão com falha assíncrona falhou", res.status, detalhe.slice(0, 300));
+      throw new Error("Não foi possível verificar a falha do checkout na Stripe.");
+    }
+    const sessao = (await res.json()) as SessaoStripe;
+    const orderId = sessao.client_reference_id || sessao.metadata?.order_id;
+    if (sessao.id !== hint.transactionId || orderId !== hint.orderId || sessao.payment_status === "paid") {
+      return false;
+    }
+    if (sessao.status === "open") {
+      throw new Error("A sessão Stripe ainda está aberta após o aviso de falha.");
+    }
+    return (sessao.status === "complete" || sessao.status === "expired") &&
+      sessao.payment_status === "unpaid";
   }
 }
 
