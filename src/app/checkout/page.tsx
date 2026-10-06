@@ -41,16 +41,11 @@ export const metadata: Metadata = {
 export default async function CheckoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pais?: string }>;
+  searchParams: Promise<{ pais?: string; rotaLocalizada?: string }>;
 }) {
   const sp = await searchParams;
-  if (sp.pais?.toUpperCase() === "US") redirect("/en/checkout");
+  if (sp.pais?.toUpperCase() === "US" && sp.rotaLocalizada !== "1") redirect("/en/checkout");
   return renderCheckout(sp);
-}
-
-/** Entrada interna das rotas localizadas, sem depender de query string. */
-export async function checkoutDoPais(pais: string) {
-  return renderCheckout({ pais });
 }
 
 async function renderCheckout(sp: { pais?: string }) {

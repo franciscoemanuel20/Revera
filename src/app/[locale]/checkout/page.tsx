@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { cookies, headers } from "next/headers";
-import { checkoutDoPais } from "@/app/checkout/page";
+import { checkoutDoPais } from "@/app/checkout/checkout-do-pais";
 import { GEO_COUNTRY_COOKIE, GEO_COUNTRY_HEADER, normalizeSiteLocale } from "@/lib/i18n/site";
 
 /**
