@@ -25,6 +25,12 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
     description: translated.descricao,
     alternates: { canonical: url, languages: { "pt-BR": `/produtos/${slug}`, "en-US": `/en/produtos/${slug}`, "es-ES": `/es/produtos/${slug}`, "fr-FR": `/fr/produtos/${slug}`, "de-DE": `/de/produtos/${slug}` } },
     openGraph: { title: `${translated.nome} — Reverá`, description: translated.descricao, url },
+    twitter: {
+      card: "summary_large_image",
+      title: `${translated.nome} — Reverá`,
+      description: translated.descricao,
+      images: ["/media/hero/produto-close-1.jpeg"],
+    },
   };
 }
 

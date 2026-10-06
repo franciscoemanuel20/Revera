@@ -62,6 +62,12 @@ export function localizedMetadata(locale: Exclude<SiteLocale, "pt">, path: strin
     description: copy.description,
     alternates: { canonical, languages },
     openGraph: { title: `${copy.title} — Reverá`, description: copy.description, url: canonical, locale: OG_LOCALE_BY_SITE_LOCALE[locale] },
+    twitter: {
+      card: "summary_large_image",
+      title: `${copy.title} — Reverá`,
+      description: copy.description,
+      images: ["/media/hero/produto-close-1.jpeg"],
+    },
     other: { "content-language": LANG_BY_SITE_LOCALE[locale] },
   };
 }
