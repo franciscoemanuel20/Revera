@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 // Página para barbeiros e profissionais — pedida pela auditoria de
 // 26/08/2026. A FAQ interna ainda marca "Vendemos para profissionais?"
 // como TODO (seeds/faq.json, sort_order 15, is_visible=false) — o
@@ -18,14 +17,14 @@ import {
   whatsappLegivel,
 } from "@/lib/config/whatsapp";
 import { ProfessionalLeadForm } from "./ProfessionalLeadForm";
-import { LOCALE_HEADER, normalizeSiteLocale } from "@/lib/i18n/site";
+import type { SiteLocale } from "@/lib/i18n/site";
 
 const FORMULARIO_UI = {
-  pt: { enviando: "Enviando…", erroNome: "Informe seu nome.", erroTelefone: "Informe um telefone válido, com DDD.", erroEmail: "E-mail inválido." },
-  en: { enviando: "Sending…", erroNome: "Enter your name.", erroTelefone: "Enter a valid phone number with country/area code.", erroEmail: "Enter a valid email address." },
-  es: { enviando: "Enviando…", erroNome: "Ingresa tu nombre.", erroTelefone: "Ingresa un teléfono válido con código de país y área.", erroEmail: "Ingresa un correo electrónico válido." },
-  fr: { enviando: "Envoi…", erroNome: "Saisissez votre nom.", erroTelefone: "Saisissez un numéro valide avec indicatif du pays et de la région.", erroEmail: "Saisissez une adresse e-mail valide." },
-  de: { enviando: "Wird gesendet…", erroNome: "Geben Sie Ihren Namen ein.", erroTelefone: "Geben Sie eine gültige Telefonnummer mit Landes- und Ortsvorwahl ein.", erroEmail: "Geben Sie eine gültige E-Mail-Adresse ein." },
+  pt: { enviando: "Enviando…", erroNome: "Informe seu nome.", erroTelefone: "Informe um telefone válido, com DDD.", erroEmail: "E-mail inválido.", whatsapp: "Olá vim do Site e quero comprar prótese capilar" },
+  en: { enviando: "Sending…", erroNome: "Enter your name.", erroTelefone: "Enter a valid phone number with country/area code.", erroEmail: "Enter a valid email address.", whatsapp: "Hello, I came from the website and would like to buy a hair system" },
+  es: { enviando: "Enviando…", erroNome: "Ingresa tu nombre.", erroTelefone: "Ingresa un teléfono válido con código de país y área.", erroEmail: "Ingresa un correo electrónico válido.", whatsapp: "Hola, vengo del sitio web y quiero comprar una prótesis capilar" },
+  fr: { enviando: "Envoi…", erroNome: "Saisissez votre nom.", erroTelefone: "Saisissez un numéro valide avec indicatif du pays et de la région.", erroEmail: "Saisissez une adresse e-mail valide.", whatsapp: "Bonjour, je viens du site et je souhaite acheter une prothèse capillaire" },
+  de: { enviando: "Wird gesendet…", erroNome: "Geben Sie Ihren Namen ein.", erroTelefone: "Geben Sie eine gültige Telefonnummer mit Landes- und Ortsvorwahl ein.", erroEmail: "Geben Sie eine gültige E-Mail-Adresse ein.", whatsapp: "Hallo, ich komme von der Website und möchte ein Haarsystem kaufen" },
 } as const;
 
 /**
@@ -34,8 +33,6 @@ const FORMULARIO_UI = {
  * O número vem de src/lib/config/whatsapp.ts — é o mesmo da loja inteira
  * desde 03/09/2026.
  */
-const WHATSAPP_MENSAGEM = "Olá vim do Site e quero comprar prótese capilar";
-
 /**
  * A página continua sendo gerada estaticamente — ler o banco a cada visita
  * seria pagar uma consulta por visitante para um texto que muda uma vez por
@@ -58,8 +55,10 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function ParaProfissionaisPage() {
-  const locale = normalizeSiteLocale((await headers()).get(LOCALE_HEADER)) ?? "pt";
+export default async function ParaProfissionaisPage(
+  _props: { params: Promise<Record<string, never>>; searchParams: Promise<Record<string, never>> },
+  locale: SiteLocale = "pt"
+) {
   const t = await textosDaPagina("profissionais", locale);
   const ui = FORMULARIO_UI[locale];
 
@@ -94,7 +93,7 @@ export default async function ParaProfissionaisPage() {
             {t("profissionais.cadastro.titulo")}
           </h2>
           <ProfessionalLeadForm
-            whatsappHref={linkWhatsApp(WHATSAPP_MENSAGEM)}
+            whatsappHref={linkWhatsApp(ui.whatsapp)}
             whatsappLegivel={whatsappLegivel()}
             whatsappDigitos={WHATSAPP_REVERA}
             textos={{

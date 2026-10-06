@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import ParaProfissionaisPage from "../../para-profissionais/page";
-import { SITE_COPY, localizePath, normalizeSiteLocale } from "@/lib/i18n/site";
+import { DEFAULT_SITE_LOCALE, SITE_COPY, SITE_LOCALES, localizePath, normalizeSiteLocale } from "@/lib/i18n/site";
 
 export const revalidate = 3600;
+export function generateStaticParams() {
+  return SITE_LOCALES.filter((locale) => locale !== DEFAULT_SITE_LOCALE).map((locale) => ({ locale }));
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const locale = normalizeSiteLocale((await params).locale) ?? "pt";
@@ -17,5 +20,5 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 export default async function ProfissionaisLocalizado({ params }: { params: Promise<{ locale: string }> }) {
   const locale = normalizeSiteLocale((await params).locale);
   if (!locale || locale === "pt") notFound();
-  return <ParaProfissionaisPage />;
+  return ParaProfissionaisPage({ params: Promise.resolve({}), searchParams: Promise.resolve({}) }, locale);
 }

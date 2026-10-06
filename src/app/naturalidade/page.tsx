@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 // Página que responde à objeção nº 1 de quem nunca comprou: "vai parecer
 // artificial?" — pedida pela auditoria de 26/08/2026.
 //
@@ -18,7 +17,7 @@ import { Reveal } from "@/components/ui/Reveal";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { textosDaPagina } from "@/lib/conteudo/textos";
 import { urlDaFotoDoSite } from "@/lib/conteudo/fotos-do-site";
-import { LOCALE_HEADER, normalizeSiteLocale } from "@/lib/i18n/site";
+import type { SiteLocale } from "@/lib/i18n/site";
 
 /**
  * O texto destes fatores mudou de lugar em 30/08/2026: agora mora em
@@ -57,8 +56,10 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function NaturalidadePage() {
-  const locale = normalizeSiteLocale((await headers()).get(LOCALE_HEADER)) ?? "pt";
+export default async function NaturalidadePage(
+  _props: { params: Promise<Record<string, never>>; searchParams: Promise<Record<string, never>> },
+  locale: SiteLocale = "pt"
+) {
   const t = await textosDaPagina("naturalidade", locale);
   const video = await urlDaFotoDoSite("/media/hero/implantacao.mp4");
 
