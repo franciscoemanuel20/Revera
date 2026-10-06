@@ -3,7 +3,7 @@ import { PAISES, idiomaDoPais } from "@/lib/internacional/paises";
 import { validarEndereco } from "@/lib/internacional/endereco";
 import { StripeProvider, urlCheckoutStripeSegura } from "@/lib/payments/stripe-provider";
 // @ts-expect-error Script operacional ESM também é testado pelo Vitest.
-import { precoProtegido, destinoReveraValido } from "../../scripts/precificar-mercados.mjs";
+import { precoProtegido, destinoReveraValido, variantePrecificavel } from "../../scripts/precificar-mercados.mjs";
 
 const resposta = vi.hoisted(() => ({
   variantes: {
@@ -148,6 +148,15 @@ it("preserva base BRL líquida da tarifa de referência e nunca reduz preço",()
     expect(precoProtegido(base,rate,valor+100)).toBe(valor+100);
   }
   expect(()=>precoProtegido(65000,0)).toThrow();
+});
+
+it("precificação internacional ignora variante administrativa sem preço ou estoque", () => {
+  const base = { id: "v", is_active: true, product_status: "active", price_cents: 65000, stock_qty: 1 };
+  expect(variantePrecificavel(base)).toBe(true);
+  expect(variantePrecificavel({ ...base, price_cents: 0 })).toBe(false);
+  expect(variantePrecificavel({ ...base, stock_qty: 0 })).toBe(false);
+  expect(variantePrecificavel({ ...base, is_active: false })).toBe(false);
+  expect(variantePrecificavel({ ...base, product_status: "draft" })).toBe(false);
 });
 
 it("links Stripe recusam domínio parecido, protocolo perigoso e credenciais",()=>{

@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
-import { GarantiaContent, metadata } from "../../garantia/GarantiaContent";
+import type { Metadata } from "next";
+import { GarantiaContent } from "../../garantia/GarantiaContent";
 import { DEFAULT_SITE_LOCALE, SITE_LOCALES, normalizeSiteLocale, type SiteLocale } from "@/lib/i18n/site";
+import { localizedMetadata } from "@/lib/i18n/seo";
 
-export { metadata };
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  return localizedMetadata(await localeDosParams(params) as Exclude<SiteLocale, "pt">, "/garantia");
+}
 
 export const revalidate = 3600;
 

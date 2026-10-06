@@ -48,7 +48,7 @@ describe("i18n publico do site", () => {
     expect(localeFromCountry("BR")).toBe("pt");
     expect(localeFromCountry("DE")).toBe("de");
     expect(localeFromCountry("FR")).toBe("fr");
-    expect(localeFromCountry("MX")).toBe("es");
+    expect(localeFromCountry("MX")).toBe("pt");
     expect(localeFromCountry("US")).toBe("en");
     expect(localeFromCountry(null)).toBe("pt");
   });
@@ -109,7 +109,12 @@ describe("i18n publico do site", () => {
     expect(isFullyLocalizedPath("/naturalidade")).toBe(true);
     expect(isFullyLocalizedPath("/sobre-as-proteses")).toBe(true);
     expect(isFullyLocalizedPath("/para-profissionais")).toBe(true);
-    expect(isFullyLocalizedPath("/produtos/micropele-008")).toBe(false);
+    expect(isFullyLocalizedPath("/produtos/micropele-008")).toBe(true);
+    expect(isFullyLocalizedPath("/faq")).toBe(true);
+    expect(isFullyLocalizedPath("/cores")).toBe(true);
+    expect(isFullyLocalizedPath("/privacidade")).toBe(true);
+    expect(isFullyLocalizedPath("/termos")).toBe(true);
+    expect(isFullyLocalizedPath("/cookies")).toBe(true);
   });
 
   it("tem o conteudo editorial principal em frances e alemao", () => {
@@ -161,7 +166,8 @@ describe("i18n publico do site", () => {
     ["BR", null],
     ["DE", "https://www.reveraprotesecapilar.com/de"],
     ["FR", "https://www.reveraprotesecapilar.com/fr"],
-    ["AR", "https://www.reveraprotesecapilar.com/es"],
+    ["ES", "https://www.reveraprotesecapilar.com/es"],
+    ["AR", null],
     ["US", "https://www.reveraprotesecapilar.com/en"],
   ])("abre a home correta para o país %s", (country, location) => {
     const request = new NextRequest("https://www.reveraprotesecapilar.com/", {
@@ -223,11 +229,11 @@ describe("i18n publico do site", () => {
     expect(portugues.headers.get("location")).toBe("https://www.reveraprotesecapilar.com/produtos");
   });
 
-  it("middleware grava idioma manual antes de limpar rota nao localizada", () => {
+  it("middleware preserva guia de cores localizado", () => {
     const response = middleware(new NextRequest("https://www.reveraprotesecapilar.com/en/cores"));
 
-    expect(response.headers.get("location")).toBe("https://www.reveraprotesecapilar.com/cores");
-    expect(response.headers.get("set-cookie")).toContain(`${LOCALE_COOKIE}=en`);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("en");
   });
 
   it("mantem selos comerciais traduzidos no catalogo localizado", () => {
@@ -237,10 +243,10 @@ describe("i18n publico do site", () => {
     expect(CATALOGO_COPY.es.provas).not.toEqual(provasPt);
     expect(CATALOGO_COPY.fr.provas).not.toEqual(provasPt);
     expect(CATALOGO_COPY.de.provas).not.toEqual(provasPt);
-    expect(CATALOGO_COPY.en.provas).toContain("Shipping across Brazil");
-    expect(CATALOGO_COPY.es.provas).toContain("Envio a todo Brasil");
-    expect(CATALOGO_COPY.fr.provas).toContain("Livraison dans tout le Bresil");
-    expect(CATALOGO_COPY.de.provas).toContain("Versand in ganz Brasilien");
+    expect(CATALOGO_COPY.en.provas).toContain("Live DHL quote");
+    expect(CATALOGO_COPY.es.provas).toContain("Cotización DHL en vivo");
+    expect(CATALOGO_COPY.fr.provas).toContain("Tarif DHL en direct");
+    expect(CATALOGO_COPY.de.provas).toContain("DHL-Live-Tarif");
   });
 
   it("nao envia catalogo localizado para ajuda de cor ainda portuguesa", () => {

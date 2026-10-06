@@ -59,7 +59,10 @@ async function renderCheckout(sp: { pais?: string }) {
     (await cookies()).get(GEO_COUNTRY_COOKIE)?.value
   )?.toUpperCase();
   const paisPedido = (sp.pais ?? paisDetectado ?? "BR").toUpperCase();
-  const pais = paises.includes(paisPedido) && regraDoPais(paisPedido) ? paisPedido : "BR";
+  // Preserve um destino conhecido mesmo quando ele ainda não está aberto na
+  // configuração. Assim, prontidaoDoMercado() mostra a indisponibilidade
+  // internacional fail-closed; jamais troca silenciosamente por checkout BRL.
+  const pais = regraDoPais(paisPedido) ? paisPedido : "BR";
 
   // O idioma sai do PAÍS ESCOLHIDO, não do cabeçalho do navegador. Um
   // brasileiro com o Chrome em inglês comprando para o Brasil continua

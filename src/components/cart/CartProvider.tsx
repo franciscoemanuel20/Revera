@@ -73,7 +73,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (locale === "en" && drawerAberto) setDrawerAberto(false);
+    if (locale !== "pt" && drawerAberto) setDrawerAberto(false);
   }, [locale, drawerAberto]);
 
   function adicionarItem(variantId: string, quantity: number) {
@@ -129,7 +129,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         // piloto dos EUA ele é deliberadamente pulado para nunca mostrar
         // uma moeda/desconto diferente do checkout internacional.
         abrirDrawer: () => {
-          if (locale === "en") router.push("/en/checkout");
+          if (locale !== "pt") router.push(`/${locale}/checkout`);
           else setDrawerAberto(true);
         },
         fecharDrawer: () => setDrawerAberto(false),
@@ -141,7 +141,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       {children}
       <CartDrawer
         locale={locale}
-        open={locale !== "en" && drawerAberto}
+        open={locale === "pt" && drawerAberto}
         onClose={() => setDrawerAberto(false)}
         items={itensDoDrawer}
         subtotalCents={cart.subtotalCents}

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import SobreAsProtesesPage from "../../sobre-as-proteses/page";
 import { DEFAULT_SITE_LOCALE, SITE_COPY, SITE_LOCALES, localizePath, normalizeSiteLocale } from "@/lib/i18n/site";
+import { alternateLanguages } from "@/lib/i18n/seo";
 
 export const revalidate = 3600;
 export function generateStaticParams() {
@@ -14,7 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   const title = SITE_COPY[locale].nav[path];
   const description = SITE_COPY[locale].seoSuffix.description;
   const url = localizePath(path, locale);
-  return { title, description, alternates: { canonical: url }, openGraph: { title: `${title} — Revera`, description, url } };
+  return { title, description, alternates: { canonical: url, languages: alternateLanguages(path) }, openGraph: { title: `${title} — Revera`, description, url } };
 }
 
 export default async function SobreLocalizado({ params }: { params: Promise<{ locale: string }> }) {

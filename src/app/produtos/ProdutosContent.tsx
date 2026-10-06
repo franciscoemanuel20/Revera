@@ -8,6 +8,9 @@ import { apresentacaoDoProduto, prioridadeCatalogoProduto } from "@/lib/catalog/
 import { ProductCard } from "@/components/ui/ProductCard";
 import { CatalogoGuiado } from "./CatalogoGuiado";
 import { type SiteLocale } from "@/lib/i18n/site";
+import { converterCentavosBrl, obterCotacaoPtax } from "@/lib/internacional/cambio-ptax";
+import { formatarDinheiroParaComprador, type Moeda } from "@/lib/internacional/moeda";
+import { produtoTraduzido } from "@/lib/i18n/produtos";
 
 export const metadata: Metadata = {
   title: "Próteses",
@@ -101,7 +104,7 @@ export const CATALOGO_COPY: Record<SiteLocale, {
     badges: ROTULOS_VALOR,
     heroCta: "Escolher minha prótese",
     heroCtaSecundario: "Ver guia de cores",
-    precoInicial: "Modelos a partir de R$ 650",
+    precoInicial: "Modelos a partir de",
     provaTitulo: "Compra guiada, sem sair do site",
     provaTexto: "A cor é escolhida na página do modelo. Compare a cartela, escolha o tom mais próximo e finalize; a equipe confere antes do envio.",
     guiaTitulo: "Dúvida na cor? Compare a cartela e continue a compra.",
@@ -126,7 +129,7 @@ export const CATALOGO_COPY: Record<SiteLocale, {
       { titulo: "Check", texto: "Order checked before shipping: piece, quantity and selected color." },
     ],
     orientacoesAria: "Purchase guidance",
-    orientacao1: "Secure purchase, shipping across Brazil.",
+    orientacao1: "Secure purchase with tracked international DHL shipping.",
     orientacao2: "Choose the color on the site; the team checks before shipping.",
     etapasAria: "Purchase steps",
     etapas: ["Choose the piece", "Compare the color", "Review the cart", "Checked before shipping"],
@@ -141,13 +144,13 @@ export const CATALOGO_COPY: Record<SiteLocale, {
     },
     heroCta: "Choose my hair system",
     heroCtaSecundario: "I need color help",
-    precoInicial: "Models from R$650",
+    precoInicial: "Models from",
     provaTitulo: "Guided purchase",
     provaTexto: "Color is selected on the model page. Compare the chart, choose the closest shade and continue; the team checks before shipping.",
     guiaTitulo: "Not sure which hair system fits?",
     guiaTexto: "Compare texture, base and use case before choosing.",
     guiaBotao: "See color chart",
-    provas: ["Secure purchase", "Shipping by postal code", "Shipping across Brazil", "Color checked before shipping"],
+    provas: ["Secure international payment", "Live DHL quote", "Tracked international delivery", "Color checked before shipping"],
   },
   es: {
     eyebrow: "Nuestras piezas",
@@ -166,7 +169,7 @@ export const CATALOGO_COPY: Record<SiteLocale, {
       { titulo: "Revision", texto: "Pedido revisado antes del envio: pieza, cantidad y color seleccionado." },
     ],
     orientacoesAria: "Orientaciones de compra",
-    orientacao1: "Compra segura, envio a todo Brasil.",
+    orientacao1: "Compra segura con envío internacional rastreado por DHL.",
     orientacao2: "Elige el color en el sitio; el equipo revisa antes de despachar.",
     etapasAria: "Etapas de la compra",
     etapas: ["Elige la pieza", "Compara el color", "Revisa el carrito", "Revision antes del envio"],
@@ -181,13 +184,13 @@ export const CATALOGO_COPY: Record<SiteLocale, {
     },
     heroCta: "Elegir mi protesis",
     heroCtaSecundario: "Necesito ayuda con el color",
-    precoInicial: "Modelos desde R$650",
+    precoInicial: "Modelos desde",
     provaTitulo: "Compra guiada",
     provaTexto: "El color se elige en la pagina del modelo. Compara la carta, elige el tono mas cercano y sigue; el equipo revisa antes del envio.",
     guiaTitulo: "No sabes cual protesis elegir?",
     guiaTexto: "Compara textura, base e indicacion de uso antes de elegir.",
     guiaBotao: "Ver carta de colores",
-    provas: ["Compra segura", "Envio por codigo postal", "Envio a todo Brasil", "Color revisado antes del envio"],
+    provas: ["Pago internacional seguro", "Cotización DHL en vivo", "Entrega internacional con seguimiento", "Color revisado antes del envío"],
   },
   fr: {
     eyebrow: "Nos pieces",
@@ -206,7 +209,7 @@ export const CATALOGO_COPY: Record<SiteLocale, {
       { titulo: "Verification", texto: "Commande verifiee avant expedition: piece, quantite et couleur choisie." },
     ],
     orientacoesAria: "Conseils d'achat",
-    orientacao1: "Achat securise, livraison dans tout le Bresil.",
+    orientacao1: "Achat sécurisé avec livraison internationale DHL suivie.",
     orientacao2: "Choisissez la couleur sur le site; l'equipe verifie avant expedition.",
     etapasAria: "Etapes de l'achat",
     etapas: ["Choisir la piece", "Comparer la couleur", "Verifier le panier", "Verifie avant expedition"],
@@ -221,13 +224,13 @@ export const CATALOGO_COPY: Record<SiteLocale, {
     },
     heroCta: "Choisir ma prothese",
     heroCtaSecundario: "Besoin d'aide couleur",
-    precoInicial: "Modeles des R$650",
+    precoInicial: "Modèles à partir de",
     provaTitulo: "Achat guide",
     provaTexto: "La couleur est choisie sur la page du modele. Comparez le nuancier, choisissez la teinte la plus proche et continuez; l'equipe verifie avant expedition.",
     guiaTitulo: "Vous ne savez pas quelle prothese choisir?",
     guiaTexto: "Comparez texture, base et usage avant de choisir.",
     guiaBotao: "Voir les couleurs",
-    provas: ["Achat securise", "Livraison par code postal", "Livraison dans tout le Bresil", "Couleur verifiee avant expedition"],
+    provas: ["Paiement international sécurisé", "Tarif DHL en direct", "Livraison internationale suivie", "Couleur vérifiée avant expédition"],
   },
   de: {
     eyebrow: "Unsere Systeme",
@@ -246,7 +249,7 @@ export const CATALOGO_COPY: Record<SiteLocale, {
       { titulo: "Prufung", texto: "Bestellung vor dem Versand gepruft: System, Menge und gewahlte Farbe." },
     ],
     orientacoesAria: "Kaufhinweise",
-    orientacao1: "Sicherer Kauf, Versand in ganz Brasilien.",
+    orientacao1: "Sicherer Kauf mit internationalem DHL-Versand und Sendungsverfolgung.",
     orientacao2: "Farbe auf der Website wahlen; das Team pruft vor dem Versand.",
     etapasAria: "Kaufschritte",
     etapas: ["System wahlen", "Farbe vergleichen", "Warenkorb prufen", "Vor Versand gepruft"],
@@ -261,13 +264,13 @@ export const CATALOGO_COPY: Record<SiteLocale, {
     },
     heroCta: "Haarsystem wahlen",
     heroCtaSecundario: "Hilfe bei der Farbe",
-    precoInicial: "Modelle ab R$650",
+    precoInicial: "Modelle ab",
     provaTitulo: "Gefuhrter Kauf",
     provaTexto: "Die Farbe wird auf der Modellseite gewahlt. Farbkarte vergleichen, nachsten Ton wahlen und fortfahren; das Team pruft vor dem Versand.",
     guiaTitulo: "Nicht sicher, welches System passt?",
     guiaTexto: "Vergleichen Sie Textur, Basis und Anwendung vor der Auswahl.",
     guiaBotao: "Farben ansehen",
-    provas: ["Sicherer Kauf", "Versand nach Postleitzahl", "Versand in ganz Brasilien", "Farbe vor Versand gepruft"],
+    provas: ["Sichere internationale Zahlung", "DHL-Live-Tarif", "Internationaler Versand mit Tracking", "Farbe vor Versand geprüft"],
   },
 };
 
@@ -301,17 +304,34 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
   const copy = CATALOGO_COPY[locale];
   const supabase = await createClient();
   const fallbackProduto = await urlDaFotoDoSite("/media/hero/produto-close-1.jpeg");
+  const mercado = locale === "pt"
+    ? { moeda: "BRL" as Moeda, locale: "pt-BR" }
+    : locale === "en"
+      ? { moeda: "USD" as Moeda, locale: "en-US" }
+      : { moeda: "EUR" as Moeda, locale: locale === "de" ? "de-DE" : locale === "fr" ? "fr-FR" : "es-ES" };
 
   const { data: produtos } = await supabase
     .from("products")
     .select(
-      "slug, name, description, is_featured, sort_order, product_variants(is_active, price_cents, compare_at_price_cents, stock_qty), product_media(url, alt_text, type, is_primary, sort_order)"
+      "slug, name, description, is_featured, sort_order, product_variants(id, is_active, price_cents, compare_at_price_cents, stock_qty), product_media(url, alt_text, type, is_primary, sort_order)"
     )
     .order("sort_order");
+
+  const ids = (produtos ?? []).flatMap((p) => (p.product_variants ?? []).map((v) => v.id as string));
+  const [cotacao, precosMercado] = locale === "pt"
+    ? [null, []] as const
+    : await Promise.all([
+        obterCotacaoPtax(mercado.moeda).catch(() => null),
+        ids.length > 0
+          ? supabase.from("variant_prices").select("variant_id").in("variant_id", ids).eq("currency", mercado.moeda).eq("is_active", true).gt("price_cents", 0).then(({ data }) => data ?? [])
+          : Promise.resolve([]),
+      ]);
+  const autorizadas = new Set(precosMercado.map((p) => p.variant_id as string));
 
   const vendaveis = (produtos ?? [])
     .map((p) => {
       const variantes = (p.product_variants ?? []).map((v) => ({
+        id: v.id as string,
         isActive: Boolean(v.is_active),
         // price_cents é not null no schema; o ?? 0 existe só para o tipo —
         // e um 0 aqui reprova em produtoEstaVendavel, que é o desfecho certo.
@@ -332,8 +352,9 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
       // todas do mesmo preço hoje; pegar o menor mantém o card honesto se
       // algum dia uma cor custar diferente.
       const precos = variantes
-        .filter((v) => v.isActive && v.priceCents > 0)
-        .map((v) => v.priceCents);
+        .filter((v) => v.isActive && v.stockQty > 0 && v.priceCents > 0 && (locale === "pt" || autorizadas.has(v.id)))
+        .map((v) => locale === "pt" ? v.priceCents : cotacao ? converterCentavosBrl(v.priceCents, cotacao.reaisPorUnidade) : 0)
+        .filter((v) => v > 0);
 
       const foto = (p.product_media ?? [])
         .filter((m) => (m.type ?? "image") === "image")
@@ -345,16 +366,17 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
         })[0];
 
       const apresentacao = apresentacaoDoProduto(p.slug as string, p.name as string);
+      const traducao = produtoTraduzido(p.slug as string, locale, p.name as string, p.description as string | null);
 
       return {
         paraVitrine,
         slug: p.slug as string,
-        name: p.name as string,
-        titulo: apresentacao.titulo,
-        resumo: apresentacao.resumo,
+        name: traducao.nome,
+        titulo: locale === "pt" ? apresentacao.titulo : traducao.nome,
+        resumo: locale === "pt" ? apresentacao.resumo : traducao.resumo,
         textura: apresentacao.textura,
         prioridade: apresentacao.prioridade,
-        description: (p.description as string | null) ?? null,
+        description: traducao.descricao,
         isFeatured: Boolean(p.is_featured),
         priceCents: precos.length > 0 ? Math.min(...precos) : null,
         /**
@@ -367,7 +389,7 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
         imageAlt: (foto?.alt_text as string | undefined) ?? null,
       };
     })
-    .filter((p) => produtoEstaVendavel(p.paraVitrine));
+    .filter((p) => produtoEstaVendavel(p.paraVitrine) && (locale === "pt" || p.priceCents != null));
 
   // Ordem pedida pelo Francisco em 21/09/2026: todas as próteses primeiro,
   // produtos (manutenção etc.) só depois — nunca misturados na mesma lista.
@@ -380,6 +402,8 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
   const produtosManutencao = vendaveis
     .filter((p) => prioridadeCatalogoProduto(p.slug, p.name) === 1)
     .sort((a, b) => a.paraVitrine.sortOrder - b.paraVitrine.sortOrder);
+  const menorPreco = vendaveis.reduce<number | null>((menor, produto) =>
+    produto.priceCents == null ? menor : menor == null ? produto.priceCents : Math.min(menor, produto.priceCents), null);
 
   return (
     <main
@@ -430,7 +454,9 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
               />
             </div>
             <div className="mt-4 flex flex-col gap-2">
-              <p className="text-sm font-semibold text-ink">{copy.precoInicial}</p>
+              {menorPreco != null ? <p className="text-sm font-semibold text-ink">
+                {copy.precoInicial} {formatarDinheiroParaComprador(menorPreco, mercado.moeda, mercado.locale)}
+              </p> : null}
               <p className="text-sm leading-6 text-ink/70">{copy.provaTexto}</p>
             </div>
           </div>
@@ -446,7 +472,7 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
         </div>
       </header>
 
-      {proteses.length > 0 ? <CatalogoGuiado locale={locale} produtos={proteses} /> : (
+      {proteses.length > 0 ? <CatalogoGuiado locale={locale} produtos={proteses} currency={mercado.moeda} moneyLocale={mercado.locale} /> : (
         <p className="text-ink/70">
           {copy.vazio}
         </p>
@@ -471,6 +497,8 @@ export async function ProdutosContent({ locale = "pt" }: { locale?: SiteLocale }
                   isFeatured={produto.isFeatured}
                   badge={copy.badges[produto.slug] ?? null}
                   locale={locale}
+                  currency={mercado.moeda}
+                  moneyLocale={mercado.locale}
                 />
               </li>
             ))}

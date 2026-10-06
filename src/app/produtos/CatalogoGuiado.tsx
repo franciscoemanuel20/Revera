@@ -263,7 +263,7 @@ const CATALOGO_GUIADO_COPY: Record<SiteLocale, {
   },
 };
 
-export function CatalogoGuiado({ locale = "pt", produtos }: { locale?: SiteLocale; produtos: ProdutoGuiado[] }) {
+export function CatalogoGuiado({ locale = "pt", produtos, currency = "BRL", moneyLocale = "pt-BR" }: { locale?: SiteLocale; produtos: ProdutoGuiado[]; currency?: string; moneyLocale?: string }) {
   const copy = CATALOGO_GUIADO_COPY[locale];
   const [filtro, setFiltro] = useState<Filtro>("todas");
   const [guiaAberto, setGuiaAberto] = useState(false);
@@ -317,6 +317,8 @@ export function CatalogoGuiado({ locale = "pt", produtos }: { locale?: SiteLocal
                   badge={copy.valor[produto.slug] ?? null}
                   valueLabel={produto.prioridade === "fixacao" ? copy.valueLabelFixacao : copy.valueLabelNatural}
                   locale={locale}
+                  currency={currency}
+                  moneyLocale={moneyLocale}
                 />
               </li>
             ))}

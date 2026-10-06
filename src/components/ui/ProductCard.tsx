@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Price } from "./Price";
 import { isFullyLocalizedPath, localizePath, type SiteLocale } from "@/lib/i18n/site";
+import { formatarDinheiroParaComprador } from "@/lib/internacional/moeda";
 
 export interface ProductCardProps {
   slug: string;
@@ -16,6 +17,8 @@ export interface ProductCardProps {
   badge?: string | null;
   valueLabel?: string | null;
   locale?: SiteLocale;
+  currency?: string;
+  moneyLocale?: string;
 }
 
 const PRODUCT_CARD_COPY: Record<SiteLocale, { featured: string; details: string; soon: string }> = {
@@ -42,13 +45,15 @@ export function ProductCard({
   badge,
   valueLabel,
   locale = "pt",
+  currency = "BRL",
+  moneyLocale = "pt-BR",
 }: ProductCardProps) {
   const copy = PRODUCT_CARD_COPY[locale];
-  const href = `/produtos/${slug}`;
+  const href = localizePath(`/produtos/${slug}`, locale);
 
   return (
     <Link
-      href={isFullyLocalizedPath(href) ? localizePath(href, locale) : href}
+      href={isFullyLocalizedPath(href) || locale !== "pt" ? href : `/produtos/${slug}`}
       className="group flex h-full flex-col gap-4 rounded-2xl border border-sand/90 bg-paper p-3.5 shadow-[0_1px_0_rgb(255_255_255_/_0.8)] transition-all duration-300 hover:-translate-y-1 hover:border-gold/70 hover:shadow-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
     >
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-sand ring-1 ring-ink/5">
@@ -78,7 +83,13 @@ export function ProductCard({
       </div>
       {priceCents != null ? (
         <div className="mt-auto flex items-center justify-between gap-3 border-t border-sand/70 px-0.5 pt-3">
-          <Price cents={priceCents} compareAtCents={compareAtCents} />
+          {currency === "BRL" ? (
+            <Price cents={priceCents} compareAtCents={compareAtCents} />
+          ) : (
+            <span className="font-semibold text-ink">
+              {formatarDinheiroParaComprador(priceCents, currency, moneyLocale)}
+            </span>
+          )}
           <span className="rounded-full border border-gold/50 px-3 py-1 text-xs font-semibold text-ink transition-colors group-hover:bg-gold/15">
             {copy.details}
           </span>

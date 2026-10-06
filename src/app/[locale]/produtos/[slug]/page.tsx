@@ -3,19 +3,40 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { converterCentavosBrl, obterCotacaoPtax } from "@/lib/internacional/cambio-ptax";
 import { ProdutoInternacional, type VarianteInternacional } from "./ProdutoInternacional";
+import { normalizeSiteLocale, localizePath, type SiteLocale } from "@/lib/i18n/site";
+import { produtoTraduzido } from "@/lib/i18n/produtos";
+import type { Moeda } from "@/lib/internacional/moeda";
 
-export const metadata: Metadata = {
-  title: "Revera hair system",
-  description: "Natural-looking Revera hair systems with secure checkout and tracked delivery to the United States.",
+const MERCADO: Record<Exclude<SiteLocale, "pt">, { moeda: Extract<Moeda, "USD" | "EUR">; moneyLocale: string }> = {
+  en: { moeda: "USD", moneyLocale: "en-US" },
+  es: { moeda: "EUR", moneyLocale: "es-ES" },
+  fr: { moeda: "EUR", moneyLocale: "fr-FR" },
+  de: { moeda: "EUR", moneyLocale: "de-DE" },
 };
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string; slug: string }> }): Promise<Metadata> {
+  const { locale: rawLocale, slug } = await params;
+  const locale = normalizeSiteLocale(rawLocale);
+  if (!locale || locale === "pt") return {};
+  const translated = produtoTraduzido(slug, locale, "Revera hair system");
+  const url = localizePath(`/produtos/${slug}`, locale);
+  return {
+    title: translated.nome,
+    description: translated.descricao,
+    alternates: { canonical: url, languages: { "pt-BR": `/produtos/${slug}`, "en-US": `/en/produtos/${slug}`, "es-ES": `/es/produtos/${slug}`, "fr-FR": `/fr/produtos/${slug}`, "de-DE": `/de/produtos/${slug}` } },
+    openGraph: { title: `${translated.nome} — Reverá`, description: translated.descricao, url },
+  };
+}
 
 export default async function ProdutoLocalizado({
   params,
 }: {
   params: Promise<{ locale: string; slug: string }>;
 }) {
-  const { locale, slug } = await params;
-  if (locale !== "en") notFound();
+  const { locale: rawLocale, slug } = await params;
+  const locale = normalizeSiteLocale(rawLocale);
+  if (!locale || locale === "pt") notFound();
+  const mercado = MERCADO[locale];
 
   const supabase = await createClient();
   const { data: product } = await supabase
@@ -30,9 +51,9 @@ export default async function ProdutoLocalizado({
   );
   const ids = active.map((variant) => variant.id as string);
   const [{ data: prices }, { data: colors }, quote] = await Promise.all([
-    supabase.from("variant_prices").select("variant_id").in("variant_id", ids).eq("currency", "USD").eq("is_active", true).gt("price_cents", 0),
+    supabase.from("variant_prices").select("variant_id").in("variant_id", ids).eq("currency", mercado.moeda).eq("is_active", true).gt("price_cents", 0),
     supabase.from("colors").select("id, code, name, photo_url").in("id", active.map((variant) => variant.color_id).filter(Boolean)),
-    obterCotacaoPtax("USD").catch(() => null),
+    obterCotacaoPtax(mercado.moeda).catch(() => null),
   ]);
   if (!quote) notFound();
 
@@ -51,7 +72,7 @@ export default async function ProdutoLocalizado({
         colorPhotoUrl: (color?.photo_url as string | null) ?? null,
         stockQty: variant.stock_qty as number,
         priceBrlCents,
-        priceUsdCents: converterCentavosBrl(priceBrlCents, quote.reaisPorUnidade),
+        priceCents: converterCentavosBrl(priceBrlCents, quote.reaisPorUnidade),
       };
     });
   if (variants.length === 0) notFound();
@@ -60,12 +81,16 @@ export default async function ProdutoLocalizado({
     .filter((media) => (media.type ?? "image") === "image")
     .sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))[0];
 
+  const translated = produtoTraduzido(slug, locale, product.name as string, product.description as string | null);
   return (
     <ProdutoInternacional
-      name={(product.name as string).replace(/^Pr[oó]tese Capilar\s*/i, "")}
-      description="Natural appearance, lightweight feel and a clean hairline for everyday wear."
+      name={translated.nome}
+      description={translated.descricao}
       imageUrl={(image?.url as string | undefined) ?? null}
       variants={variants}
+      locale={locale}
+      currency={mercado.moeda}
+      moneyLocale={mercado.moneyLocale}
     />
   );
 }

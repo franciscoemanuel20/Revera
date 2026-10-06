@@ -22,6 +22,14 @@ export function precoProtegido(baseCents, rate, anterior = 0, fixoCents = 39) {
   return Math.max(anterior, Math.ceil((baseCents + fixoCents) / (1 - 0.0599) / rate / 100) * 100);
 }
 
+export function variantePrecificavel(variante) {
+  return Boolean(
+    variante && variante.is_active === true && variante.product_status === 'active' &&
+    Number.isSafeInteger(variante.price_cents) && variante.price_cents > 0 &&
+    Number.isSafeInteger(variante.stock_qty) && variante.stock_qty > 0
+  );
+}
+
 export async function executar() {
   const aplicar = process.argv.includes('--aplicar');
   const data = process.argv.find(a => a.startsWith('--data='))?.split('=')[1];
@@ -52,7 +60,8 @@ export async function executar() {
     await db.query('begin');
     // Evita precificar um catálogo que esteja mudando durante esta operação.
     if (aplicar) await db.query('lock table products, product_variants, variant_prices, intl_shipping_quotes in share row exclusive mode');
-    const { rows: variantes } = await db.query("select v.id,v.price_cents,p.name from product_variants v join products p on p.id=v.product_id where v.is_active and p.status='active' order by v.id");
+    const { rows: variantesBrutas } = await db.query("select v.id,v.price_cents,v.stock_qty,v.is_active,p.status as product_status,p.name from product_variants v join products p on p.id=v.product_id where v.is_active and p.status='active' and v.price_cents > 0 and v.stock_qty > 0 order by v.id");
+    const variantes = variantesBrutas.filter(variantePrecificavel);
     const { rows: antigos } = await db.query('select variant_id,currency,price_cents from variant_prices');
     if (!variantes.length) throw new Error('Catálogo vazio');
     const plano = [];

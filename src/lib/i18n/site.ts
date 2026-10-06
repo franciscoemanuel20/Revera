@@ -41,26 +41,16 @@ export function localeFromAcceptLanguage(acceptLanguage: string | null | undefin
   return candidates[0]?.locale ?? DEFAULT_SITE_LOCALE;
 }
 
-const PAISES_PT = new Set(["BR", "PT", "AO", "MZ", "CV", "GW", "ST", "TL"]);
-const PAISES_DE = new Set(["DE", "AT", "CH", "LI"]);
-const PAISES_FR = new Set([
-  "FR", "MC", "SN", "CI", "CM", "ML", "BF", "NE", "TG", "BJ", "CD",
-  "CG", "GA", "GN", "HT", "MG",
-]);
-const PAISES_ES = new Set([
-  "ES", "MX", "AR", "CL", "CO", "VE", "EC", "GT", "PA", "CR", "DO",
-  "UY", "PY", "BO", "PE", "HN", "SV", "NI", "CU", "PR",
-]);
-
 /** Idioma inicial da vitrine segundo o país detectado pela Vercel. */
 export function localeFromCountry(country: string | null | undefined): SiteLocale {
   const iso = country?.trim().toUpperCase();
-  if (!iso || iso === "XX") return DEFAULT_SITE_LOCALE;
-  if (PAISES_PT.has(iso)) return "pt";
-  if (PAISES_DE.has(iso)) return "de";
-  if (PAISES_FR.has(iso)) return "fr";
-  if (PAISES_ES.has(iso)) return "es";
-  return "en";
+  // A abertura internacional é deliberadamente limitada aos quatro países
+  // testados. Idioma compartilhado não autoriza inferir outro mercado.
+  if (iso === "US") return "en";
+  if (iso === "ES") return "es";
+  if (iso === "FR") return "fr";
+  if (iso === "DE") return "de";
+  return DEFAULT_SITE_LOCALE;
 }
 
 export function localeFromPath(pathname: string): SiteLocale | null {
@@ -90,6 +80,7 @@ export function localizePath(pathname: string, locale: SiteLocale): string {
 
 export function isFullyLocalizedPath(pathname: string): boolean {
   const cleanPath = stripLocaleFromPath(pathname);
+  if (/^\/produtos\/[^/]+$/.test(cleanPath)) return true;
   return [
     "/",
     "/produtos",
@@ -100,6 +91,12 @@ export function isFullyLocalizedPath(pathname: string): boolean {
     "/naturalidade",
     "/sobre-as-proteses",
     "/para-profissionais",
+    "/faq",
+    "/cores",
+    "/privacidade",
+    "/termos",
+    "/cookies",
+    "/checkout",
   ].includes(cleanPath);
 }
 
