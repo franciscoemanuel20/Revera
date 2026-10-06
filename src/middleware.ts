@@ -34,9 +34,36 @@ function shouldIgnore(pathname: string): boolean {
   );
 }
 
+/**
+ * PREFETCH NÃO É ESCOLHA DE IDIOMA (06/10/2026).
+ *
+ * O seletor PT/EN/ES/FR/DE do cabeçalho e as abas de país do checkout são
+ * `<Link>`, e o Next pré-carrega cada um deles em segundo plano. Cada
+ * pré-carga passava por aqui como se fosse uma visita a /en, /fr, /de... e
+ * gravava `revera_locale` + `revera_locale_manual=1` por um ano. O último
+ * pré-carregamento a terminar "vencia": um brasileiro que só abriu
+ * /checkout saía com o cookie em inglês (ou francês, ou alemão, por sorteio
+ * de rede), e a navegação seguinte sem prefixo era redirecionada para o
+ * checkout internacional. Pior: o POST do "Finalizar pedido" (server action
+ * em /checkout) também era redirecionado — 307 para /en/checkout.
+ *
+ * Regra: só uma navegação de verdade (GET/HEAD que não é pré-carga) grava a
+ * escolha, e requisição que não é GET/HEAD nunca é redirecionada.
+ */
+function ehPreCarga(request: NextRequest): boolean {
+  const purpose = `${request.headers.get("purpose") ?? ""} ${request.headers.get("sec-purpose") ?? ""}`;
+  return request.headers.has("next-router-prefetch") || /prefetch/i.test(purpose);
+}
+
+function ehLeitura(request: NextRequest): boolean {
+  return request.method === "GET" || request.method === "HEAD";
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (shouldIgnore(pathname)) return NextResponse.next();
+
+  const gravaEscolha = ehLeitura(request) && !ehPreCarga(request);
 
   const localeInPath = localeFromPath(pathname);
 
@@ -49,7 +76,7 @@ export function middleware(request: NextRequest) {
       ? normalizeSiteLocale(request.cookies.get(LOCALE_COOKIE)?.value)
       : null;
     const locale = localeManual ?? localeFromCountry(request.headers.get("x-vercel-ip-country"));
-    if (locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname)) {
+    if (ehLeitura(request) && locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname)) {
       const url = request.nextUrl.clone();
       url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
       const response = NextResponse.redirect(url);
@@ -83,26 +110,19 @@ export function middleware(request: NextRequest) {
     !isFullyLocalizedPath(strippedPath)
   ) {
     const response = NextResponse.redirect(url);
-    response.cookies.set(LOCALE_COOKIE, localeInPath, {
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-      sameSite: "lax",
-    });
-    if (veioDaGeolocalizacao) response.cookies.delete(LOCALE_GEO_PENDING_COOKIE);
-    else {
-      response.cookies.set(LOCALE_MANUAL_COOKIE, "1", {
-        maxAge: 60 * 60 * 24 * 365,
-        path: "/",
-        sameSite: "lax",
-      });
-    }
+    if (gravaEscolha) gravarIdioma(response, localeInPath, veioDaGeolocalizacao);
     return registrarPais(response, request);
   }
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(LOCALE_HEADER, localeInPath);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.cookies.set(LOCALE_COOKIE, localeInPath, {
+  if (gravaEscolha) gravarIdioma(response, localeInPath, veioDaGeolocalizacao);
+  return registrarPais(response, request);
+}
+
+function gravarIdioma(response: NextResponse, locale: string, veioDaGeolocalizacao: boolean) {
+  response.cookies.set(LOCALE_COOKIE, locale, {
     maxAge: 60 * 60 * 24 * 365,
     path: "/",
     sameSite: "lax",
@@ -115,7 +135,6 @@ export function middleware(request: NextRequest) {
       sameSite: "lax",
     });
   }
-  return registrarPais(response, request);
 }
 
 export const config = {
