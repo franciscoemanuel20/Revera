@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { CheckoutForm } from "./CheckoutForm";
 import { CheckoutInternacionalForm, type ResumoInternacional } from "./CheckoutInternacionalForm";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { lerCarrinhoCompleto } from "@/lib/cart/store";
 import { aceiteInternacional } from "@/lib/internacional/aceite";
-import { prontidaoDoMercado } from "@/lib/internacional/mercado";
+import { precosDoCarrinhoNoMercado, prontidaoDoMercado } from "@/lib/internacional/mercado";
 import {
   bandeira,
   idiomaDoPais,
@@ -17,6 +18,7 @@ import {
 import { LANG_HTML, textos, type Idioma } from "@/lib/internacional/idioma";
 import { GEO_COUNTRY_COOKIE, GEO_COUNTRY_HEADER } from "@/lib/i18n/site";
 import { reveraApplePayDisponivel } from "@/lib/payments/revera";
+import { obterCotacaoPtax } from "@/lib/internacional/cambio-ptax";
 
 export const metadata: Metadata = {
   title: "Checkout",
@@ -41,6 +43,16 @@ export default async function CheckoutPage({
   searchParams: Promise<{ pais?: string }>;
 }) {
   const sp = await searchParams;
+  if (sp.pais?.toUpperCase() === "US") redirect("/en/checkout");
+  return renderCheckout(sp);
+}
+
+/** Entrada interna das rotas localizadas, sem depender de query string. */
+export async function checkoutDoPais(pais: string) {
+  return renderCheckout({ pais });
+}
+
+async function renderCheckout(sp: { pais?: string }) {
   const paises = paisesDoCheckout();
   const paisDetectado = (
     (await headers()).get(GEO_COUNTRY_HEADER) ??
@@ -91,7 +103,7 @@ export default async function CheckoutPage({
           {paises.map((iso) => (
             <Link
               key={iso}
-              href={`/checkout?pais=${iso}`}
+              href={iso === "US" ? "/en/checkout" : `/checkout?pais=${iso}`}
               className={`rounded-full border px-4 py-2 text-sm ${
                 iso === pais
                   ? "border-ink bg-ink text-paper"
@@ -133,6 +145,26 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
     return <p className="max-w-2xl text-ink/70">{t.sacolaVazia}</p>;
   }
 
+  let precos;
+  try {
+    const cambio = await obterCotacaoPtax(mercado.moeda);
+    precos = await precosDoCarrinhoNoMercado(
+      carrinho.items.map((item) => ({
+        variantId: item.variantId,
+        quantity: item.quantity,
+        basePriceCents: item.basePriceCents,
+      })),
+      mercado.moeda,
+      cambio
+    );
+  } catch {
+    precos = { ok: false as const, semPreco: carrinho.items.map((item) => item.variantId) };
+  }
+  if (!precos.ok) {
+    return <IndisponivelInternacional pais={pais} motivo={t.semPrecoNoMercado} />;
+  }
+  const precoPorVariante = new Map(precos.itens.map((item) => [item.variantId, item]));
+
   const aceite = aceiteInternacional(idioma);
   const resumo: ResumoInternacional = {
     idioma,
@@ -149,9 +181,12 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
     },
     moeda: mercado.moeda,
     itens: carrinho.items.map((item) => ({
+      variantId: item.variantId,
       nome: item.productName,
       quantidade: item.quantity,
+      precoUnitarioCents: precoPorVariante.get(item.variantId)?.unitPriceCents ?? 0,
     })),
+    subtotalCents: precos.subtotalCents,
     avisoImpostosTitulo: aceite.avisoTitulo,
     avisoImpostosTexto: aceite.avisoTexto,
     aceiteTexto: aceite.aceite,

@@ -72,6 +72,9 @@ export function middleware(request: NextRequest) {
   }
 
   const strippedPath = stripLocaleFromPath(pathname);
+  const pilotoEuaLocalizado =
+    localeInPath === "en" &&
+    (strippedPath === "/checkout" || /^\/produtos\/[^/]+$/.test(strippedPath));
   const veioDaGeolocalizacao = request.cookies.get(LOCALE_GEO_PENDING_COOKIE)?.value === "1";
   const url = request.nextUrl.clone();
   url.pathname = strippedPath;
@@ -80,7 +83,7 @@ export function middleware(request: NextRequest) {
   if (
     localeInPath === DEFAULT_SITE_LOCALE ||
     shouldIgnore(strippedPath) ||
-    !isFullyLocalizedPath(strippedPath)
+    (!isFullyLocalizedPath(strippedPath) && !pilotoEuaLocalizado)
   ) {
     const response = NextResponse.redirect(url);
     response.cookies.set(LOCALE_COOKIE, localeInPath, {

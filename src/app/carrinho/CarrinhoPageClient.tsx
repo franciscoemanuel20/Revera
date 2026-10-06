@@ -160,7 +160,7 @@ export function CarrinhoPageClient({ locale = "pt" }: { locale?: SiteLocale }) {
               </div>
             </dl>
 
-            <Link href="/checkout">
+            <Link href={localizePath("/checkout", locale)}>
               <Button size="lg" className="w-full">
                 {copy.checkout}
               </Button>

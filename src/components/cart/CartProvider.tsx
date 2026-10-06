@@ -72,6 +72,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (locale === "en" && drawerAberto) setDrawerAberto(false);
+  }, [locale, drawerAberto]);
+
   function adicionarItem(variantId: string, quantity: number) {
     return new Promise<{ erro: string | null }>((resolve) => {
       iniciarTransicao(async () => {
@@ -121,7 +125,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         carregando,
         pendente,
         drawerAberto,
-        abrirDrawer: () => setDrawerAberto(true),
+        // O drawer ainda espelha os valores BRL do carrinho nacional. No
+        // piloto dos EUA ele é deliberadamente pulado para nunca mostrar
+        // uma moeda/desconto diferente do checkout internacional.
+        abrirDrawer: () => {
+          if (locale === "en") router.push("/en/checkout");
+          else setDrawerAberto(true);
+        },
         fecharDrawer: () => setDrawerAberto(false),
         adicionarItem,
         alterarQuantidade,
@@ -131,7 +141,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       {children}
       <CartDrawer
         locale={locale}
-        open={drawerAberto}
+        open={locale !== "en" && drawerAberto}
         onClose={() => setDrawerAberto(false)}
         items={itensDoDrawer}
         subtotalCents={cart.subtotalCents}

@@ -36,24 +36,26 @@ export interface ItemMedido {
   nome: string;
   quantidade: number;
   precoUnitarioCents: number;
+  currency?: Moeda;
 }
 
 /**
  * O visitante viu um produto. Meta chama de ViewContent; GA4, de view_item.
  */
 export function medirVerProduto(item: ItemMedido) {
+  const currency = item.currency ?? MOEDA;
   if (META_PIXEL_ID) {
     window.fbq?.("track", "ViewContent", {
       content_ids: [item.variantId],
       content_type: "product",
       content_name: item.nome,
       value: centavosParaMoeda(item.precoUnitarioCents),
-      currency: MOEDA,
+      currency,
     });
   }
   if (GOOGLE_TAG_ID) {
     window.gtag?.("event", "view_item", {
-      currency: MOEDA,
+      currency,
       value: centavosParaMoeda(item.precoUnitarioCents),
       items: [
         {
@@ -70,18 +72,19 @@ export function medirVerProduto(item: ItemMedido) {
 /** Colocou na sacola. */
 export function medirAdicionarAoCarrinho(item: ItemMedido) {
   const valor = centavosParaMoeda(item.precoUnitarioCents * item.quantidade);
+  const currency = item.currency ?? MOEDA;
   if (META_PIXEL_ID) {
     window.fbq?.("track", "AddToCart", {
       content_ids: [item.variantId],
       content_type: "product",
       content_name: item.nome,
       value: valor,
-      currency: MOEDA,
+      currency,
     });
   }
   if (GOOGLE_TAG_ID) {
     window.gtag?.("event", "add_to_cart", {
-      currency: MOEDA,
+      currency,
       value: valor,
       items: [
         {
@@ -109,9 +112,11 @@ export function medirAdicionarAoCarrinho(item: ItemMedido) {
 export function medirIniciarCheckout(input: {
   itens: ItemMedido[];
   totalCents: number;
+  currency?: Moeda;
 }) {
   const valor = centavosParaMoeda(input.totalCents);
   const numItens = input.itens.reduce((s, i) => s + i.quantidade, 0);
+  const currency = input.currency ?? MOEDA;
 
   if (META_PIXEL_ID) {
     window.fbq?.("track", "InitiateCheckout", {
@@ -124,12 +129,12 @@ export function medirIniciarCheckout(input: {
       })),
       num_items: numItens,
       value: valor,
-      currency: MOEDA,
+      currency,
     });
   }
   if (GOOGLE_TAG_ID) {
     window.gtag?.("event", "begin_checkout", {
-      currency: MOEDA,
+      currency,
       value: valor,
       items: input.itens.map((i) => ({
         item_id: i.variantId,

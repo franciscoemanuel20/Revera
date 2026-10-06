@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { lerAtribuicao } from "@/lib/tracking/atribuicao";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
@@ -10,6 +10,8 @@ import {
   criarPedidoInternacionalAction,
   type CheckoutInternacionalInput,
 } from "./actions-internacional";
+import { medirIniciarCheckout } from "@/lib/tracking/browser";
+import type { Moeda } from "@/lib/internacional/moeda";
 
 const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink";
 
@@ -43,7 +45,8 @@ export interface ResumoInternacional {
     postalExemplo: string;
   };
   moeda: string;
-  itens: Array<{ nome: string; quantidade: number }>;
+  itens: Array<{ variantId: string; nome: string; quantidade: number; precoUnitarioCents: number }>;
+  subtotalCents: number;
   avisoImpostosTitulo: string;
   avisoImpostosTexto: string;
   aceiteTexto: string;
@@ -88,6 +91,17 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
   const [cotacao, setCotacao] = useState<NonNullable<Awaited<ReturnType<typeof criarPedidoInternacionalAction>>["cotacao"]> | null>(null);
   const t = textos(resumo.idioma);
   const cotacaoCopy = COTACAO_COPY[resumo.idioma];
+  const tracked = useRef(false);
+
+  useEffect(() => {
+    if (tracked.current || resumo.itens.length === 0) return;
+    tracked.current = true;
+    medirIniciarCheckout({
+      itens: resumo.itens,
+      totalCents: resumo.subtotalCents,
+      currency: resumo.moeda as Moeda,
+    });
+  }, [resumo]);
 
   function atualizar(campo: keyof FormState, valor: string) {
     setCampos((atual) => ({ ...atual, [campo]: valor }));
