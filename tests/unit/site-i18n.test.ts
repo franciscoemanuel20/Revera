@@ -231,6 +231,23 @@ describe("i18n publico do site", () => {
     expect(resposta.headers.get(`x-middleware-request-${LOCALE_HEADER}`)).toBe("pt");
   });
 
+  it("redirect por geolocalização vindo de pré-carga não marca geolocalização pendente", () => {
+    const preCarga = middleware(
+      new NextRequest("https://www.reveraprotesecapilar.com/produtos?_rsc=z", {
+        headers: { rsc: "1", "sec-fetch-dest": "empty", "x-vercel-ip-country": "US" },
+      }),
+    );
+    expect(preCarga.headers.get("location")).toContain("/en/produtos");
+    expect(preCarga.cookies.get(LOCALE_GEO_PENDING_COOKIE)).toBeUndefined();
+
+    const pagina = middleware(
+      new NextRequest("https://www.reveraprotesecapilar.com/produtos", {
+        headers: { "sec-fetch-dest": "document", "x-vercel-ip-country": "US" },
+      }),
+    );
+    expect(pagina.cookies.get(LOCALE_GEO_PENDING_COOKIE)?.value).toBe("1");
+  });
+
   it("seletor de idioma do cabeçalho é <a> comum, não <Link>", () => {
     const header = readFileSync(join(process.cwd(), "src/components/ui/Header.tsx"), "utf8");
     const seletor = header.slice(header.indexOf('aria-label="Idioma"'));

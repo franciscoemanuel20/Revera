@@ -49,9 +49,10 @@ function shouldIgnore(pathname: string): boolean {
  *
  * Regra: só uma navegação de verdade (GET/HEAD que não é pré-carga) grava a
  * escolha ou é redirecionada pelo idioma; pré-carga e POST passam direto.
- * Os links de idioma e de país também saem com `prefetch={false}`, para o
- * clique sempre chegar ao servidor (uma pré-carga que seguiu redirect
- * deixava o Next reaproveitar a URL errada e o clique em PT não pegava).
+ * As abas de país do checkout saem com `prefetch={false}` (o seletor de
+ * idioma virou `<a>`, ver abaixo), para o clique sempre chegar ao servidor
+ * (uma pré-carga que seguiu redirect deixava o Next reaproveitar a URL
+ * errada e o clique em PT não pegava).
  */
 function ehPreCarga(request: NextRequest): boolean {
   const purpose = `${request.headers.get("purpose") ?? ""} ${request.headers.get("sec-purpose") ?? ""}`;
@@ -107,11 +108,17 @@ export function middleware(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
       const response = NextResponse.redirect(url);
-      response.cookies.set(LOCALE_GEO_PENDING_COOKIE, "1", {
-        maxAge: 60,
-        path: "/",
-        sameSite: "lax",
-      });
+      // Só marca "veio da geolocalização" num carregamento de página: o
+      // /en/... que segue um redirect de pré-carga chega como `empty`, não
+      // apagaria a marca, e um clique em idioma nos 60 s seguintes seria
+      // gravado como geolocalização em vez de escolha.
+      if (ehCarregamentoDePagina(request)) {
+        response.cookies.set(LOCALE_GEO_PENDING_COOKIE, "1", {
+          maxAge: 60,
+          path: "/",
+          sameSite: "lax",
+        });
+      }
       return registrarPais(response, request);
     }
 
