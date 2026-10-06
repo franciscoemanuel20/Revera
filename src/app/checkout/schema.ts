@@ -106,6 +106,7 @@ export const checkoutSchema = z.object({
       utmCampaign: textoCurto,
       utmContent: textoCurto,
       utmTerm: textoCurto,
+      metaCampaignId: textoCurto,
     })
     .nullable()
     .optional()

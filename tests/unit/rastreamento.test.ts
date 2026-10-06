@@ -92,12 +92,13 @@ describe("atribuição de campanha", () => {
   });
 
   it("usa a URL quando não há nada guardado", async () => {
-    vi.stubGlobal("window", { location: { search: "?utm_source=google&gclid=xyz" } });
+    vi.stubGlobal("window", { location: { search: "?utm_source=google&gclid=xyz&sck=120256469830010768" } });
     vi.stubGlobal("sessionStorage", { getItem: () => null, setItem: () => {} });
     const mod = await import("@/lib/tracking/atribuicao");
     const a = mod.lerAtribuicao();
     expect(a.utmSource).toBe("google");
     expect(a.gclid).toBe("xyz");
+    expect(a.metaCampaignId).toBe("120256469830010768");
   });
 
   it("sessionStorage indisponível (navegação privada) não derruba nada", async () => {

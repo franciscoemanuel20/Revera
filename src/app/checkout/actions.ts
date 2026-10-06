@@ -302,6 +302,7 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
     utm_campaign: dados.atribuicao?.utmCampaign ?? null,
     utm_content: dados.atribuicao?.utmContent ?? null,
     utm_term: dados.atribuicao?.utmTerm ?? null,
+    meta_campaign_id: dados.atribuicao?.metaCampaignId ?? null,
     client_ip: cabecalhos.get("x-real-ip") ?? encadeado ?? null,
     user_agent: cabecalhos.get("user-agent")?.slice(0, 500) ?? null,
   };

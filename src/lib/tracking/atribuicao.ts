@@ -22,6 +22,8 @@ export interface Atribuicao {
   utmCampaign: string | null;
   utmContent: string | null;
   utmTerm: string | null;
+  /** ID numérico da campanha Meta, enviado pelos anúncios como `sck`. */
+  metaCampaignId: string | null;
 }
 
 function cookie(nome: string): string | null {
@@ -79,6 +81,7 @@ export function guardarAtribuicaoDaUrl(): void {
     "utm_term",
     "fbclid",
     "gclid",
+    "sck",
   ];
 
   const presentes = campos.filter((c) => params.get(c));
@@ -131,5 +134,6 @@ export function lerAtribuicao(): Atribuicao {
     utmCampaign: pega("utm_campaign"),
     utmContent: pega("utm_content"),
     utmTerm: pega("utm_term"),
+    metaCampaignId: pega("sck"),
   };
 }
