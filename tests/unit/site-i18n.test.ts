@@ -158,6 +158,24 @@ describe("i18n publico do site", () => {
     }
   });
 
+  it("pré-carga sem prefixo não redireciona nem marca geolocalização pendente", () => {
+    const request = new NextRequest("https://www.reveraprotesecapilar.com/checkout?pais=FR", {
+      headers: { "next-router-prefetch": "1", rsc: "1", "x-vercel-ip-country": "US" },
+    });
+    const response = middleware(request);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.cookies.get(LOCALE_GEO_PENDING_COOKIE)).toBeUndefined();
+  });
+
+  it("marca manual antiga (revera_locale_manual) não prende mais o brasileiro", () => {
+    const request = new NextRequest("https://www.reveraprotesecapilar.com/produtos", {
+      headers: { "x-vercel-ip-country": "BR" },
+    });
+    request.cookies.set(LOCALE_COOKIE, "fr");
+    request.cookies.set("revera_locale_manual", "1");
+    expect(middleware(request).headers.get("location")).toBeNull();
+  });
+
   it("clique de verdade em /en continua gravando a escolha", () => {
     const request = new NextRequest("https://www.reveraprotesecapilar.com/en/checkout", {
       headers: { rsc: "1", "x-vercel-ip-country": "BR" },

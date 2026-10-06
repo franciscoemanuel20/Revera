@@ -269,6 +269,7 @@ export function Header({ locale = "pt", logo, menuPrincipal = LINKS, menuConheca
             <Link
               key={l}
               href={localeSwitchPath(pathname ?? "/", l)}
+              prefetch={false}
               className={`rounded px-2 py-1 text-xs font-semibold uppercase ${
                 l === localeAtual ? "bg-paper text-ink" : "text-paper/70 hover:text-gold"
               }`}

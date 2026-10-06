@@ -48,7 +48,10 @@ function shouldIgnore(pathname: string): boolean {
  * em /checkout) também era redirecionado — 307 para /en/checkout.
  *
  * Regra: só uma navegação de verdade (GET/HEAD que não é pré-carga) grava a
- * escolha, e requisição que não é GET/HEAD nunca é redirecionada.
+ * escolha ou é redirecionada pelo idioma; pré-carga e POST passam direto.
+ * Os links de idioma e de país também saem com `prefetch={false}`, para o
+ * clique sempre chegar ao servidor (uma pré-carga que seguiu redirect
+ * deixava o Next reaproveitar a URL errada e o clique em PT não pegava).
  */
 function ehPreCarga(request: NextRequest): boolean {
   const purpose = `${request.headers.get("purpose") ?? ""} ${request.headers.get("sec-purpose") ?? ""}`;
@@ -76,7 +79,9 @@ export function middleware(request: NextRequest) {
       ? normalizeSiteLocale(request.cookies.get(LOCALE_COOKIE)?.value)
       : null;
     const locale = localeManual ?? localeFromCountry(request.headers.get("x-vercel-ip-country"));
-    if (ehLeitura(request) && locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname)) {
+    // Pré-carga não redireciona nem marca geolocalização pendente: o clique
+    // de verdade é que decide, e chega sem o cabeçalho de pré-carga.
+    if (gravaEscolha && locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname)) {
       const url = request.nextUrl.clone();
       url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
       const response = NextResponse.redirect(url);
