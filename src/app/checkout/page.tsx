@@ -103,6 +103,7 @@ async function renderCheckout(sp: { pais?: string }) {
             <Link
               key={iso}
               href={iso === "US" ? "/en/checkout" : `/checkout?pais=${iso}`}
+              prefetch={false}
               className={`rounded-full border px-4 py-2 text-sm ${
                 iso === pais
                   ? "border-ink bg-ink text-paper"
@@ -233,7 +234,7 @@ function IndisponivelInternacional({ pais, motivo }: { pais: string; motivo: str
       </h2>
       <p className="mt-2 text-sm text-ink/70">{motivo}</p>
       <p className="mt-4 text-sm text-ink/70">{t.indisponivelAlternativa}</p>
-      <Link href="/checkout?pais=BR" className="mt-4 inline-block text-sm text-ink underline">
+      <Link href="/checkout?pais=BR" prefetch={false} className="mt-4 inline-block text-sm text-ink underline">
         {t.indisponivelLinkBR}
       </Link>
     </div>

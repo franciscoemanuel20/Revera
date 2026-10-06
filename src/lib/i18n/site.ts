@@ -4,7 +4,11 @@ export type SiteLocale = (typeof SITE_LOCALES)[number];
 
 export const DEFAULT_SITE_LOCALE: SiteLocale = "pt";
 export const LOCALE_COOKIE = "revera_locale";
-export const LOCALE_MANUAL_COOKIE = "revera_locale_manual";
+// Nome trocado em 06/10/2026: o antigo `revera_locale_manual` foi gravado por
+// PRÉ-CARGA de link em visitantes que nunca escolheram idioma (ver o
+// middleware). Com nome novo, essas marcas contaminadas deixam de valer e o
+// visitante volta a seguir o país; quem escolher de novo grava aqui.
+export const LOCALE_MANUAL_COOKIE = "revera_idioma_escolhido";
 export const LOCALE_GEO_PENDING_COOKIE = "revera_locale_geo_pending";
 export const LOCALE_HEADER = "x-revera-locale";
 export const GEO_COUNTRY_COOKIE = "revera_country";
