@@ -27,7 +27,7 @@ const LIMITE_POR_RODADA = 25;
 // antes da aprovação: sai da fila para não tomar o lugar dos recentes.
 // Captura RETIDA também fica 'pending', mas o webhook PENDING já avisou.
 const PENDENTE_MAX_HORAS = 24;
-// 25 pedidos × 8 s ainda cabe nos 60 s mesmo com o PayPal lento.
+// Timeout da consulta da ordem; quem protege os 60 s é o corte de 45 s no laço.
 const TIMEOUT_POR_PEDIDO_MS = 8_000;
 
 export async function GET(req: NextRequest) {
