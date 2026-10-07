@@ -15,6 +15,8 @@ import type { Idioma } from "@/lib/internacional/idioma";
 const E = EMPRESA.endereco;
 const ENDERECO = `${E.linha1}, ${E.bairro}, ${E.cidade} – ${E.estado}, ${E.cep}, ${E.paisEn}`;
 const CONTATO = `${EMPRESA.razaoSocial}, ${ENDERECO}, e-mail ${EMPRESA.email}, WhatsApp ${EMPRESA.whatsapp}`;
+const ENDERECO_PT = `${E.linha1}, ${E.bairro}, ${E.cidade}/${E.estado}, CEP ${E.cep}, ${E.pais}`;
+const CONTATO_PT = `${EMPRESA.razaoSocial}, ${ENDERECO_PT}, e-mail ${EMPRESA.email}, WhatsApp ${EMPRESA.whatsapp}`;
 
 export function textoDesistencia(idioma: Idioma, entregaNoBrasil: boolean): string {
   switch (idioma) {
@@ -26,12 +28,15 @@ export function textoDesistencia(idioma: Idioma, entregaNoBrasil: boolean): stri
           ? ["Compras entregues no Brasil: nos primeiros 7 dias após o recebimento (art. 49 do Código de Defesa do Consumidor), a desistência não tem exceções nem custo — o frete de volta é por nossa conta e o reembolso é imediato. Do 8º ao 14º dia valem as condições abaixo."]
           : []),
         `Como desistir: envie uma mensagem clara com o número do pedido para ${EMPRESA.email} ou pelo WhatsApp ${EMPRESA.whatsapp}.`,
-        `Devolução: envie o produto em até ${DIAS} dias após o aviso para ${EMPRESA.razaoSocial}, ${ENDERECO}. O custo do envio de volta é seu. Se o produto tiver sido usado além do necessário para conferi-lo (colado, cortado ou aplicado), podemos descontar a perda de valor.`,
+        `Devolução: envie o produto em até ${DIAS} dias após o aviso para ${EMPRESA.razaoSocial}, ${ENDERECO_PT}. O custo do envio de volta é seu. Se o produto tiver sido usado além do necessário para conferi-lo (colado, cortado ou aplicado), podemos descontar a perda de valor.`,
         `Reembolso: devolvemos o valor pago, incluindo o frete de ida no serviço padrão, em até ${DIAS} dias após o seu aviso, pelo mesmo meio de pagamento, sem custo. Podemos aguardar o produto ou o comprovante de envio, o que acontecer primeiro.`,
         "Exceção: itens entregues lacrados por motivo de higiene (como cola e removedor) não podem ser devolvidos se o lacre tiver sido rompido após a entrega.",
+        ...(entregaNoBrasil
+          ? []
+          : ["Impostos de importação pagos à alfândega do seu país não são pagos a nós. Marque o pacote de volta como \"devolução de mercadoria\"."]),
         "",
         "MODELO DE FORMULÁRIO DE DESISTÊNCIA",
-        `Para: ${CONTATO}`,
+        `Para: ${CONTATO_PT}`,
         "Comunico que desisto da compra do(s) seguinte(s) produto(s):",
         "Pedido nº / data do pedido / data do recebimento:",
         "Nome e endereço:",

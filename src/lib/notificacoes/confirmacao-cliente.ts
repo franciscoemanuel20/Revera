@@ -145,30 +145,17 @@ export function montarConfirmacao(dados: {
   return { assunto: t.assunto(dados.orderNumber), texto, idioma };
 }
 
-export async function enviarConfirmacaoAoCliente(
-  supabase: ReturnType<typeof createAdminClient>,
-  orderId: string
-): Promise<void> {
-  try {
-    const { data: pedido } = await supabase
-      .from("orders")
-      .select(
-        "id, order_number, access_token, currency, subtotal_cents, discount_cents, shipping_cents, total_cents, customer_id, address_id"
-      )
-      .eq("id", orderId)
-      .maybeSingle();
-    if (!pedido) return;
+type Supa = ReturnType<typeof createAdminClient>;
 
-    const [{ data: cliente }, { data: endereco }, { data: itens }] = await Promise.all([
-      supabase.from("customers").select("full_name, email, phone").eq("id", pedido.customer_id).maybeSingle(),
-      pedido.address_id
-        ? supabase.from("addresses").select("*").eq("id", pedido.address_id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("order_items")
-        .select("product_name_snapshot, variant_label_snapshot, quantity, subtotal_cents")
-        .eq("order_id", orderId),
-    ]);
+export async function enviarConfirmacaoAoCliente(supabase: Supa, orderId: string): Promise<void> {
+  try {
+    // Sem e-mail configurado não se reserva nada: senão o pedido ficaria
+    // "reservado" para sempre e nunca receberia o e-mail depois da chave.
+    if (!process.env.RESEND_API_KEY?.trim()) return;
+
+    const { data: pedido } = await supabase.from("orders").select("customer_id").eq("id", orderId).maybeSingle();
+    if (!pedido?.customer_id) return;
+    const { data: cliente } = await supabase.from("customers").select("email").eq("id", pedido.customer_id).maybeSingle();
     const email = (cliente?.email as string | null | undefined)?.trim();
     if (!email || !email.includes("@")) return;
 
@@ -180,6 +167,58 @@ export async function enviarConfirmacaoAoCliente(
       if (erroReserva.code !== "23505") console.error("[confirmacao-cliente] reserva falhou", erroReserva);
       return;
     }
+    await enviarReservada(supabase, orderId);
+  } catch (erro) {
+    console.error("[confirmacao-cliente] falha inesperada", erro);
+  }
+}
+
+/**
+ * Reenvio das reservas que ficaram sem `sent_at` (Resend fora do ar, função
+ * encerrada no meio). Chamado pela conferência periódica. O
+ * Idempotency-Key do Resend impede e-mail duplicado dentro de 24 h.
+ */
+export async function reenviarConfirmacoesPendentes(supabase: Supa, agora = Date.now()): Promise<number> {
+  const { data } = await supabase
+    .from("order_notifications")
+    .select("order_id, attempts, created_at")
+    .eq("kind", KIND)
+    .is("sent_at", null)
+    .lte("created_at", new Date(agora - 5 * 60_000).toISOString())
+    .gte("created_at", new Date(agora - 7 * 86_400_000).toISOString())
+    .lt("attempts", 5)
+    .limit(20);
+  let reenviados = 0;
+  for (const linha of data ?? []) {
+    if (await enviarReservada(supabase, linha.order_id as string)) reenviados++;
+  }
+  return reenviados;
+}
+
+async function enviarReservada(supabase: Supa, orderId: string): Promise<boolean> {
+  try {
+    const { data: pedido } = await supabase
+      .from("orders")
+      .select(
+        "id, order_number, access_token, currency, subtotal_cents, discount_cents, shipping_cents, total_cents, customer_id, address_id"
+      )
+      .eq("id", orderId)
+      .maybeSingle();
+    if (!pedido) return false;
+
+    const [{ data: cliente }, { data: endereco }, { data: itens }, { data: reserva }] = await Promise.all([
+      supabase.from("customers").select("full_name, email, phone").eq("id", pedido.customer_id).maybeSingle(),
+      pedido.address_id
+        ? supabase.from("addresses").select("*").eq("id", pedido.address_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("order_items")
+        .select("product_name_snapshot, variant_label_snapshot, quantity, subtotal_cents")
+        .eq("order_id", orderId),
+      supabase.from("order_notifications").select("attempts").eq("order_id", orderId).eq("kind", KIND).maybeSingle(),
+    ]);
+    const email = (cliente?.email as string | null | undefined)?.trim();
+    if (!email || !email.includes("@")) return false;
 
     const linha = endereco as unknown as LinhaEndereco | null;
     const dominio = linha ? daLinha(linha, (cliente?.phone as string | null) ?? "") : null;
@@ -206,19 +245,29 @@ export async function enviarConfirmacaoAoCliente(
       assunto: montado.assunto,
       texto: montado.texto,
       idempotencyKey: `revera-confirmacao-cliente:${orderId}`,
+      // Roda dentro da confirmação do pagamento: não segura o webhook.
+      timeoutMs: 5_000,
     });
 
+    const tentativas = ((reserva?.attempts as number | null) ?? 0) + 1;
     if (r.estado === "enviado") {
       await supabase
         .from("order_notifications")
-        .update({ sent_at: new Date().toISOString() })
+        .update({ sent_at: new Date().toISOString(), provider_message_id: r.id, last_error: null, attempts: tentativas })
         .eq("order_id", orderId)
         .eq("kind", KIND);
-    } else {
-      // A reserva fica com sent_at nulo: o painel mostra "não enviado".
-      console.error("[confirmacao-cliente] e-mail não saiu", r.estado === "erro" ? r.motivo : r.estado);
+      return true;
     }
+    const motivo = r.estado === "erro" ? r.motivo : r.estado;
+    console.error("[confirmacao-cliente] e-mail não saiu", motivo);
+    await supabase
+      .from("order_notifications")
+      .update({ last_error: motivo.slice(0, 500), attempts: tentativas })
+      .eq("order_id", orderId)
+      .eq("kind", KIND);
+    return false;
   } catch (erro) {
-    console.error("[confirmacao-cliente] falha inesperada", erro);
+    console.error("[confirmacao-cliente] falha ao enviar", erro);
+    return false;
   }
 }

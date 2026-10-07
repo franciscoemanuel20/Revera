@@ -29,6 +29,7 @@ const base = {
 
 beforeEach(() => {
   vi.resetModules();
+  vi.stubEnv("RESEND_API_KEY", "re_teste");
   enviar.mockReset().mockResolvedValue({ estado: "enviado", id: "x" });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -70,7 +71,7 @@ describe("enviarConfirmacaoAoCliente", () => {
         customers: [{ id: "c1", full_name: "Ivan Pineda Mota", email, phone: "+49" }],
         addresses: [{ id: "a1", country: "DE", recipient_name: "Ivan Pineda Mota", company: null, cep: null, street: null, number: null, complement: null, neighborhood: null, city: "Ottobrunn", state: null, line1: "Hauptstraße 1", line2: null, postal_code: "85521", region: null }],
         order_items: [{ order_id: PEDIDO, product_name_snapshot: "Micropele 0,08mm", variant_label_snapshot: "1b", quantity: 1, subtotal_cents: 14650 }],
-        order_notifications: [],
+        order_notifications: [] as Array<Record<string, unknown>>,
       },
       [{ tabela: "order_notifications", colunas: ["order_id", "kind"] }]
     );
@@ -99,11 +100,28 @@ describe("enviarConfirmacaoAoCliente", () => {
     expect(fake.tabela("order_notifications")).toHaveLength(0);
   });
 
-  it("falha no envio não lança e deixa a reserva sem sent_at", async () => {
-    enviar.mockResolvedValue({ estado: "erro", motivo: "Resend fora" });
+  it("falha no envio não lança, guarda o motivo e o reenvio periódico completa", async () => {
+    enviar.mockResolvedValueOnce({ estado: "erro", motivo: "Resend fora" });
+    const fake = banco();
+    const mod = await import("@/lib/notificacoes/confirmacao-cliente");
+    await expect(mod.enviarConfirmacaoAoCliente(fake as never, PEDIDO)).resolves.toBeUndefined();
+    const linha = fake.tabela("order_notifications")[0]!;
+    expect(linha.sent_at ?? null).toBeNull();
+    expect(linha.last_error).toBe("Resend fora");
+    expect(linha.attempts).toBe(1);
+    linha.created_at = new Date(Date.now() - 10 * 60_000).toISOString();
+    linha.sent_at = null; // no banco real a coluna nasce nula
+    await expect(mod.reenviarConfirmacoesPendentes(fake as never)).resolves.toBe(1);
+    expect(fake.tabela("order_notifications")[0]?.sent_at).toBeTruthy();
+    expect(enviar).toHaveBeenCalledTimes(2);
+  });
+
+  it("sem RESEND_API_KEY não reserva (o pedido não fica preso)", async () => {
+    vi.stubEnv("RESEND_API_KEY", "");
     const fake = banco();
     const { enviarConfirmacaoAoCliente } = await import("@/lib/notificacoes/confirmacao-cliente");
-    await expect(enviarConfirmacaoAoCliente(fake as never, PEDIDO)).resolves.toBeUndefined();
-    expect(fake.tabela("order_notifications")[0]?.sent_at ?? null).toBeNull();
+    await enviarConfirmacaoAoCliente(fake as never, PEDIDO);
+    expect(fake.tabela("order_notifications")).toHaveLength(0);
+    expect(enviar).not.toHaveBeenCalled();
   });
 });

@@ -65,7 +65,7 @@ export async function enviarEmailOperacional(
  * equipe como destino. Nunca lança.
  */
 export async function enviarEmail(
-  mensagem: MensagemOperacional & { para: string[]; de: string; responderPara?: string }
+  mensagem: MensagemOperacional & { para: string[]; de: string; responderPara?: string; timeoutMs?: number }
 ): Promise<ResultadoEmail> {
   const chave = process.env.RESEND_API_KEY?.trim();
   const para = mensagem.para;
@@ -91,7 +91,7 @@ export async function enviarEmail(
         text: texto,
         html,
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(mensagem.timeoutMs ?? 10_000),
     });
 
     const corpo = (await resposta.json().catch(() => null)) as
