@@ -64,26 +64,36 @@ export async function GET(req: NextRequest) {
   // a reserva 'pending' passando das 24 h. Vêm primeiro: são vendas pagas.
   const { data: marcas, error: erroMarcas } = await supabase
     .from("audit_logs")
-    .select("entity_id")
+    .select("entity_id, diff")
     .eq("action", ACAO_PAYPAL_RETIDO)
     .gte("created_at", new Date(agora - JANELA_DIAS * 86_400_000).toISOString())
     .order("created_at", { ascending: false })
     .limit(LIMITE_POR_RODADA);
   if (erroMarcas) console.error("[cron/paypal] falha ao ler retidos", erroMarcas.message);
-  const idsRetidos = [...new Set((marcas ?? []).map((m) => m.entity_id as string).filter(Boolean))];
+  // A ordem PayPal que estava retida vem da marca: se o pedido ganhou outra
+  // ordem depois, a retida continua sendo a conferida.
+  const ordemRetida = new Map<string, string | null>();
+  for (const m of marcas ?? []) {
+    const id = m.entity_id as string | null;
+    if (!id || ordemRetida.has(id)) continue;
+    const ordem = (m.diff as { ordem?: string } | null)?.ordem;
+    ordemRetida.set(id, typeof ordem === "string" ? ordem : null);
+  }
+  const idsRetidos = [...ordemRetida.keys()];
   let retidosPendentes: string[] = [];
   if (idsRetidos.length > 0) {
-    const { data: aindaPendentes } = await supabase
+    const { data: aindaPendentes, error: erroPendentes } = await supabase
       .from("orders")
       .select("id")
       .in("id", idsRetidos)
       .eq("payment_status", "pending")
       .is("canceled_at", null);
+    if (erroPendentes) console.error("[cron/paypal] falha ao filtrar retidos", erroPendentes.message);
     retidosPendentes = (aindaPendentes ?? []).map((o) => o.id as string);
   }
 
   const fila: Array<{ orderId: string; paypalOrderId: string | null }> = [
-    ...retidosPendentes.map((orderId) => ({ orderId, paypalOrderId: null })),
+    ...retidosPendentes.map((orderId) => ({ orderId, paypalOrderId: ordemRetida.get(orderId) ?? null })),
     ...(data ?? []).map((l) => ({ orderId: l.order_id as string, paypalOrderId: l.provider_payment_id as string })),
   ];
 
