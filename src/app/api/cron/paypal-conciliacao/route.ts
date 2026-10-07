@@ -27,6 +27,11 @@ const LIMITE_POR_RODADA = 25;
 // antes da aprovação: sai da fila para não tomar o lugar dos recentes.
 // Captura RETIDA também fica 'pending', mas o webhook PENDING já avisou.
 const PENDENTE_MAX_HORAS = 24;
+// Fila longa (vendas retidas): lê até 100 marcas e embaralha a ordem a cada
+// rodada. O corte de 45 s decide quantas cabem; com mais retidas do que
+// cabem numa rodada, o embaralho garante que nenhuma fica de fora sempre.
+const MARCAS_MAX = 100;
+const RETIDOS_POR_RODADA = 15;
 // Timeout da consulta da ordem; quem protege os 60 s é o corte de 45 s no laço.
 const TIMEOUT_POR_PEDIDO_MS = 8_000;
 
@@ -68,7 +73,7 @@ export async function GET(req: NextRequest) {
     .eq("action", ACAO_PAYPAL_RETIDO)
     .gte("created_at", new Date(agora - JANELA_DIAS * 86_400_000).toISOString())
     .order("created_at", { ascending: false })
-    .limit(LIMITE_POR_RODADA);
+    .limit(MARCAS_MAX);
   if (erroMarcas) console.error("[cron/paypal] falha ao ler retidos", erroMarcas.message);
   // A ordem PayPal que estava retida vem da marca: se o pedido ganhou outra
   // ordem depois, a retida continua sendo a conferida.
@@ -89,7 +94,8 @@ export async function GET(req: NextRequest) {
       .eq("payment_status", "pending")
       .is("canceled_at", null);
     if (erroPendentes) console.error("[cron/paypal] falha ao filtrar retidos", erroPendentes.message);
-    retidosPendentes = (aindaPendentes ?? []).map((o) => o.id as string);
+    // Até 15 por rodada: o resto do tempo fica para a fila normal.
+    retidosPendentes = embaralhar((aindaPendentes ?? []).map((o) => o.id as string)).slice(0, RETIDOS_POR_RODADA);
   }
 
   const fila: Array<{ orderId: string; paypalOrderId: string | null }> = [
@@ -117,4 +123,13 @@ export async function GET(req: NextRequest) {
 
   console.info("[cron/paypal]", JSON.stringify({ pedidos: vistos.size, resultados }));
   return NextResponse.json({ ok: true, pedidos: vistos.size, resultados }, { headers: { "cache-control": "no-store" } });
+}
+
+function embaralhar<T>(lista: T[]): T[] {
+  const copia = [...lista];
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j] as T, copia[i] as T];
+  }
+  return copia;
 }

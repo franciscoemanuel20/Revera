@@ -91,6 +91,17 @@ function campo(valor: string | null | undefined, max: number): string | undefine
  * cliente não pagaria nada. Perder a proteção num caso raro é melhor que
  * perder a venda.
  */
+/**
+ * A ordem já tem o rastreio desta guia? O PayPal identifica o tracker como
+ * "<captura>-<número>"; um tracker cancelado não conta.
+ */
+function jaTemRastreio(ordem: OrdemPayPal, capturaId: string, numero: string): boolean {
+  const esperado = `${capturaId}-${numero}`;
+  return (ordem.purchase_units?.[0]?.shipping?.trackers ?? []).some(
+    (t) => t.id === esperado && t.status !== "CANCELLED"
+  );
+}
+
 export function enderecoEntregaPayPal(
   endereco: PaymentCharge["shippingAddress"]
 ): Record<string, unknown> | null {
@@ -136,6 +147,7 @@ interface OrdemPayPal {
   links?: Array<{ href?: string; rel?: string }>;
   purchase_units?: Array<{
     custom_id?: string;
+    shipping?: { trackers?: Array<{ id?: string; status?: string }> };
     payments?: {
       captures?: Array<{
         id?: string;
@@ -191,7 +203,12 @@ export class PayPalProvider implements PaymentProvider {
     }
   }
 
-  private async accessToken(): Promise<string> {
+  /**
+   * `signal` é o MESMO prazo da chamada que pediu o token: um timeout curto
+   * (tela do cliente, conferência periódica) vale para o token também, e não
+   * só para a consulta — antes o token sozinho podia levar 20 s.
+   */
+  private async accessToken(signal?: AbortSignal): Promise<string> {
     assertAmbientePermitido();
     requireClientId();
     requireClientSecret();
@@ -209,7 +226,7 @@ export class PayPalProvider implements PaymentProvider {
       },
       body: "grant_type=client_credentials",
       cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
+      signal: signal ?? AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
     });
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
@@ -226,7 +243,7 @@ export class PayPalProvider implements PaymentProvider {
   }
 
   private async chamar(caminho: string, init?: { method?: string; body?: unknown; signal?: AbortSignal; requestId?: string }) {
-    const token = await this.accessToken();
+    const token = await this.accessToken(init?.signal);
     return fetch(`${apiBase()}${caminho}`, {
       method: init?.method ?? "GET",
       headers: {
@@ -579,6 +596,10 @@ export class PayPalProvider implements PaymentProvider {
     if (ordem.status !== "COMPLETED" || !captura?.id) {
       return { ok: false, motivo: "O pagamento ainda não está concluído no PayPal." };
     }
+    // Reenvio da mesma guia: se o PayPal já tem o rastreio, é sucesso. Sem
+    // isto, depois que o cache do PayPal-Request-Id expira, o PayPal recusa
+    // a duplicata (422) e a tela dizia "não chegou ao PayPal" — tendo chegado.
+    if (jaTemRastreio(ordem, captura.id, numeroRastreio)) return { ok: true };
     const res = await this.chamar(
       `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/track`,
       {
@@ -594,6 +615,11 @@ export class PayPalProvider implements PaymentProvider {
     );
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
+      // Duas abas, ou um reenvio que cruzou com o primeiro: confere de novo.
+      if (res.status === 422) {
+        const depois = await this.buscarOrdem(paypalOrderId).catch(() => null);
+        if (depois && jaTemRastreio(depois, captura.id, numeroRastreio)) return { ok: true };
+      }
       console.error("[paypal] rastreio recusado", res.status, detalhe.slice(0, 300));
       return { ok: false, motivo: `O PayPal recusou o rastreio (HTTP ${res.status}).` };
     }
