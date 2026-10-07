@@ -12,6 +12,26 @@ import { AmbiguousChargeError, TIMEOUT_CRIACAO_MS } from "./provider";
 
 const MOEDAS_PAYPAL = new Set(["USD", "EUR", "GBP", "AUD", "CAD"]);
 
+const EVENTOS_DE_CAPTURA = new Set([
+  "PAYMENT.CAPTURE.PENDING",
+  "PAYMENT.CAPTURE.DENIED",
+  "PAYMENT.CAPTURE.DECLINED",
+  "PAYMENT.CAPTURE.REFUNDED",
+  "PAYMENT.CAPTURE.REVERSED",
+]);
+
+export type EstadoCapturaPayPal =
+  | { estado: "concluida" }
+  | { estado: "aprovada_sem_captura" }
+  | { estado: "pendente"; motivo: string | null }
+  | { estado: "recusada"; motivo: string | null }
+  | { estado: "reembolsada" }
+  | { estado: "parcialmente_reembolsada" }
+  | { estado: "estornada"; motivo: string | null }
+  | { estado: "desconhecida"; status: string }
+  | { estado: "sem_captura"; statusOrdem: string | null }
+  | { estado: "outro_pedido" };
+
 function paypalEnv(): "live" | "sandbox" {
   const env = process.env.PAYPAL_ENV?.trim().toLowerCase();
   if (env === "sandbox" || env === "live") return env;
@@ -120,6 +140,7 @@ interface OrdemPayPal {
       captures?: Array<{
         id?: string;
         status?: string;
+        status_details?: { reason?: string } | null;
         amount?: { currency_code?: string; value?: string };
         seller_receivable_breakdown?: {
           gross_amount?: { currency_code?: string; value?: string };
@@ -140,7 +161,20 @@ interface EventoPayPal {
     supplementary_data?: { related_ids?: { order_id?: string } };
     purchase_units?: OrdemPayPal["purchase_units"];
     amount?: { currency_code?: string; value?: string };
+    links?: Array<{ href?: string; rel?: string }>;
   };
+}
+
+/**
+ * Id da captura a que o evento se refere. No REFUNDED o resource é o
+ * REEMBOLSO: a captura só aparece no link rel="up". Nos demais, o resource
+ * é a própria captura.
+ */
+function capturaDoEvento(evento: EventoPayPal): string | null {
+  const up = evento.resource?.links?.find((l) => l.rel === "up")?.href ?? "";
+  const doLink = /\/captures\/([^/?#]+)/.exec(up)?.[1];
+  if (doLink) return decodeURIComponent(doLink);
+  return evento.event_type === "PAYMENT.CAPTURE.REFUNDED" ? null : evento.resource?.id ?? null;
 }
 
 export class PayPalProvider implements PaymentProvider {
@@ -361,12 +395,93 @@ export class PayPalProvider implements PaymentProvider {
       };
     }
 
+    // Retida, recusada, reembolsada, estornada (06/10/2026). O aviso só diz
+    // QUAL pedido olhar: o que fazer sai de reavaliarCapturaPayPal(), que
+    // pergunta ao PayPal o estado real da captura. Até essa data esses
+    // eventos caíam em "ignorar" e um estorno no PayPal deixava o pedido
+    // "pago" no painel — pronto para despachar uma peça sem dinheiro.
+    if (EVENTOS_DE_CAPTURA.has(evento.event_type)) {
+      // Nunca null: um evento assinado que não sabemos ler vira 200 "ignorar",
+      // não 400 — 400 faz o PayPal reenviar por dias.
+      const orderId = evento.resource?.custom_id ?? "";
+      const paypalOrderId = evento.resource?.supplementary_data?.related_ids?.order_id ?? null;
+      const captura = capturaDoEvento(evento);
+      if (!orderId && !paypalOrderId && !captura) {
+        return { orderId: "", transactionId: null, invoiceSlug: null, eventId: evento.id, kind: "ignorar" };
+      }
+      return {
+        orderId,
+        transactionId: paypalOrderId,
+        // Para o REFUNDED sem custom_id: a rota resolve o pedido pela captura.
+        invoiceSlug: captura,
+        eventId: evento.id,
+        kind: "captura_paypal",
+        eventoGateway: evento.event_type,
+      };
+    }
+
     return {
       orderId: evento.resource?.custom_id ?? "",
       transactionId: evento.resource?.id ?? null,
       invoiceSlug: null,
       eventId: evento.id,
       kind: "ignorar",
+    };
+  }
+
+  /**
+   * Estado REAL da captura de uma ordem, lido do PayPal (nunca do aviso).
+   * Confere que a ordem é deste pedido antes de responder.
+   */
+  async estadoCaptura(
+    paypalOrderId: string,
+    pedidoId: string,
+    opcoes?: { timeoutMs?: number }
+  ): Promise<EstadoCapturaPayPal> {
+    const ordem = await this.buscarOrdem(
+      paypalOrderId,
+      opcoes?.timeoutMs ? AbortSignal.timeout(opcoes.timeoutMs) : undefined
+    );
+    if (ordem.purchase_units?.[0]?.custom_id !== pedidoId) return { estado: "outro_pedido" };
+    if (ordem.status === "APPROVED") return { estado: "aprovada_sem_captura" };
+    const captura = ordem.purchase_units?.[0]?.payments?.captures?.[0];
+    if (!captura?.status) return { estado: "sem_captura", statusOrdem: ordem.status ?? null };
+    const motivo = captura.status_details?.reason ?? null;
+    switch (captura.status) {
+      case "COMPLETED":
+        return { estado: "concluida" };
+      case "PENDING":
+        return { estado: "pendente", motivo };
+      case "DECLINED":
+      case "FAILED":
+        return { estado: "recusada", motivo };
+      case "REFUNDED":
+        return { estado: "reembolsada" };
+      case "PARTIALLY_REFUNDED":
+        return { estado: "parcialmente_reembolsada" };
+      case "REVERSED":
+        return { estado: "estornada", motivo: captura.status };
+      default:
+        // Status que o PayPal venha a criar: não mexe no pedido, só avisa.
+        return { estado: "desconhecida", status: captura.status };
+    }
+  }
+
+  /** Pedido e ordem de uma captura (GET /v2/payments/captures/{id}). */
+  async pedidoDaCaptura(captureId: string): Promise<{ orderId: string | null; paypalOrderId: string | null }> {
+    const res = await this.chamar(`/v2/payments/captures/${encodeURIComponent(captureId)}`);
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[paypal] retrieve da captura falhou", res.status, detalhe.slice(0, 300));
+      throw new Error("Não foi possível ler a captura no PayPal.");
+    }
+    const c = (await res.json()) as {
+      custom_id?: string;
+      supplementary_data?: { related_ids?: { order_id?: string } };
+    };
+    return {
+      orderId: c.custom_id ?? null,
+      paypalOrderId: c.supplementary_data?.related_ids?.order_id ?? null,
     };
   }
 
@@ -485,8 +600,8 @@ export class PayPalProvider implements PaymentProvider {
     return { ok: true };
   }
 
-  private async buscarOrdem(orderId: string): Promise<OrdemPayPal> {
-    const res = await this.chamar(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
+  private async buscarOrdem(orderId: string, signal?: AbortSignal): Promise<OrdemPayPal> {
+    const res = await this.chamar(`/v2/checkout/orders/${encodeURIComponent(orderId)}`, signal ? { signal } : undefined);
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
       console.error("[paypal] retrieve da order falhou", res.status, detalhe.slice(0, 300));

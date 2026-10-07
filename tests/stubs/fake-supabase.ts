@@ -60,6 +60,7 @@ type Operacao = "select" | "insert" | "update" | "delete";
 
 class Consulta {
   private filtros: Filtro[] = [];
+  private negados: Filtro[] = [];
   private operacao: Operacao = "select";
   private patch: Linha | null = null;
   private paraInserir: Linha[] = [];
@@ -104,6 +105,13 @@ class Consulta {
     return this;
   }
 
+  /** Só o `not(coluna, "is", null)` que o código usa: "coluna preenchida". */
+  not(coluna: string, operador: string, valor: unknown) {
+    if (operador !== "is") throw new Error(`FakeSupabase: not(${operador}) não emulado`);
+    this.negados.push({ coluna, valor });
+    return this;
+  }
+
   order(_coluna: string, _opcoes?: unknown) {
     return this;
   }
@@ -115,7 +123,8 @@ class Consulta {
 
   private casam(): Linha[] {
     const achadas = this.linhas.filter((l) =>
-      this.filtros.every((f) => l[f.coluna] === f.valor)
+      this.filtros.every((f) => l[f.coluna] === f.valor) &&
+        this.negados.every((f) => (l[f.coluna] ?? null) !== f.valor)
     );
     return this.limite != null ? achadas.slice(0, this.limite) : achadas;
   }

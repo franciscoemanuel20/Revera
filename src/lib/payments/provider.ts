@@ -129,7 +129,14 @@ export interface PaymentResult {
  * "ignorar" registra o evento (auditoria + idempotência) e para — para os
  * muitos eventos que um gateway manda e não mudam pedido nenhum.
  */
-export type TipoDeAviso = "pagamento" | "reembolso" | "ignorar" | "checkout_expirado" | "checkout_falhou";
+export type TipoDeAviso =
+  | "pagamento"
+  | "reembolso"
+  | "ignorar"
+  | "checkout_expirado"
+  | "checkout_falhou"
+  /** PayPal: captura retida/recusada/reembolsada/estornada — reavaliar no gateway. */
+  | "captura_paypal";
 
 /** Superfície mínima dos cabeçalhos HTTP que um adapter pode precisar ler. */
 export interface CabecalhosWebhook {
@@ -158,6 +165,8 @@ export interface WebhookHint {
    * histórico — os adapters antigos não precisam mudar.
    */
   kind?: TipoDeAviso;
+  /** Tipo do evento no gateway (ex.: PAYMENT.CAPTURE.REVERSED), quando importa. */
+  eventoGateway?: string | null;
 }
 
 /** Resultado de uma verificação ATIVA junto ao gateway. É isto que vale. */

@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/conversoes",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/paypal-conciliacao",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
