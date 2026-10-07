@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { PaginaLegal } from "./PaginaLegal";
 import type { SiteLocale } from "@/lib/i18n/site";
+import { localizePath } from "@/lib/i18n/site";
+import { controlador } from "./PaginasLegaisUE";
 
 type LegalCopy = { title: string; updated: string; intro: string; sections: Array<{ title: string; body: ReactNode }> };
 
@@ -89,8 +91,24 @@ const COPY: Record<Exclude<SiteLocale, "pt">, Record<"privacidade" | "termos" | 
   },
 };
 
+const DEVOLUCAO: Record<Exclude<SiteLocale, "pt">, [string, string, string]> = {
+  en: ["Returns and withdrawal", "You may withdraw from a purchase within 14 days. See how in our", "returns page"],
+  es: ["Devoluciones y desistimiento", "Puedes desistir de una compra en 14 días. Consulta cómo en nuestra", "página de devoluciones"],
+  fr: ["Retours et rétractation", "Vous pouvez vous rétracter dans un délai de 14 jours. Voir la", "page retours"],
+  de: ["Widerruf und Rückgabe", "Sie können einen Kauf binnen 14 Tagen widerrufen. Einzelheiten in unserer", "Widerrufsbelehrung"],
+};
+
 export function LocalizedLegalPage({ locale, page }: { locale: Exclude<SiteLocale, "pt">; page: "privacidade" | "termos" | "cookies" }) {
   const copy = COPY[locale][page];
-  return <PaginaLegal titulo={copy.title} atualizadoEm={copy.updated}>{copy.intro && <p>{copy.intro}</p>}{copy.sections.map((section) => <section key={section.title}><h2 className="font-display text-2xl text-ink">{section.title}</h2><div className="mt-3 space-y-3">{section.body}</div></section>)}</PaginaLegal>;
+  const extras: Array<{ title: string; body: ReactNode }> = [];
+  if (page === "privacidade") {
+    const c = controlador(locale);
+    extras.push({ title: c.titulo, body: c.corpo });
+  }
+  if (page === "termos") {
+    const [t, frase, rotulo] = DEVOLUCAO[locale];
+    extras.push({ title: t, body: <p>{frase} <a className="underline hover:text-ink" href={localizePath("/devolucao", locale)}>{rotulo}</a>.</p> });
+  }
+  const secoes = [...copy.sections, ...extras];
+  return <PaginaLegal titulo={copy.title} atualizadoEm={copy.updated} locale={locale}>{copy.intro && <p>{copy.intro}</p>}{secoes.map((section) => <section key={section.title}><h2 className="font-display text-2xl text-ink">{section.title}</h2><div className="mt-3 space-y-3">{section.body}</div></section>)}</PaginaLegal>;
 }
-

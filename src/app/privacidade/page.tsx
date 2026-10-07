@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { PaginaLegal } from "@/components/legal/PaginaLegal";
+import { controlador } from "@/components/legal/PaginasLegaisUE";
 
 export const metadata: Metadata = { title: "Política de Privacidade" };
 
@@ -30,8 +31,8 @@ export default function PrivacidadePage() {
       </Secao>
       <Secao titulo="Seus direitos e contato">
         <p>Você pode solicitar confirmação de tratamento, acesso, correção, anonimização, eliminação quando cabível, informação sobre compartilhamentos ou revisão de consentimento. Para isso, fale com a equipe pelo WhatsApp <a className="underline hover:text-ink" href="https://wa.me/5512981409901?text=Olá%2C%20preciso%20de%20ajuda%20sobre%20meus%20dados%20pessoais.">+55 12 98140-9901</a>.</p>
-        <p>Identificação do controlador (razão social, CNPJ e endereço): <strong>pendente de confirmação jurídica e cadastral antes da revisão final desta política.</strong></p>
       </Secao>
+      <Secao titulo={controlador("pt").titulo}>{controlador("pt").corpo}</Secao>
     </PaginaLegal>
   );
 }

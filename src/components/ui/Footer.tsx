@@ -54,6 +54,8 @@ const GRUPOS_DE_LINKS = [
       { href: "/privacidade", label: "Privacidade" },
       { href: "/termos", label: "Termos de uso" },
       { href: "/cookies", label: "Cookies" },
+      { href: "/devolucao", label: "Devolução" },
+      { href: "/aviso-legal", label: "Aviso legal" },
     ],
   },
 ];
