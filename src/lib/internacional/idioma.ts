@@ -105,6 +105,9 @@ export interface Dicionario {
   pedidoAguardando: string;
   pedidoTextoPago: string;
   pedidoTextoAguardando: string;
+  /** PayPal recebeu, mas segurou a cobrança (aceite manual, análise). */
+  pedidoEmConfirmacao: string;
+  pedidoTextoEmConfirmacao: string;
   pedidoTextoEstornado: string;
   pedidoPassoRecebido: string;
   pedidoPassoPago: string;
@@ -217,6 +220,8 @@ const PT: Dicionario = {
   pedidoAguardando: "Aguardando pagamento",
   pedidoTextoPago: "Recebemos seu pedido e já estamos cuidando dele.",
   pedidoTextoAguardando: "Assim que o pagamento for identificado, esta página se atualiza.",
+  pedidoEmConfirmacao: "Pagamento recebido, em confirmação",
+  pedidoTextoEmConfirmacao: "O PayPal recebeu o seu pagamento e está concluindo a confirmação. Não é preciso pagar de novo — esta página se atualiza sozinha.",
   pedidoTextoEstornado: "O valor deste pedido foi devolvido. Qualquer dúvida, fale com a gente.",
   pedidoPassoRecebido: "Pedido recebido",
   pedidoPassoPago: "Pagamento confirmado",
@@ -338,6 +343,8 @@ const EN: Dicionario = {
   pedidoAguardando: "Awaiting payment",
   pedidoTextoPago: "We have received your order and we are already working on it.",
   pedidoTextoAguardando: "This page updates as soon as the payment is confirmed.",
+  pedidoEmConfirmacao: "Payment received, being confirmed",
+  pedidoTextoEmConfirmacao: "PayPal has received your payment and is finishing the confirmation. You don't need to pay again — this page updates automatically.",
   pedidoTextoEstornado:
     "This order has been refunded. If you have any question, get in touch with us.",
   pedidoPassoRecebido: "Order received",
@@ -476,6 +483,8 @@ const ES: Dicionario = {
   pedidoAguardando: "Pago pendiente",
   pedidoTextoPago: "Hemos recibido tu pedido y ya nos estamos ocupando de él.",
   pedidoTextoAguardando: "Esta página se actualiza en cuanto se confirme el pago.",
+  pedidoEmConfirmacao: "Pago recibido, en confirmación",
+  pedidoTextoEmConfirmacao: "PayPal recibió tu pago y está terminando la confirmación. No hace falta pagar de nuevo: esta página se actualiza sola.",
   pedidoTextoEstornado:
     "El importe de este pedido ha sido devuelto. Si tienes cualquier duda, escríbenos.",
   pedidoPassoRecebido: "Pedido recibido",
@@ -559,6 +568,8 @@ const FR: Dicionario = {
   pedidoTituloAba: "Votre commande — Reverá", pedidoPago: "Paiement confirmé", pedidoEstornado: "Paiement remboursé", pedidoAguardando: "Paiement en attente",
   pedidoTextoPago: "Nous avons reçu votre commande et nous nous en occupons déjà.",
   pedidoTextoAguardando: "Cette page sera mise à jour dès que le paiement sera confirmé.",
+  pedidoEmConfirmacao: "Paiement reçu, en cours de confirmation",
+  pedidoTextoEmConfirmacao: "PayPal a reçu votre paiement et termine la confirmation. Inutile de payer à nouveau : cette page se met à jour automatiquement.",
   pedidoTextoEstornado: "Cette commande a été remboursée. Contactez-nous si vous avez une question.",
   pedidoPassoRecebido: "Commande reçue", pedidoPassoPago: "Paiement confirmé", pedidoPassoPreparando: "Préparation", pedidoPassoEtiqueta: "Étiquette prête", pedidoPassoEnviado: "Expédiée", pedidoPassoEntregue: "Livrée", pedidoRastreamento: "Suivi",
   pedidoNumero: (n) => `Commande ${n}`, pedidoCancelado: "Cette commande a été annulée.", pedidoItens: "Articles", pedidoSubtotal: "Sous-total", pedidoDesconto: "Remise", pedidoFrete: "Livraison", pedidoFreteACombinar: "à confirmer", pedidoTotal: "Total", pedidoEntrega: "Adresse de livraison",
@@ -585,7 +596,7 @@ const DE: Dicionario = {
   resumoRessalvaPrazo: "Die Laufzeit wird vom Versanddienstleister geschätzt und umfasst weder die Vorbereitung noch die Zollabfertigung. Für internationale Sendungen garantieren wir kein Lieferdatum.",
   aceiteObrigatorio: "Bitte stimmen Sie den internationalen Versandbedingungen zu.", botaoContinuar: "Weiter zur Zahlung", botaoEnviando: "Bestellung wird erstellt…",
   erroConfiraCampos: "Bitte prüfen Sie die markierten Felder.", erroNome: "Geben Sie Ihren vollständigen Namen ein.", erroEmail: "Ungültige E-Mail-Adresse.", erroTelefone: "Geben Sie Ihre Telefonnummer ein.", erroEnderecoObrigatorio: "Geben Sie Ihre Adresse ein.", erroCidadeObrigatoria: "Geben Sie Ihren Ort ein.", erroPostalObrigatorio: "Geben Sie Ihre Postleitzahl ein.", erroPostalInvalido: (r, e) => `${r} ungültig — Beispiel: ${e}.`, erroRegiaoObrigatoria: (r) => `Geben Sie ${r} ein.`, erroPaisNaoAtendido: "Wir liefern noch nicht in dieses Land.", erroEnderecoBrasileiro: "Eine brasilianische Adresse nutzt den brasilianischen Checkout.", erroPedidoEmAndamento: "Diese Bestellung wird bereits abgeschlossen. Warten Sie einen Moment und prüfen Sie Ihre E-Mail, bevor Sie es erneut versuchen.", erroRegistrarDados: "Ihre Angaben konnten nicht gespeichert werden. Versuchen Sie es erneut.", erroRegistrarEndereco: "Die Adresse konnte nicht gespeichert werden. Versuchen Sie es erneut.",
-  pedidoTituloAba: "Ihre Bestellung — Reverá", pedidoPago: "Zahlung bestätigt", pedidoEstornado: "Zahlung erstattet", pedidoAguardando: "Zahlung ausstehend", pedidoTextoPago: "Wir haben Ihre Bestellung erhalten und bearbeiten sie bereits.", pedidoTextoAguardando: "Diese Seite wird aktualisiert, sobald die Zahlung bestätigt ist.", pedidoTextoEstornado: "Diese Bestellung wurde erstattet. Kontaktieren Sie uns bei Fragen.", pedidoPassoRecebido: "Bestellung eingegangen", pedidoPassoPago: "Zahlung bestätigt", pedidoPassoPreparando: "In Vorbereitung", pedidoPassoEtiqueta: "Versandetikett erstellt", pedidoPassoEnviado: "Versandt", pedidoPassoEntregue: "Zugestellt", pedidoRastreamento: "Sendungsverfolgung", pedidoNumero: (n) => `Bestellung ${n}`, pedidoCancelado: "Diese Bestellung wurde storniert.", pedidoItens: "Artikel", pedidoSubtotal: "Zwischensumme", pedidoDesconto: "Rabatt", pedidoFrete: "Versand", pedidoFreteACombinar: "wird bestätigt", pedidoTotal: "Gesamt", pedidoEntrega: "Lieferadresse",
+  pedidoTituloAba: "Ihre Bestellung — Reverá", pedidoPago: "Zahlung bestätigt", pedidoEstornado: "Zahlung erstattet", pedidoAguardando: "Zahlung ausstehend", pedidoTextoPago: "Wir haben Ihre Bestellung erhalten und bearbeiten sie bereits.", pedidoTextoAguardando: "Diese Seite wird aktualisiert, sobald die Zahlung bestätigt ist.", pedidoEmConfirmacao: "Zahlung erhalten, wird bestätigt", pedidoTextoEmConfirmacao: "PayPal hat Ihre Zahlung erhalten und schließt die Bestätigung ab. Sie müssen nicht erneut bezahlen – diese Seite aktualisiert sich automatisch.", pedidoTextoEstornado: "Diese Bestellung wurde erstattet. Kontaktieren Sie uns bei Fragen.", pedidoPassoRecebido: "Bestellung eingegangen", pedidoPassoPago: "Zahlung bestätigt", pedidoPassoPreparando: "In Vorbereitung", pedidoPassoEtiqueta: "Versandetikett erstellt", pedidoPassoEnviado: "Versandt", pedidoPassoEntregue: "Zugestellt", pedidoRastreamento: "Sendungsverfolgung", pedidoNumero: (n) => `Bestellung ${n}`, pedidoCancelado: "Diese Bestellung wurde storniert.", pedidoItens: "Artikel", pedidoSubtotal: "Zwischensumme", pedidoDesconto: "Rabatt", pedidoFrete: "Versand", pedidoFreteACombinar: "wird bestätigt", pedidoTotal: "Gesamt", pedidoEntrega: "Lieferadresse",
   suporteTitulo: "Haben Sie Fragen?", suporteTexto: "Kontaktieren Sie unser Team zu dieser Bestellung — wir antworten während der brasilianischen Geschäftszeiten.", suporteBotao: (n) => `Frage zu Bestellung ${n}`, suporteMensagem: (n) => `Hallo! Ich habe eine Frage zu Bestellung ${n}.`, recompraBotao: "Erneut bestellen", recompraMensagem: (n) => `Hallo! Ich habe Bestellung ${n} aufgegeben und möchte erneut bestellen.`, suporteTituloPendente: "Benötigen Sie Hilfe bei der Zahlung?", suporteTextoPendente: "Wenn die Zahlung nicht funktioniert hat oder Sie vor der Zahlung eine Frage haben, kontaktieren Sie unser Team — wir antworten während der brasilianischen Geschäftszeiten.", suporteBotaoPendente: "Über WhatsApp kontaktieren", suporteMensagemPendente: (n) => `Hallo! Ich benötige Hilfe bei der Zahlung für Bestellung ${n}.`, suporteTelefoneRotulo: "Support-Telefon",
 };
 

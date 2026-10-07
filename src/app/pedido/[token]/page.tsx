@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
 import { confirmarPagamento } from "@/lib/payments/confirmar";
+import { PayPalProvider } from "@/lib/payments/paypal-provider";
 import { consumirPurchaseParaNavegador } from "@/lib/tracking/purchase";
 import { formatarDinheiroParaComprador } from "@/lib/internacional/moeda";
 import { idiomaDoPais, localeDoPais } from "@/lib/internacional/paises";
@@ -99,6 +100,13 @@ export default async function PedidoPage({
   // O estado da tela "Aguardando pagamento": o pedido existe, o dinheiro
   // ainda não entrou, e nada deu errado a ponto de cancelar ou estornar.
   const aguardando = !pago && !estornado && status !== "canceled";
+  // O PayPal recebeu e segurou a cobrança (aceite manual de moeda, análise).
+  // Sem isto o cliente lia "Aguardando pagamento" depois de ter pago — e
+  // pagava de novo ou abria disputa (06/10/2026).
+  const emConfirmacao =
+    aguardando && (pedido.currency ?? "BRL") !== "BRL"
+      ? await capturaPayPalRetida(supabase, pedido.id as string)
+      : false;
 
   const [{ data: itens }, { data: endereco }, { data: envio }] = await Promise.all([
     supabase
@@ -170,14 +178,22 @@ export default async function PedidoPage({
       <header className="flex flex-col gap-2 text-center">
         <span className="eyebrow-ink">{t.pedidoNumero(pedido.order_number as string)}</span>
         <h1 className="font-display text-3xl text-ink">
-          {estornado ? t.pedidoEstornado : pago ? t.pedidoPago : t.pedidoAguardando}
+          {estornado
+            ? t.pedidoEstornado
+            : pago
+              ? t.pedidoPago
+              : emConfirmacao
+                ? t.pedidoEmConfirmacao
+                : t.pedidoAguardando}
         </h1>
         <p className="text-ink/70">
           {estornado
             ? t.pedidoTextoEstornado
             : pago
               ? t.pedidoTextoPago
-              : t.pedidoTextoAguardando}
+              : emConfirmacao
+                ? t.pedidoTextoEmConfirmacao
+                : t.pedidoTextoAguardando}
         </p>
       </header>
 
@@ -307,4 +323,32 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
       <dd className="tabular-nums">{valor}</dd>
     </div>
   );
+}
+
+/**
+ * A captura PayPal deste pedido está retida? Pergunta ao PayPal (nada é
+ * gravado: o campo de verificação de payments é lido pela trava de pedido
+ * pago e não pode receber marcador). Qualquer falha responde false, e a
+ * página mostra o "Aguardando pagamento" de sempre.
+ */
+async function capturaPayPalRetida(
+  supabase: ReturnType<typeof createAdminClient>,
+  orderId: string
+): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("payments")
+      .select("provider_payment_id")
+      .eq("order_id", orderId)
+      .eq("provider", "paypal")
+      .not("provider_payment_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data?.provider_payment_id) return false;
+    const estado = await new PayPalProvider().estadoCaptura(data.provider_payment_id as string, orderId);
+    return estado.estado === "pendente";
+  } catch {
+    return false;
+  }
 }

@@ -11,6 +11,7 @@ import { confirmarPagamento, registrarReembolso } from "@/lib/payments/confirmar
 import type { PaymentProvider, WebhookHint } from "@/lib/payments/provider";
 import { segredoConfere } from "@/lib/payments/webhook-url";
 import { enviarEmailOperacional } from "@/lib/notificacoes/email-operacional";
+import { reavaliarCapturaPayPal } from "@/lib/payments/paypal-captura";
 
 /**
  * PORTA 1 de confirmação de pagamento: o aviso do gateway.
@@ -153,6 +154,30 @@ export async function POST(
       .eq("provider", provider.name)
       .eq("provider_event_id", hint.eventId);
     return NextResponse.json({ ok: true, reembolso: resultado });
+  }
+
+  if (hint.kind === "captura_paypal") {
+    // Retida, recusada, reembolsada ou estornada: o aviso só aponta o
+    // pedido; reavaliarCapturaPayPal() pergunta ao PayPal o estado real.
+    const resultado = await reavaliarCapturaPayPal(hint.orderId, {
+      eventId: hint.eventId,
+      paypalOrderId: hint.transactionId,
+    });
+    if (resultado.estado === "indisponivel") {
+      // Sem resposta do PayPal: apaga o evento para o reenvio ser processado.
+      await supabase
+        .from("payment_events")
+        .delete()
+        .eq("provider", provider.name)
+        .eq("provider_event_id", hint.eventId);
+      return NextResponse.json({ erro: resultado.motivo }, { status: 503 });
+    }
+    await supabase
+      .from("payment_events")
+      .update({ processed_at: new Date().toISOString() })
+      .eq("provider", provider.name)
+      .eq("provider_event_id", hint.eventId);
+    return NextResponse.json({ ok: true, captura: resultado.estado });
   }
 
   if (hint.kind === "checkout_expirado") {

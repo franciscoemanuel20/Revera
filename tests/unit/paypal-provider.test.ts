@@ -443,4 +443,56 @@ describe("PayPalProvider", () => {
     });
     expect(requestId).toBe(ORDER);
   });
+
+  describe("eventos de captura e estado real (06/10/2026)", () => {
+    it("PENDING/DENIED/REFUNDED/REVERSED viram captura_paypal com o pedido do custom_id", async () => {
+      const p = await provider();
+      for (const tipo of ["PAYMENT.CAPTURE.PENDING", "PAYMENT.CAPTURE.DENIED", "PAYMENT.CAPTURE.REFUNDED", "PAYMENT.CAPTURE.REVERSED"]) {
+        const hint = p.parseWebhookHint(JSON.stringify({
+          id: `WH-${tipo}`,
+          event_type: tipo,
+          resource: { id: "CAP-1", custom_id: ORDER, supplementary_data: { related_ids: { order_id: "PAYPAL-ORDER-1" } } },
+        }));
+        expect(hint).toMatchObject({ kind: "captura_paypal", orderId: ORDER, transactionId: "PAYPAL-ORDER-1" });
+      }
+    });
+
+    it("evento qualquer continua ignorado", async () => {
+      const p = await provider();
+      const hint = p.parseWebhookHint(JSON.stringify({ id: "WH-X", event_type: "CUSTOMER.DISPUTE.CREATED", resource: {} }));
+      expect(hint?.kind).toBe("ignorar");
+    });
+
+    it("estadoCaptura lê o status e o motivo da captura", async () => {
+      const casos: Array<[string, string | null, unknown]> = [
+        ["COMPLETED", null, { estado: "concluida" }],
+        ["PENDING", "RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION", { estado: "pendente", motivo: "RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION" }],
+        ["DECLINED", null, { estado: "recusada", motivo: null }],
+        ["REFUNDED", null, { estado: "reembolsada" }],
+        ["PARTIALLY_REFUNDED", null, { estado: "parcialmente_reembolsada" }],
+        ["REVERSED", null, { estado: "estornada", motivo: "REVERSED" }],
+      ];
+      for (const [status, motivo, esperado] of casos) {
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+          if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+          return Response.json({
+            id: "PAYPAL-ORDER-1",
+            status: "COMPLETED",
+            purchase_units: [{ custom_id: ORDER, payments: { captures: [{ id: "CAP-1", status, status_details: motivo ? { reason: motivo } : null }] } }],
+          });
+        }));
+        const p = await provider();
+        await expect(p.estadoCaptura("PAYPAL-ORDER-1", ORDER)).resolves.toEqual(esperado);
+      }
+    });
+
+    it("estadoCaptura recusa ordem de outro pedido", async () => {
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        return Response.json({ id: "PAYPAL-ORDER-1", status: "COMPLETED", purchase_units: [{ custom_id: "outro", payments: { captures: [{ status: "COMPLETED" }] } }] });
+      }));
+      const p = await provider();
+      await expect(p.estadoCaptura("PAYPAL-ORDER-1", ORDER)).resolves.toEqual({ estado: "outro_pedido" });
+    });
+  });
 });
