@@ -235,7 +235,7 @@ async function enviarReservada(supabase: Supa, orderId: string): Promise<boolean
       pais: linha?.country ?? "BR",
       nome: (cliente?.full_name as string | null) ?? "",
       itens: (itens ?? []) as Linha[],
-      endereco: dominio ? formatarEndereco(dominio) : [],
+      endereco: dominio ? formatarEndereco(dominio, idiomaDoPais(linha?.country ?? "BR")) : [],
       base: baseUrl(),
     });
 
