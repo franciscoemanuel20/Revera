@@ -17,6 +17,7 @@ import { BotaoEtiqueta } from "../BotaoEtiqueta";
 import { BotaoImprimirEtiqueta } from "../BotaoImprimirEtiqueta";
 import { LiberarReservaButton } from "../LiberarReservaButton";
 import { ChecklistExportacao } from "../ChecklistExportacao";
+import { RegistrarEnvioDhl } from "../RegistrarEnvioDhl";
 import {
   derivarExportStatus,
   montarChecklist,
@@ -403,13 +404,14 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
       <section className="flex flex-col gap-3 print:hidden">
         <h2 className="font-display text-lg text-ink">Ações</h2>
         {pedidoInternacional ? (
-          <div className="rounded-md border border-sand bg-sand/40 p-3 text-sm text-ink/70">
-            <p className="font-medium text-ink">Envio internacional</p>
-            <p>
-              DHL — <strong>não configurado</strong>. A etiqueta da SuperFrete é só nacional
-              e não atende este destino.
-            </p>
-          </div>
+          paymentStatus === "paid" && !canceladoEm ? (
+            <RegistrarEnvioDhl orderId={pedido.id} guiaRegistrada={envio?.tracking_code ?? null} />
+          ) : (
+            <div className="rounded-md border border-sand bg-sand/40 p-3 text-sm text-ink/70">
+              <p className="font-medium text-ink">Envio internacional — DHL</p>
+              <p>A guia DHL só é registrada depois que o pedido estiver pago.</p>
+            </div>
+          )
         ) : (
           <BotaoEtiqueta
             orderId={pedido.id}

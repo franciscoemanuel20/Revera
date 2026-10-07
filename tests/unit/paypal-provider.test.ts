@@ -325,4 +325,69 @@ describe("PayPalProvider", () => {
       expect(corpo.payment_source.paypal.experience_context.shipping_preference).toBe("NO_SHIPPING");
     });
   });
+
+  describe("adicionarRastreio (rastreio DHL no PayPal, 06/10/2026)", () => {
+    function ordem(customId: string, status = "COMPLETED", captura = "COMPLETED") {
+      return Response.json({
+        id: "PAYPAL-ORDER-1",
+        status,
+        purchase_units: [{ custom_id: customId, payments: { captures: [{ id: "CAPTURE-1", status: captura }] } }],
+      });
+    }
+
+    it("manda o rastreio ligado à captura concluída, sem avisar o comprador", async () => {
+      let corpo: any;
+      let urlTrack = "";
+      const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        if (url.endsWith("/track")) {
+          urlTrack = url;
+          corpo = JSON.parse(String(init?.body));
+          return Response.json({ id: "PAYPAL-ORDER-1" }, { status: 201 });
+        }
+        return ordem(ORDER);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const p = await provider();
+      await expect(p.adicionarRastreio("PAYPAL-ORDER-1", ORDER, "1234567890")).resolves.toEqual({ ok: true });
+      expect(urlTrack).toContain("/v2/checkout/orders/PAYPAL-ORDER-1/track");
+      expect(corpo).toEqual({ capture_id: "CAPTURE-1", tracking_number: "1234567890", carrier: "DHL", notify_payer: false });
+    });
+
+    it("não escreve rastreio em ordem de outro pedido", async () => {
+      const fetchMock = vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        if (url.endsWith("/track")) throw new Error("não devia chamar /track");
+        return ordem("outro-pedido");
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const p = await provider();
+      await expect(p.adicionarRastreio("PAYPAL-ORDER-1", ORDER, "1234567890")).resolves.toMatchObject({ ok: false });
+    });
+
+    it("não escreve rastreio enquanto a captura está pendente", async () => {
+      const fetchMock = vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        if (url.endsWith("/track")) throw new Error("não devia chamar /track");
+        return ordem(ORDER, "COMPLETED", "PENDING");
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const p = await provider();
+      await expect(p.adicionarRastreio("PAYPAL-ORDER-1", ORDER, "1234567890")).resolves.toMatchObject({ ok: false });
+    });
+
+    it("recusa do PayPal vira resultado, não exceção", async () => {
+      const fetchMock = vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        if (url.endsWith("/track")) return new Response("{}", { status: 422 });
+        return ordem(ORDER);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const p = await provider();
+      await expect(p.adicionarRastreio("PAYPAL-ORDER-1", ORDER, "1234567890")).resolves.toEqual({
+        ok: false,
+        motivo: "O PayPal recusou o rastreio (HTTP 422).",
+      });
+    });
+  });
 });

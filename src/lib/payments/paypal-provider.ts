@@ -418,6 +418,54 @@ export class PayPalProvider implements PaymentProvider {
     };
   }
 
+  /**
+   * Informa ao PayPal o rastreio DHL de uma ordem já paga.
+   *
+   * Por que existe (06/10/2026): a primeira venda internacional ficou com o
+   * saldo "ainda não disponível" (retenção de vendedor novo). O PayPal libera
+   * mais cedo quando a transação tem rastreio, e numa disputa de "não
+   * recebi" o rastreio é a prova da entrega.
+   *
+   * Confere que a ordem pertence ao pedido (custom_id) antes de escrever:
+   * um ID trocado não pode carimbar rastreio na venda de outro cliente.
+   * `notify_payer: false` — quem avisa o cliente é a Reverá, uma vez só.
+   */
+  async adicionarRastreio(
+    paypalOrderId: string,
+    pedidoId: string,
+    numeroRastreio: string
+  ): Promise<{ ok: true } | { ok: false; motivo: string }> {
+    const ordem = await this.buscarOrdem(paypalOrderId);
+    if (ordem.purchase_units?.[0]?.custom_id !== pedidoId) {
+      return { ok: false, motivo: "A ordem PayPal não pertence a este pedido." };
+    }
+    const captura = ordem.purchase_units?.[0]?.payments?.captures?.find(
+      (c) => c.status === "COMPLETED"
+    );
+    if (ordem.status !== "COMPLETED" || !captura?.id) {
+      return { ok: false, motivo: "O pagamento ainda não está concluído no PayPal." };
+    }
+    const res = await this.chamar(
+      `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/track`,
+      {
+        method: "POST",
+        requestId: `track-${paypalOrderId}-${numeroRastreio}`,
+        body: {
+          capture_id: captura.id,
+          tracking_number: numeroRastreio,
+          carrier: "DHL",
+          notify_payer: false,
+        },
+      }
+    );
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[paypal] rastreio recusado", res.status, detalhe.slice(0, 300));
+      return { ok: false, motivo: `O PayPal recusou o rastreio (HTTP ${res.status}).` };
+    }
+    return { ok: true };
+  }
+
   private async buscarOrdem(orderId: string): Promise<OrdemPayPal> {
     const res = await this.chamar(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
     if (!res.ok) {
