@@ -283,7 +283,7 @@ export default async function PedidoPage({
             {(() => {
               const dominio = daLinha(endereco as unknown as LinhaEndereco, "");
               const linhas = dominio
-                ? formatarEndereco(dominio)
+                ? formatarEndereco(dominio, idioma)
                 : [endereco.recipient_name as string];
               return linhas.map((linha, i) => (
                 <span key={i}>
