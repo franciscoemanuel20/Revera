@@ -78,6 +78,17 @@ function campo(valor: string | null | undefined, max: number): string | undefine
 }
 
 /**
+ * A ordem já tem o rastreio desta guia? O PayPal identifica o tracker como
+ * "<captura>-<número>"; um tracker cancelado não conta.
+ */
+function jaTemRastreio(ordem: OrdemPayPal, capturaId: string, numero: string): boolean {
+  const esperado = `${capturaId}-${numero}`;
+  return (ordem.purchase_units?.[0]?.shipping?.trackers ?? []).some(
+    (t) => t.id === esperado && t.status !== "CANCELLED"
+  );
+}
+
+/**
  * Endereço de entrega no formato do Orders v2, ou null quando falta algo.
  *
  * Por que existe (06/10/2026): a ordem era criada com NO_SHIPPING e sem
@@ -91,17 +102,6 @@ function campo(valor: string | null | undefined, max: number): string | undefine
  * cliente não pagaria nada. Perder a proteção num caso raro é melhor que
  * perder a venda.
  */
-/**
- * A ordem já tem o rastreio desta guia? O PayPal identifica o tracker como
- * "<captura>-<número>"; um tracker cancelado não conta.
- */
-function jaTemRastreio(ordem: OrdemPayPal, capturaId: string, numero: string): boolean {
-  const esperado = `${capturaId}-${numero}`;
-  return (ordem.purchase_units?.[0]?.shipping?.trackers ?? []).some(
-    (t) => t.id === esperado && t.status !== "CANCELLED"
-  );
-}
-
 export function enderecoEntregaPayPal(
   endereco: PaymentCharge["shippingAddress"]
 ): Record<string, unknown> | null {
@@ -242,8 +242,18 @@ export class PayPalProvider implements PaymentProvider {
     return json.access_token;
   }
 
-  private async chamar(caminho: string, init?: { method?: string; body?: unknown; signal?: AbortSignal; requestId?: string }) {
-    const token = await this.accessToken(init?.signal);
+  private async chamar(
+    caminho: string,
+    init?: {
+      method?: string;
+      body?: unknown;
+      signal?: AbortSignal;
+      requestId?: string;
+      /** Só consultas: o token entra no mesmo prazo. A criação da cobrança não usa. */
+      tokenNoMesmoPrazo?: boolean;
+    }
+  ) {
+    const token = await this.accessToken(init?.tokenNoMesmoPrazo ? init.signal : undefined);
     return fetch(`${apiBase()}${caminho}`, {
       method: init?.method ?? "GET",
       headers: {
@@ -627,7 +637,10 @@ export class PayPalProvider implements PaymentProvider {
   }
 
   private async buscarOrdem(orderId: string, signal?: AbortSignal): Promise<OrdemPayPal> {
-    const res = await this.chamar(`/v2/checkout/orders/${encodeURIComponent(orderId)}`, signal ? { signal } : undefined);
+    const res = await this.chamar(
+      `/v2/checkout/orders/${encodeURIComponent(orderId)}`,
+      signal ? { signal, tokenNoMesmoPrazo: true } : undefined
+    );
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
       console.error("[paypal] retrieve da order falhou", res.status, detalhe.slice(0, 300));
