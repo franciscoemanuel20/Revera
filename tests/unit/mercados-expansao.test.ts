@@ -6,6 +6,8 @@ import { StripeProvider, urlCheckoutStripeSegura } from "@/lib/payments/stripe-p
 import { precoProtegido, destinoReveraValido, variantePrecificavel } from "../../scripts/precificar-mercados.mjs";
 
 const resposta = vi.hoisted(() => ({
+  quoteEnvironment: "producao" as "sandbox" | "producao",
+  quoteSource: "mydhl-production",
   variantes: {
     data: [
       { id: "v1", price_cents: 65000, stock_qty: 10 },
@@ -22,7 +24,7 @@ vi.mock("@/lib/supabase/server", () => ({createAdminClient: () => ({from: (table
   const q = { select: () => q, eq: (key: string, value: string) => { if(key === "id") id=value; return q; }, gt: (key: string, value: number) => { filtrosGt.push([key, value]); return q; },
     lte:()=>q,gte:()=>q,order:()=>q,limit:()=>q,
     maybeSingle:async()=>({data:table === "shipping_quotes"
-      ? {id:"quote-1",order_id:"pedido-1",carrier:"DHL",price_cents:6600,service_name:"Express",eta_days:4,created_at:new Date().toISOString(),raw_response:{source:"mydhl-production",environment:"producao",country:"US",currency:"USD",product_code:"8",service_name:"Express",eta_days:4,delivery_date:null,quoted_at:new Date().toISOString()}}
+      ? {id:"quote-1",order_id:"pedido-1",carrier:"DHL",price_cents:6600,service_name:"Express",eta_days:4,created_at:new Date().toISOString(),raw_response:{source:resposta.quoteSource,environment:resposta.quoteEnvironment,country:"US",currency:"USD",product_code:"8",service_name:"Express",eta_days:4,delivery_date:null,quoted_at:new Date().toISOString()}}
       : {id:id??"cotacao-nova",carrier:"DHL",service_name:"Express",currency:"USD",price_cents:id?6600:6800,valid_until:"2026-10-02"},error:null}),
     then: (resolve: (x: unknown) => unknown) => {
       if (table !== "product_variants") return Promise.resolve(resolve(resposta.precos));
@@ -36,6 +38,8 @@ vi.mock("@/lib/supabase/server", () => ({createAdminClient: () => ({from: (table
 
 beforeEach(() => {
   vi.unstubAllEnvs(); vi.unstubAllGlobals();
+  resposta.quoteEnvironment = "producao";
+  resposta.quoteSource = "mydhl-production";
   resposta.variantes = {
     data: [
       { id: "v1", price_cents: 65000, stock_qty: 10 },
@@ -100,7 +104,8 @@ it("não toma consulta truncada como catálogo completo",async()=>{
 
 it("pedido só paga com recibo DHL ao vivo vinculado ao próprio pedido",async()=>{
   vi.stubEnv("CHECKOUT_PAISES","BR,US");
-  vi.stubEnv("STRIPE_SECRET_KEY","sk_test_fixture");vi.stubEnv("STRIPE_WEBHOOK_SECRET","whsec_fixture");
+  vi.stubEnv("VERCEL_ENV","production");
+  vi.stubEnv("STRIPE_SECRET_KEY","sk_live_fixture");vi.stubEnv("STRIPE_WEBHOOK_SECRET","whsec_fixture");
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({charges_enabled:true,payouts_enabled:true,capabilities:{card_payments:"active"}}))));
   const {pedidoInternacionalPagavel,cotacaoFreteInternacional} = await import("@/lib/internacional/mercado");
   expect((await cotacaoFreteInternacional("US","USD"))?.priceCents).toBe(6800);
@@ -109,6 +114,23 @@ it("pedido só paga com recibo DHL ao vivo vinculado ao próprio pedido",async()
   expect((await pedidoInternacionalPagavel("US","EUR","pedido-1",6600,"quote-1")).pagavel).toBe(false);
   expect((await pedidoInternacionalPagavel("US","USD","pedido-1",6800,"quote-1")).pagavel).toBe(false);
   expect((await pedidoInternacionalPagavel("US","USD","other-order",6600,"quote-1")).pagavel).toBe(false);
+});
+
+it("staging paga somente com recibo DHL sandbox autêntico", async () => {
+  vi.stubEnv("VERCEL_ENV", "preview");
+  vi.stubEnv("APP_ENV", "staging");
+  vi.stubEnv("CHECKOUT_PAISES", "BR,US");
+  vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_fixture");
+  vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_fixture");
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({charges_enabled:true,payouts_enabled:true,capabilities:{card_payments:"active"}}))));
+  const { pedidoInternacionalPagavel } = await import("@/lib/internacional/mercado");
+  resposta.quoteEnvironment = "sandbox";
+  resposta.quoteSource = "mydhl-sandbox";
+  expect((await pedidoInternacionalPagavel("US", "USD", "pedido-1", 6600, "quote-1")).pagavel).toBe(true);
+  resposta.quoteSource = "mydhl-production";
+  expect((await pedidoInternacionalPagavel("US", "USD", "pedido-1", 6600, "quote-1")).pagavel).toBe(false);
+  resposta.quoteEnvironment = "producao";
+  expect((await pedidoInternacionalPagavel("US", "USD", "pedido-1", 6600, "quote-1")).pagavel).toBe(false);
 });
 
 it("reserva 3 h para iniciar PayPal, a chamada do gateway e 3 h para a ordem expirar", async () => {

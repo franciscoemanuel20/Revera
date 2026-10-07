@@ -42,6 +42,7 @@ import {
   prontidaoDoMercado,
 } from "@/lib/internacional/mercado";
 import { ACEITE_INTERNACIONAL_VERSAO } from "@/lib/internacional/aceite";
+import { cotacaoDhlPermitida, origemCotacaoDhl } from "@/lib/internacional/ambiente-cotacao";
 import { idiomaDoPais } from "@/lib/internacional/paises";
 import { textos, type Idioma } from "@/lib/internacional/idioma";
 
@@ -275,8 +276,8 @@ export async function criarPedidoInternacionalAction(
   if (!frete || frete.priceCents <= 0) {
     return { erro: "A DHL não retornou um serviço de envio compatível para este endereço." };
   }
-  if (cotacaoDhl.ambiente !== "producao") {
-    console.error("[checkout-intl] cotação recusada fora da produção DHL");
+  if (!cotacaoDhlPermitida(cotacaoDhl.ambiente)) {
+    console.error("[checkout-intl] ambiente da cotação DHL incompatível com o checkout");
     return { erro: "O frete internacional está temporariamente indisponível para pagamento." };
   }
 
@@ -396,7 +397,7 @@ export async function criarPedidoInternacionalAction(
   }
 
   const reciboDhl = {
-    source: "mydhl-production",
+    source: origemCotacaoDhl(cotacaoDhl.ambiente),
     environment: cotacaoDhl.ambiente,
     country: endereco.endereco.pais,
     currency: mercado.moeda,

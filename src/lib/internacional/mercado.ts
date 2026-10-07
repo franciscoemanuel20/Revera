@@ -4,6 +4,7 @@ import { reveraInternationalCheckoutDisponivel } from "@/lib/payments/revera";
 import { ehMoedaSuportada, type Moeda } from "./moeda";
 import { paisesDoCheckout, regraDoPais } from "./paises";
 import { converterCentavosBrl, type CotacaoPtax } from "./cambio-ptax";
+import { cotacaoDhlPermitida, origemCotacaoDhl } from "./ambiente-cotacao";
 
 /**
  * Prontidão de um MERCADO internacional — a resposta honesta à pergunta
@@ -116,7 +117,9 @@ export async function pedidoInternacionalPagavel(
   }
   const raw = data.raw_response as Record<string, unknown> | null;
   const produtoDhl = raw?.product_code;
-  const reciboCoerente = raw?.source === "mydhl-production" && raw?.environment === "producao" &&
+  const ambienteDhl = raw?.environment;
+  const reciboCoerente = (ambienteDhl === "sandbox" || ambienteDhl === "producao") &&
+    cotacaoDhlPermitida(ambienteDhl) && raw?.source === origemCotacaoDhl(ambienteDhl) &&
     raw?.country === pais.toUpperCase() && raw?.currency === moeda &&
     (produtoDhl === "8" || produtoDhl === "P") &&
     typeof data.service_name === "string" && data.service_name.length > 0 &&

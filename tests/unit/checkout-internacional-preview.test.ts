@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   nomeServico: "Express Worldwide",
   prazoDias: 4,
   dataEntrega: "2026-10-09",
+  ambienteDhl: "producao" as "sandbox" | "producao",
   items: [{ variantId: "variant-fixture", quantity: 1, basePriceCents: 10000, productName: "Fixture", variantLabel: "Standard" }],
   redirect: vi.fn(),
 }));
@@ -55,7 +56,7 @@ vi.mock("@/lib/internacional/idioma", () => ({ textos: () => ({
 }) }));
 vi.mock("@/lib/internacional/cambio-ptax", () => ({ obterCotacaoPtax: vi.fn(async () => ({ moeda: "USD", reaisPorUnidade: 5, data: "2026-10-05", fonte: "fixture" })) }));
 vi.mock("@/lib/shipping/dhl/admin-quote", () => ({ cotarDhlOperacional: vi.fn(async () => ({
-  ambiente: "producao",
+  ambiente: state.ambienteDhl,
   quotes: [{ productCode: "8", currency: "USD", priceCents: state.tarifaDhl, productName: state.nomeServico, etaDays: state.prazoDias, deliveryDate: state.dataEntrega }],
 })) }));
 vi.mock("@/lib/notificacoes/email-operacional", () => ({ avisarPedidoPendentePorEmail: vi.fn(async () => ({ estado: "enviado" })) }));
@@ -74,9 +75,11 @@ describe("checkout internacional: cotação antes da criação do pedido", () =>
     state.nomeServico = "Express Worldwide";
     state.prazoDias = 4;
     state.dataEntrega = "2026-10-09";
+    state.ambienteDhl = "producao";
     state.items = [{ variantId: "variant-fixture", quantity: 1, basePriceCents: 10000, productName: "Fixture", variantLabel: "Standard" }];
     state.redirect.mockClear();
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role-key-fixture-not-a-secret-value");
+    vi.stubEnv("VERCEL_ENV", "production");
   });
 
   it("mostra subtotal, frete e total sem gravar pedido nem cobrança", async () => {
@@ -89,6 +92,16 @@ describe("checkout internacional: cotação antes da criação do pedido", () =>
     });
     expect(state.writes).toEqual([]);
     expect(state.redirect).not.toHaveBeenCalled();
+  });
+
+  it("mostra cotação DHL sandbox no staging deliberado", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("APP_ENV", "staging");
+    state.ambienteDhl = "sandbox";
+    const { criarPedidoInternacionalAction } = await import("@/app/checkout/actions-internacional");
+    const resultado = await criarPedidoInternacionalAction(payload);
+    expect(resultado.cotacao?.shippingCents).toBe(5000);
+    expect(state.writes).toEqual([]);
   });
 
   it("não avança quando o preço do frete muda na recotação", async () => {
