@@ -148,7 +148,9 @@ export default async function PagamentoPage({
     pedido.address_id
       ? supabase
           .from("addresses")
-          .select("street, number, complement, neighborhood, city, state, cep")
+          .select(
+            "street, number, complement, neighborhood, city, state, cep, recipient_name, line1, line2, region, postal_code, country"
+          )
           .eq("id", pedido.address_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -464,6 +466,20 @@ export default async function PagamentoPage({
             postalCode: endereco.cep,
           }
         : undefined,
+      // Só no internacional: o PayPal grava a entrega na transação, e sem
+      // ela a venda fica fora da Proteção ao Vendedor (ver provider.ts).
+      shippingAddress:
+        endereco && pedido.currency !== "BRL"
+          ? {
+              recipientName: endereco.recipient_name ?? cliente?.full_name ?? null,
+              line1: endereco.line1,
+              line2: endereco.line2,
+              city: endereco.city,
+              region: endereco.region,
+              postalCode: endereco.postal_code,
+              countryCode: endereco.country,
+            }
+          : undefined,
       // PORTA 2 da confirmação: o cliente volta para cá depois de pagar, e
       // essa página confirma com o gateway. Ver src/lib/payments/confirmar.ts.
       // O retorno é apenas um sinal de navegação para abrir o WhatsApp. A

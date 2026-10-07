@@ -49,6 +49,56 @@ function valorPayPal(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+// Países em que o PayPal exige estado/província (admin_area_1) no endereço.
+const PAISES_COM_REGIAO_OBRIGATORIA = new Set(["US", "CA", "AU"]);
+
+function campo(valor: string | null | undefined, max: number): string | undefined {
+  const limpo = valor?.replace(/\s+/g, " ").trim();
+  return limpo ? limpo.slice(0, max) : undefined;
+}
+
+/**
+ * Endereço de entrega no formato do Orders v2, ou null quando falta algo.
+ *
+ * Por que existe (06/10/2026): a ordem era criada com NO_SHIPPING e sem
+ * endereço, e o PayPal mostrava na transação "Pagamentos sem endereço de
+ * entrega não são cobertos pela Proteção ao Vendedor". Produto físico enviado
+ * por DHL ao exterior sem essa proteção perde qualquer disputa de "não
+ * recebi".
+ *
+ * Endereço incompleto devolve null e a ordem segue como antes (NO_SHIPPING):
+ * mandar endereço pela metade faz o PayPal recusar a ordem (422), e aí o
+ * cliente não pagaria nada. Perder a proteção num caso raro é melhor que
+ * perder a venda.
+ */
+export function enderecoEntregaPayPal(
+  endereco: PaymentCharge["shippingAddress"]
+): Record<string, unknown> | null {
+  if (!endereco) return null;
+  const pais = campo(endereco.countryCode, 2)?.toUpperCase();
+  const linha1 = campo(endereco.line1, 300);
+  const cidade = campo(endereco.city, 120);
+  const cep = campo(endereco.postalCode, 60);
+  const regiao = campo(endereco.region, 300);
+  const nome = campo(endereco.recipientName, 300);
+  if (!pais || !/^[A-Z]{2}$/.test(pais) || pais === "BR") return null;
+  if (!linha1 || !cidade || !cep) return null;
+  if (PAISES_COM_REGIAO_OBRIGATORIA.has(pais) && !regiao) return null;
+  const linha2 = campo(endereco.line2, 300);
+  return {
+    type: "SHIPPING",
+    ...(nome ? { name: { full_name: nome } } : {}),
+    address: {
+      address_line_1: linha1,
+      ...(linha2 ? { address_line_2: linha2 } : {}),
+      admin_area_2: cidade,
+      ...(regiao ? { admin_area_1: regiao } : {}),
+      postal_code: cep,
+      country_code: pais,
+    },
+  };
+}
+
 function urlCheckoutPayPalSegura(url: string): boolean {
   try {
     const u = new URL(url);
@@ -184,44 +234,68 @@ export class PayPalProvider implements PaymentProvider {
     requireClientId();
     requireClientSecret();
 
-    let res: Response;
-    try {
-      res = await this.chamar("/v2/checkout/orders", {
-        method: "POST",
-        requestId: charge.orderId,
-        signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
-        body: {
-          intent: "CAPTURE",
-          purchase_units: [
-            {
-              reference_id: charge.orderId,
-              custom_id: charge.orderId,
-              invoice_id: charge.orderNumber,
-              description: `Pedido ${charge.orderNumber} - Revera`,
-              amount: {
-                currency_code: charge.currency,
-                value: valorPayPal(charge.amountCents),
-              },
-            },
-          ],
-          payment_source: {
-            paypal: {
-              experience_context: {
-                brand_name: "Revera",
-                locale: localePayPal(charge.locale),
-                landing_page: "LOGIN",
-                shipping_preference: "NO_SHIPPING",
-                user_action: "PAY_NOW",
-                return_url: charge.redirectUrl,
-                cancel_url: charge.redirectUrl,
-              },
-            },
+    // Com endereço completo, o PayPal grava a entrega na transação e trava a
+    // troca (SET_PROVIDED_ADDRESS): o endereço cotado na DHL é o que vale.
+    const entrega = enderecoEntregaPayPal(charge.shippingAddress);
+
+    const corpo = (comEntrega: boolean) => ({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          reference_id: charge.orderId,
+          custom_id: charge.orderId,
+          invoice_id: charge.orderNumber,
+          description: `Pedido ${charge.orderNumber} - Revera`,
+          amount: {
+            currency_code: charge.currency,
+            value: valorPayPal(charge.amountCents),
+          },
+          ...(comEntrega && entrega ? { shipping: entrega } : {}),
+        },
+      ],
+      payment_source: {
+        paypal: {
+          experience_context: {
+            brand_name: "Revera",
+            locale: localePayPal(charge.locale),
+            landing_page: "LOGIN",
+            shipping_preference: comEntrega && entrega ? "SET_PROVIDED_ADDRESS" : "NO_SHIPPING",
+            user_action: "PAY_NOW",
+            return_url: charge.redirectUrl,
+            cancel_url: charge.redirectUrl,
           },
         },
-      });
-    } catch (erro) {
-      console.error("[paypal] falha de rede ao criar order", erro);
-      throw new AmbiguousChargeError("Falha de rede ao criar a ordem PayPal.", { cause: erro });
+      },
+    });
+
+    const criar = async (comEntrega: boolean, recuperacao = false): Promise<Response> => {
+      try {
+        return await this.chamar("/v2/checkout/orders", {
+          method: "POST",
+          // Id próprio para a tentativa sem endereço: o PayPal guarda a
+          // resposta por Request-Id, e repetir o id da tentativa recusada
+          // devolveria a mesma recusa.
+          requestId: recuperacao ? `${charge.orderId}:sem-entrega` : charge.orderId,
+          signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
+          body: corpo(comEntrega),
+        });
+      } catch (erro) {
+        console.error("[paypal] falha de rede ao criar order", erro);
+        throw new AmbiguousChargeError("Falha de rede ao criar a ordem PayPal.", { cause: erro });
+      }
+    };
+
+    let res = await criar(Boolean(entrega));
+
+    // Endereço recusado (4xx) NÃO pode travar a venda. O estado é texto livre
+    // no checkout ("New York" em vez de "NY") e o PayPal só aceita código.
+    // 4xx garante que nenhuma ordem foi criada, então tentar de novo sem
+    // endereço não cobra duas vezes; perde-se só a Proteção ao Vendedor
+    // nesta venda — o comportamento de antes de 06/10/2026.
+    if (!res.ok && entrega && res.status >= 400 && res.status < 500) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[paypal] endereço recusado; criando sem entrega", res.status, detalhe.slice(0, 500));
+      res = await criar(false, true);
     }
 
     if (!res.ok) {
@@ -361,6 +435,54 @@ export class PayPalProvider implements PaymentProvider {
       installments: null,
       raw: ordem,
     };
+  }
+
+  /**
+   * Informa ao PayPal o rastreio DHL de uma ordem já paga.
+   *
+   * Por que existe (06/10/2026): a primeira venda internacional ficou com o
+   * saldo "ainda não disponível" (retenção de vendedor novo). O PayPal libera
+   * mais cedo quando a transação tem rastreio, e numa disputa de "não
+   * recebi" o rastreio é a prova da entrega.
+   *
+   * Confere que a ordem pertence ao pedido (custom_id) antes de escrever:
+   * um ID trocado não pode carimbar rastreio na venda de outro cliente.
+   * `notify_payer: false` — quem avisa o cliente é a Reverá, uma vez só.
+   */
+  async adicionarRastreio(
+    paypalOrderId: string,
+    pedidoId: string,
+    numeroRastreio: string
+  ): Promise<{ ok: true } | { ok: false; motivo: string }> {
+    const ordem = await this.buscarOrdem(paypalOrderId);
+    if (ordem.purchase_units?.[0]?.custom_id !== pedidoId) {
+      return { ok: false, motivo: "A ordem PayPal não pertence a este pedido." };
+    }
+    const captura = ordem.purchase_units?.[0]?.payments?.captures?.find(
+      (c) => c.status === "COMPLETED"
+    );
+    if (ordem.status !== "COMPLETED" || !captura?.id) {
+      return { ok: false, motivo: "O pagamento ainda não está concluído no PayPal." };
+    }
+    const res = await this.chamar(
+      `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/track`,
+      {
+        method: "POST",
+        requestId: `track-${paypalOrderId}-${numeroRastreio}`,
+        body: {
+          capture_id: captura.id,
+          tracking_number: numeroRastreio,
+          carrier: "DHL",
+          notify_payer: false,
+        },
+      }
+    );
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[paypal] rastreio recusado", res.status, detalhe.slice(0, 300));
+      return { ok: false, motivo: `O PayPal recusou o rastreio (HTTP ${res.status}).` };
+    }
+    return { ok: true };
   }
 
   private async buscarOrdem(orderId: string): Promise<OrdemPayPal> {
