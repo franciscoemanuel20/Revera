@@ -145,4 +145,22 @@ describe("reavaliarCapturaPayPal", () => {
     expect(reembolsar).not.toHaveBeenCalled();
     expect(email).toHaveBeenCalledTimes(1);
   });
+
+  it("captura retida fica marcada UMA vez no histórico (fila longa da conferência)", async () => {
+    banco();
+    estado = { estado: "pendente", motivo: "RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION" };
+    await reavaliar();
+    await reavaliar();
+    const marcas = fake.tabela("audit_logs").filter((l) => l.action === "pedido.paypal_retido");
+    expect(marcas).toHaveLength(1);
+    expect(marcas[0]).toMatchObject({ entity_type: "orders", entity_id: PEDIDO });
+    expect(marcas[0]?.diff).toMatchObject({ ordem: ORDEM, motivo: "RECEIVING_PREFERENCE_MANDATES_MANUAL_ACTION" });
+  });
+
+  it("captura concluída não marca retido", async () => {
+    banco();
+    estado = { estado: "concluida" };
+    await reavaliar();
+    expect(fake.tabela("audit_logs")).toHaveLength(0);
+  });
 });

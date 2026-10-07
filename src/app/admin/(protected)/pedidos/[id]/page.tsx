@@ -452,5 +452,9 @@ function descreverAcao(action: string, diff: unknown): string {
     const d = diff as { de: OrderStatusValue; para: OrderStatusValue };
     return `Status mudou de "${STATUS_LABEL[d.de] ?? d.de}" para "${STATUS_LABEL[d.para] ?? d.para}"`;
   }
+  if (action === "pedido.paypal_retido") {
+    const motivo = diff && typeof diff === "object" && "motivo" in diff ? (diff as { motivo?: string | null }).motivo : null;
+    return `PayPal segurou o pagamento${motivo ? ` (${motivo})` : ""} — o site confere sozinho até ser liberado`;
+  }
   return action;
 }
