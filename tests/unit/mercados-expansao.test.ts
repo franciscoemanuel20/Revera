@@ -101,7 +101,7 @@ it("não toma consulta truncada como catálogo completo",async()=>{
 it("pedido só paga com recibo DHL ao vivo vinculado ao próprio pedido",async()=>{
   vi.stubEnv("CHECKOUT_PAISES","BR,US");
   vi.stubEnv("STRIPE_SECRET_KEY","sk_test_fixture");vi.stubEnv("STRIPE_WEBHOOK_SECRET","whsec_fixture");
-  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({charges_enabled:true,capabilities:{card_payments:"active"}}))));
+  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({charges_enabled:true,payouts_enabled:true,capabilities:{card_payments:"active"}}))));
   const {pedidoInternacionalPagavel,cotacaoFreteInternacional} = await import("@/lib/internacional/mercado");
   expect((await cotacaoFreteInternacional("US","USD"))?.priceCents).toBe(6800);
   expect((await cotacaoFreteInternacional("US","USD","cotacao-original"))?.priceCents).toBe(6600);
@@ -134,8 +134,10 @@ it("conta suspensa, chave inválida ou indisponibilidade bloqueiam pagamento", a
   vi.stubEnv("STRIPE_SECRET_KEY","sk_test_fixture");vi.stubEnv("STRIPE_WEBHOOK_SECRET","whsec_fixture");
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({charges_enabled:false,capabilities:{card_payments:"active"}}))));
   expect(await new StripeProvider().disponivel()).toBe(false);
-  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({charges_enabled:true,capabilities:{card_payments:"active"}}))));
+  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({charges_enabled:true,payouts_enabled:true,capabilities:{card_payments:"active"}}))));
   expect(await new StripeProvider().disponivel()).toBe(true);
+  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({charges_enabled:true,payouts_enabled:false,capabilities:{card_payments:"active"}}))));
+  expect(await new StripeProvider().disponivel()).toBe(false);
   vi.stubEnv("STRIPE_SECRET_KEY","");
   expect(await new StripeProvider().disponivel()).toBe(false);
 });

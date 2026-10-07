@@ -323,7 +323,7 @@ export class PayPalProvider implements PaymentProvider {
             shipping_preference: comEntrega && entrega ? "SET_PROVIDED_ADDRESS" : "NO_SHIPPING",
             user_action: "PAY_NOW",
             return_url: charge.redirectUrl,
-            cancel_url: charge.redirectUrl,
+            cancel_url: (() => { const url = new URL(charge.redirectUrl); url.searchParams.set("retorno", "cancelamento"); return url.toString(); })(),
           },
         },
       },

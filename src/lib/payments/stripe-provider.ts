@@ -198,6 +198,12 @@ export function localeDaStripe(locale: string | undefined): string {
   return "auto";
 }
 
+function urlCancelamento(urlRetorno: string): string {
+  const url = new URL(urlRetorno);
+  url.searchParams.set("retorno", "cancelamento");
+  return url.toString();
+}
+
 export class StripeProvider implements PaymentProvider {
   readonly name = "stripe";
 
@@ -208,7 +214,9 @@ export class StripeProvider implements PaymentProvider {
       const res = await this.chamar("/v1/account", { signal: AbortSignal.timeout(5000) });
       if (!res.ok) return false;
       const conta = await res.json();
-      return conta.charges_enabled === true && conta.capabilities?.card_payments === "active";
+      return conta.charges_enabled === true &&
+        conta.payouts_enabled === true &&
+        conta.capabilities?.card_payments === "active";
     } catch {
       return false;
     }
@@ -273,7 +281,7 @@ export class StripeProvider implements PaymentProvider {
       // O sucesso volta para a página do pedido (porta 2) com o id da
       // sessão — {CHECKOUT_SESSION_ID} é preenchido pela própria Stripe.
       success_url: `${charge.redirectUrl}${charge.redirectUrl.includes("?") ? "&" : "?"}cs={CHECKOUT_SESSION_ID}`,
-      cancel_url: charge.redirectUrl,
+      cancel_url: urlCancelamento(charge.redirectUrl),
       expires_at: charge.expiresAt ? Math.floor(charge.expiresAt.getTime() / 1000) : undefined,
       customer_email: charge.customerEmail,
       metadata: {

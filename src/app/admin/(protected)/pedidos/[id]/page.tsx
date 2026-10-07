@@ -18,6 +18,7 @@ import { BotaoImprimirEtiqueta } from "../BotaoImprimirEtiqueta";
 import { LiberarReservaButton } from "../LiberarReservaButton";
 import { ChecklistExportacao } from "../ChecklistExportacao";
 import { RegistrarEnvioDhl } from "../RegistrarEnvioDhl";
+import { GerarEtiquetaDhl } from "../GerarEtiquetaDhl";
 import {
   derivarExportStatus,
   montarChecklist,
@@ -405,7 +406,10 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         <h2 className="font-display text-lg text-ink">Ações</h2>
         {pedidoInternacional ? (
           paymentStatus === "paid" && !canceladoEm ? (
-            <RegistrarEnvioDhl orderId={pedido.id} guiaRegistrada={envio?.tracking_code ?? null} />
+            <div className="flex flex-col gap-3">
+              <GerarEtiquetaDhl orderId={pedido.id} disabled={Boolean(envio)} />
+              <RegistrarEnvioDhl orderId={pedido.id} guiaRegistrada={envio?.tracking_code ?? null} />
+            </div>
           ) : (
             <div className="rounded-md border border-sand bg-sand/40 p-3 text-sm text-ink/70">
               <p className="font-medium text-ink">Envio internacional — DHL</p>

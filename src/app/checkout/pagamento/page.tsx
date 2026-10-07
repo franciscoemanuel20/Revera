@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getStripeProvider } from "@/lib/payments";
-import { getReveraProviderForCurrency } from "@/lib/payments/revera";
+import { getReveraInternationalProviderForPreference, getReveraProviderForCurrency } from "@/lib/payments/revera";
 import { AmbiguousChargeError } from "@/lib/payments/provider";
 import { confirmarPagamento } from "@/lib/payments/confirmar";
 import { urlDoWebhook } from "@/lib/payments/webhook-url";
@@ -13,6 +13,7 @@ import { cotacaoPermiteNovoPayPal, pedidoInternacionalPagavel } from "@/lib/inte
 import { urlCheckoutStripeSegura } from "@/lib/payments/stripe-provider";
 import { urlCheckoutPayPalSegura } from "@/lib/payments/paypal-provider";
 import { montarItensDoPagamento } from "@/lib/payments/itens";
+import { registrarEventoPagamento } from "@/lib/payments/journey";
 import { AutoRetryPagamento } from "./AutoRetryPagamento";
 import { CopiarNumeroPedido } from "./CopiarNumeroPedido";
 
@@ -306,7 +307,9 @@ export default async function PagamentoPage({
     provider =
       pedido.currency === "BRL" && pedido.payment_preference === "apple_pay"
         ? getStripeProvider()
-        : getReveraProviderForCurrency(pedido.currency as string);
+        : pedido.currency === "BRL"
+          ? getReveraProviderForCurrency(pedido.currency as string)
+          : getReveraInternationalProviderForPreference(pedido.payment_preference);
   } catch (erro) {
     console.error("[pagamento] pagamento não configurado", erro);
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
@@ -693,6 +696,22 @@ export default async function PagamentoPage({
       checkout: provider.name === "infinitepay" ? "infinitepay" : "generico",
     });
   }
+  await registrarEventoPagamento(supabase, {
+    orderId: pedido.id,
+    paymentId: reserva?.id ?? null,
+    provider: provider.name,
+    eventType: "checkout_created",
+    source: "server",
+    eventKey: `checkout-created:${reserva?.id ?? pedido.id}`,
+  });
+  await registrarEventoPagamento(supabase, {
+    orderId: pedido.id,
+    paymentId: reserva?.id ?? null,
+    provider: provider.name,
+    eventType: "checkout_redirected",
+    source: "server",
+    eventKey: `checkout-redirected:${reserva?.id ?? pedido.id}`,
+  });
   redirect(checkoutUrl);
 }
 

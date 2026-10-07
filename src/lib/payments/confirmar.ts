@@ -5,6 +5,7 @@ import type { WebhookHint } from "@/lib/payments/provider";
 import { registrarPurchasePendente } from "@/lib/tracking/purchase";
 import { despacharPurchase } from "@/lib/tracking/despachar";
 import { avisarVendaPaga } from "@/lib/notificacoes/venda-paga";
+import { registrarEventoPagamento } from "@/lib/payments/journey";
 import { enviarConfirmacaoAoCliente } from "@/lib/notificacoes/confirmacao-cliente";
 
 /**
@@ -175,7 +176,18 @@ export async function confirmarPagamento(
   }
 
   if (!confirmacao.paid) {
-    await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
+    // "Ainda não pago" não é sinônimo de "recusado". O retorno do cliente,
+    // uma conciliação precoce ou uma busca eventualmente consistente podem
+    // chegar antes da aprovação. Guardamos o fato na jornada sem poluir o
+    // livro financeiro com uma falsa falha.
+    await registrarEventoPagamento(supabase, {
+      orderId: pedido.id,
+      provider: provider.name,
+      eventType: "checkout_returned_unpaid",
+      source: pistas?.eventId ? "webhook" : "reconciliation",
+      eventKey: `unpaid:${provider.name}:${pedido.id}:${pistasEfetivas?.eventId ?? pistasEfetivas?.transactionId ?? "sem-pista"}`,
+      metadata: { gatewayPaid: false },
+    });
     return { estado: "nao_pago", motivo: "gateway diz que não foi pago" };
   }
 
@@ -192,6 +204,14 @@ export async function confirmarPagamento(
       moedaPaga: confirmacao.currency,
     });
     await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
+    await registrarEventoPagamento(supabase, {
+      orderId: pedido.id,
+      provider: provider.name,
+      eventType: "payment_declined",
+      source: "server",
+      eventKey: `rejected-currency:${provider.name}:${pedido.id}:${pistasEfetivas?.transactionId ?? "sem-pista"}`,
+      metadata: { reason: "currency_mismatch" },
+    });
     return { estado: "nao_pago", motivo: "moeda divergente" };
   }
 
@@ -207,6 +227,14 @@ export async function confirmarPagamento(
       total: pedido.total_cents,
     });
     await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
+    await registrarEventoPagamento(supabase, {
+      orderId: pedido.id,
+      provider: provider.name,
+      eventType: "payment_declined",
+      source: "server",
+      eventKey: `rejected-amount:${provider.name}:${pedido.id}:${pistasEfetivas?.transactionId ?? "sem-pista"}`,
+      metadata: { reason: "amount_mismatch" },
+    });
     return { estado: "nao_pago", motivo: "valor divergente" };
   }
 
@@ -246,6 +274,14 @@ export async function confirmarPagamento(
     // A outra porta ganhou a corrida. Pago, sem redisparar nada.
     return { estado: "pago", jaEstavaPago: true };
   }
+
+  await registrarEventoPagamento(supabase, {
+    orderId: pedido.id,
+    provider: provider.name,
+    eventType: "payment_approved",
+    source: pistas?.eventId ? "webhook" : "reconciliation",
+    eventKey: `approved:${provider.name}:${pedido.id}`,
+  });
 
   // Só quem efetivamente transicionou registra o direito ao Purchase.
   await registrarPurchasePendente(supabase, pedido.id);

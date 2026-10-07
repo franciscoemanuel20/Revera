@@ -59,11 +59,12 @@ vi.mock("@/lib/shipping/dhl/admin-quote", () => ({ cotarDhlOperacional: vi.fn(as
   quotes: [{ productCode: "8", currency: "USD", priceCents: state.tarifaDhl, productName: state.nomeServico, etaDays: state.prazoDias, deliveryDate: state.dataEntrega }],
 })) }));
 vi.mock("@/lib/notificacoes/email-operacional", () => ({ avisarPedidoPendentePorEmail: vi.fn(async () => ({ estado: "enviado" })) }));
+vi.mock("@/lib/payments/revera", () => ({ provedoresInternacionaisDisponiveis: vi.fn(async () => ["paypal"]) }));
 
 const payload = {
   pais: "US", name: "Fixture Buyer", email: "buyer@example.test", telefone: "+1 5551234567",
   empresa: null, linha1: "1 Test Street", linha2: null, cidade: "Beverly Hills", regiao: "CA",
-  codigoPostal: "90210", aceite: false,
+  codigoPostal: "90210", aceite: false, paymentPreference: "paypal" as const,
 };
 
 describe("checkout internacional: cotação antes da criação do pedido", () => {

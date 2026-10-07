@@ -12,6 +12,7 @@ import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacion
 import { PurchaseTracker } from "./PurchaseTracker";
 import { SuportePosCompra } from "./SuportePosCompra";
 import { RedirecionarWhatsAppPagamento } from "./RedirecionarWhatsAppPagamento";
+import { registrarEventoPagamento } from "@/lib/payments/journey";
 
 export const metadata: Metadata = {
   title: "Seu pedido",
@@ -78,6 +79,20 @@ export default async function PedidoPage({
     .maybeSingle();
 
   if (!pedido) notFound();
+
+  if (retorno === "cancelamento" && pedido.payment_status === "pending") {
+    const { data: pagamento } = await supabase.from("payments")
+      .select("id, provider").eq("order_id", pedido.id).eq("status", "pending")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    await registrarEventoPagamento(supabase, {
+      orderId: pedido.id,
+      paymentId: pagamento?.id ?? null,
+      provider: pagamento?.provider ?? null,
+      eventType: "checkout_canceled",
+      source: "browser",
+      eventKey: `checkout-canceled:${pagamento?.id ?? pedido.id}`,
+    });
+  }
 
   // PORTA 2. Só age se ainda estiver aguardando pagamento. O eixo legado
   // `status` volta a 'new' num pedido ESTORNADO (o CASE gerado não tem

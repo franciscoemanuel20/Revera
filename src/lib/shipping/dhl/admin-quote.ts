@@ -41,7 +41,7 @@ export interface CotacaoDhlOperacionalResultado {
   quotes: DhlQuote[];
 }
 
-function planejadaPadrao(): string {
+export function planejadaPadrao(): string {
   const data = new Date();
   data.setDate(data.getDate() + 1);
   const yyyy = data.getFullYear();

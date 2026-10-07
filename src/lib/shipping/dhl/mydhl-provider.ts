@@ -1,7 +1,7 @@
 import "server-only";
 
 import { ShippingUnavailable } from "../provider";
-import type { DhlAmbiente, DhlQuote, DhlQuoteRequest } from "./types";
+import type { DhlAmbiente, DhlQuote, DhlQuoteRequest, DhlShipmentRequest, DhlShipmentResult } from "./types";
 
 const DHL_TIMEOUT_MS = 15_000;
 const DHL_SANDBOX_BASE = "https://express.api.dhl.com/mydhlapi/test";
@@ -260,4 +260,100 @@ export class MyDhlProvider {
     }
     return cotacoes;
   }
+
+  async createShipment(input: DhlShipmentRequest): Promise<DhlShipmentResult> {
+    exigirAmbienteDhlParaTransacao("criar remessa");
+    if (valorEnv("DHL_SHIPMENT_CREATION_ENABLED") !== "1") {
+      throw new ShippingUnavailable("Criação automática de remessa DHL está desabilitada.");
+    }
+    const accountNumber = valorEnv("DHL_ACCOUNT_NUMBER");
+    if (!accountNumber) throw new ShippingUnavailable("DHL_ACCOUNT_NUMBER ausente.");
+    const payload = montarPayloadDhlShipment(input, accountNumber);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    let response: Response;
+    try {
+      response = await fetch(`${baseDhl()}/shipments`, {
+        method: "POST",
+        headers: {
+          Authorization: authHeader(),
+          "content-type": "application/json",
+          accept: "application/json",
+          "Message-Reference": input.orderId,
+          "Message-Reference-Date": new Date().toUTCString(),
+        },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    } catch (e) {
+      throw new ShippingUnavailable(`DHL não respondeu à criação da remessa: ${e}`);
+    } finally {
+      clearTimeout(timeout);
+    }
+    const texto = await response.text();
+    if (!response.ok) throw new ShippingUnavailable(`DHL shipments → HTTP ${response.status}: ${texto.slice(0, 300)}`);
+    let json: unknown;
+    try { json = JSON.parse(texto); } catch { throw new ShippingUnavailable("DHL devolveu resposta não-JSON ao criar a remessa."); }
+    return interpretarDhlShipment(json);
+  }
+}
+
+export function montarPayloadDhlShipment(input: DhlShipmentRequest, accountNumber: string): Record<string, unknown> {
+  return {
+    plannedShippingDateAndTime: input.plannedShippingDate,
+    pickup: { isRequested: input.requestPickup },
+    productCode: input.productCode,
+    accounts: [{ typeCode: "shipper", number: accountNumber }],
+    outputImageProperties: { encodingFormat: "pdf", imageOptions: [{ typeCode: "label" }, { typeCode: "waybillDoc" }] },
+    customerDetails: {
+      shipperDetails: {
+        postalAddress: { postalCode: input.shipper.postalCode, cityName: input.shipper.cityName, countryCode: input.shipper.countryCode, provinceCode: input.shipper.provinceCode, addressLine1: input.shipper.addressLine1, addressLine2: input.shipper.addressLine2 ?? undefined },
+        contactInformation: { companyName: input.shipper.legalName, fullName: input.shipper.contactName, phone: input.shipper.phone, email: input.shipper.email },
+        registrationNumbers: [{ typeCode: "VAT", number: input.shipper.taxId, issuerCountryCode: input.shipper.countryCode }],
+      },
+      receiverDetails: {
+        postalAddress: { postalCode: input.receiver.postalCode, cityName: input.receiver.cityName, countryCode: input.receiver.countryCode, provinceCode: input.receiver.provinceCode, addressLine1: input.receiver.addressLine1, addressLine2: input.receiver.addressLine2 ?? undefined },
+        contactInformation: { companyName: input.receiver.name, fullName: input.receiver.name, phone: input.receiver.phone, email: input.receiver.email },
+      },
+    },
+    content: {
+      packages: [{
+        weight: kg(input.packageInfo.weightGrams),
+        dimensions: { length: cm(input.packageInfo.lengthCm, "Comprimento"), width: cm(input.packageInfo.widthCm, "Largura"), height: cm(input.packageInfo.heightCm, "Altura") },
+        customerReferences: [{ value: input.orderId, typeCode: "CU" }],
+      }],
+      isCustomsDeclarable: true,
+      declaredValue: centavosParaUnidade(input.declaredValueCents),
+      declaredValueCurrency: input.currency,
+      exportDeclaration: {
+        lineItems: input.lineItems.map((item, index) => ({
+          number: index + 1,
+          description: item.description,
+          price: item.valueCents / 100,
+          quantity: { value: item.quantity, unitOfMeasurement: "PCS" },
+          commodityCodes: [{ typeCode: "outbound", value: item.hsCode }],
+          exportReasonType: "permanent",
+          manufacturerCountry: item.originCountry,
+          weight: { netValue: kg(item.weightGrams), grossValue: kg(item.weightGrams) },
+        })),
+        invoice: { number: input.orderId, date: input.plannedShippingDate.slice(0, 10) },
+      },
+    },
+  };
+}
+
+export function interpretarDhlShipment(resposta: unknown): DhlShipmentResult {
+  const raiz = asRecord(resposta);
+  const shipmentId = primeiroTexto(raiz.shipmentTrackingNumber, raiz.dispatchConfirmationNumber);
+  const trackingNumber = primeiroTexto(raiz.shipmentTrackingNumber);
+  if (!shipmentId || !trackingNumber) throw new ShippingUnavailable("DHL criou resposta sem número de rastreio.");
+  const docs = Array.isArray(raiz.documents) ? raiz.documents : [];
+  const documents = docs.flatMap((doc) => {
+    const d = asRecord(doc);
+    const content = primeiroTexto(d.content);
+    return content ? [{ typeCode: primeiroTexto(d.typeCode), contentBase64: content }] : [];
+  });
+  const label = documents.find((d) => d.typeCode?.toLowerCase().includes("label"))?.contentBase64 ?? documents[0]?.contentBase64 ?? null;
+  return { shipmentId, trackingNumber, labelBase64: label, documents, raw: resposta };
 }

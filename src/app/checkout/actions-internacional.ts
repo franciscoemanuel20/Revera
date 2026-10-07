@@ -57,6 +57,7 @@ import { cotarDhlOperacional } from "@/lib/shipping/dhl/admin-quote";
 import type { DhlQuote } from "@/lib/shipping/dhl/types";
 import { avisarPedidoPendentePorEmail } from "@/lib/notificacoes/email-operacional";
 import type { CheckoutResult } from "./actions";
+import { provedoresInternacionaisDisponiveis } from "@/lib/payments/revera";
 
 const textoCurto = z.string().max(500).nullable().optional().catch(null);
 
@@ -104,6 +105,7 @@ function construirSchema(idioma: Idioma) {
     .optional()
     .catch(null),
   confirmarCotacao: z.string().min(20).max(4096).optional().nullable(),
+  paymentPreference: z.enum(["stripe", "paypal"]),
   });
 }
 
@@ -157,6 +159,10 @@ export async function criarPedidoInternacionalAction(
   const dados = parsed.data;
   if (dados.confirmarCotacao && !dados.aceite) {
     return { erro: t.aceiteObrigatorio };
+  }
+  const gatewaysDisponiveis = await provedoresInternacionaisDisponiveis();
+  if (!gatewaysDisponiveis.includes(dados.paymentPreference)) {
+    return { erro: t.erroConfiraCampos, camposComErro: { paymentPreference: "Este meio de pagamento não está disponível agora." } };
   }
 
   // A única porta de validação de endereço internacional — inclui a regra
@@ -515,6 +521,7 @@ export async function criarPedidoInternacionalAction(
       shipping_cents: shippingCents,
       tax_cents: taxCents,
       total_cents: totalCents,
+      payment_preference: dados.paymentPreference,
       tracking_consent: dados.trackingConsent,
       export_status: "pending_data",
       // O aceite: versão + instante do SERVIDOR. O navegador só disse

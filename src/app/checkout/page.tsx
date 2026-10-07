@@ -18,7 +18,7 @@ import {
 import { LANG_HTML, textos, type Idioma } from "@/lib/internacional/idioma";
 import { GEO_COUNTRY_COOKIE, GEO_COUNTRY_HEADER } from "@/lib/i18n/site";
 import { produtoTraduzido } from "@/lib/i18n/produtos";
-import { reveraApplePayDisponivel } from "@/lib/payments/revera";
+import { provedoresInternacionaisDisponiveis, reveraApplePayDisponivel } from "@/lib/payments/revera";
 import { obterCotacaoPtax } from "@/lib/internacional/cambio-ptax";
 
 export const metadata: Metadata = {
@@ -166,6 +166,10 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
   const precoPorVariante = new Map(precos.itens.map((item) => [item.variantId, item]));
 
   const aceite = aceiteInternacional(idioma);
+  const gateways = await provedoresInternacionaisDisponiveis();
+  if (gateways.length === 0) {
+    return <IndisponivelInternacional pais={pais} motivo={mensagemDeBloqueio("pagamento", idioma)} />;
+  }
   const resumo: ResumoInternacional = {
     idioma,
     locale: regra.locale,
@@ -180,6 +184,7 @@ async function checkoutInternacional(pais: string): Promise<React.ReactNode> {
       postalExemplo: regra.postalExemplo,
     },
     moeda: mercado.moeda,
+    gateways,
     itens: carrinho.items.map((item) => ({
       variantId: item.variantId,
       nome: produtoTraduzido(item.productSlug, idioma, item.productName).nome,

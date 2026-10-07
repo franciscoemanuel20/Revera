@@ -130,6 +130,7 @@ const NAV_ITEMS = [
   // "o que já vendeu", mas "quem ainda não pagou e por que o aviso de
   // WhatsApp não chegou". Ver recuperacao-consulta.ts.
   { href: "/admin/recuperacao", label: "Recuperação" },
+  { href: "/admin/recuperacao-internacional", label: "Recup. internacional" },
   { href: "/admin/produtos", label: "Produtos" },
   { href: "/admin/cores", label: "Cores" },
   { href: "/admin/precos", label: "Preços" },

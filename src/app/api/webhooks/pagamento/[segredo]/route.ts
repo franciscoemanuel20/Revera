@@ -3,9 +3,9 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { getStripeProvider } from "@/lib/payments";
 import { PayPalProvider } from "@/lib/payments/paypal-provider";
 import {
-  getReveraInternationalProviderName,
   getReveraNationalProvider,
   getReveraProviderByName,
+  paypalWebhookConfigurado,
 } from "@/lib/payments/revera";
 import { confirmarPagamento, registrarReembolso } from "@/lib/payments/confirmar";
 import type { PaymentProvider, WebhookHint } from "@/lib/payments/provider";
@@ -409,10 +409,9 @@ function rotearWebhook(
     if (candidatos.some((p) => p.name === nome)) continue;
     candidatos.push(getReveraProviderByName(nome));
   }
-  if (
-    process.env.PAYPAL_WEBHOOK_ENABLED?.trim() === "1" &&
-    getReveraInternationalProviderName() === "paypal"
-  ) {
+  // PayPal pode ser a alternativa visível com Stripe como principal. Todo
+  // provider oferecido precisa continuar ouvindo confirmação e estorno.
+  if (paypalWebhookConfigurado()) {
     candidatos.push(getReveraProviderByName("paypal"));
   }
 
