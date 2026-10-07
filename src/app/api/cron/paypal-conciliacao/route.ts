@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { reavaliarCapturaPayPal } from "@/lib/payments/paypal-captura";
+import { ACAO_PAYPAL_RETIDO, reavaliarCapturaPayPal } from "@/lib/payments/paypal-captura";
 import { PayPalProvider } from "@/lib/payments/paypal-provider";
 
 export const runtime = "nodejs";
@@ -59,19 +59,46 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false });
   }
 
+  // Fila longa: capturas que o PayPal SEGUROU (marcadas no histórico por
+  // reavaliarCapturaPayPal) continuam sendo conferidas por 7 dias, mesmo com
+  // a reserva 'pending' passando das 24 h. Vêm primeiro: são vendas pagas.
+  const { data: marcas, error: erroMarcas } = await supabase
+    .from("audit_logs")
+    .select("entity_id")
+    .eq("action", ACAO_PAYPAL_RETIDO)
+    .gte("created_at", new Date(agora - JANELA_DIAS * 86_400_000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(LIMITE_POR_RODADA);
+  if (erroMarcas) console.error("[cron/paypal] falha ao ler retidos", erroMarcas.message);
+  const idsRetidos = [...new Set((marcas ?? []).map((m) => m.entity_id as string).filter(Boolean))];
+  let retidosPendentes: string[] = [];
+  if (idsRetidos.length > 0) {
+    const { data: aindaPendentes } = await supabase
+      .from("orders")
+      .select("id")
+      .in("id", idsRetidos)
+      .eq("payment_status", "pending")
+      .is("canceled_at", null);
+    retidosPendentes = (aindaPendentes ?? []).map((o) => o.id as string);
+  }
+
+  const fila: Array<{ orderId: string; paypalOrderId: string | null }> = [
+    ...retidosPendentes.map((orderId) => ({ orderId, paypalOrderId: null })),
+    ...(data ?? []).map((l) => ({ orderId: l.order_id as string, paypalOrderId: l.provider_payment_id as string })),
+  ];
+
   // Uma instância só: o token OAuth é guardado por instância.
   const paypal = new PayPalProvider();
   const inicio = Date.now();
   const vistos = new Set<string>();
   const resultados: Record<string, number> = {};
-  for (const linha of data ?? []) {
-    const orderId = linha.order_id as string;
+  for (const { orderId, paypalOrderId } of fila) {
     if (vistos.has(orderId)) continue;
     if (Date.now() - inicio > 45_000) break; // a próxima rodada continua
     vistos.add(orderId);
     const r = await reavaliarCapturaPayPal(
       orderId,
-      { eventId: null, paypalOrderId: linha.provider_payment_id as string },
+      { eventId: null, paypalOrderId },
       paypal,
       { timeoutMs: TIMEOUT_POR_PEDIDO_MS }
     );

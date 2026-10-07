@@ -22,6 +22,46 @@ import { enviarEmailOperacional } from "@/lib/notificacoes/email-operacional";
  * marca pedido como pago: isso continua só em confirmarPagamento().
  */
 
+/** Ação do histórico que põe o pedido na fila longa da conferência. */
+export const ACAO_PAYPAL_RETIDO = "pedido.paypal_retido";
+
+/**
+ * Registra UMA vez no histórico que o PayPal segurou a captura deste pedido.
+ *
+ * A conferência periódica só olha reservas 'pending' de até 24 h (o resto é
+ * quase sempre checkout abandonado). Uma captura retida também fica
+ * 'pending' — e o PayPal pode liberá-la dias depois (aceite manual de moeda,
+ * análise). Esta marca é o que a mantém na fila por até 7 dias; sem ela, se
+ * o aviso de COMPLETED se perdesse depois de 24 h, só a visita do cliente à
+ * página do pedido confirmaria a venda.
+ *
+ * Vai para audit_logs, e não para payments.gateway_verification: aquele campo
+ * é lido pela guarda_pedido_pago como prova de pagamento.
+ */
+async function marcarRetido(
+  supabase: ReturnType<typeof createAdminClient>,
+  orderId: string,
+  paypalOrderId: string,
+  motivo: string | null
+): Promise<void> {
+  const { data: existente, error } = await supabase
+    .from("audit_logs")
+    .select("id")
+    .eq("action", ACAO_PAYPAL_RETIDO)
+    .eq("entity_id", orderId)
+    .limit(1)
+    .maybeSingle();
+  if (error || existente) return;
+  const { error: erroInsert } = await supabase.from("audit_logs").insert({
+    admin_user_id: null,
+    action: ACAO_PAYPAL_RETIDO,
+    entity_type: "orders",
+    entity_id: orderId,
+    diff: { ordem: paypalOrderId, motivo },
+  });
+  if (erroInsert) console.error("[paypal-captura] não marcou retido", erroInsert);
+}
+
 export type ResultadoReavaliacao =
   | { estado: "sem_paypal" }
   | { estado: "indisponivel"; motivo: string }
@@ -139,6 +179,7 @@ export async function reavaliarCapturaPayPal(
           : "O que fazer: abra a transação no PayPal e veja o que ele pede para liberar.",
         "Quando o PayPal concluir, o site confirma o pedido sozinho.",
       ]);
+      await marcarRetido(supabase, orderId, paypalOrderId, estado.motivo);
       return { estado: "retido", motivo: estado.motivo };
     }
 
