@@ -5,6 +5,7 @@ import type { WebhookHint } from "@/lib/payments/provider";
 import { registrarPurchasePendente } from "@/lib/tracking/purchase";
 import { despacharPurchase } from "@/lib/tracking/despachar";
 import { avisarVendaPaga } from "@/lib/notificacoes/venda-paga";
+import { enviarConfirmacaoAoCliente } from "@/lib/notificacoes/confirmacao-cliente";
 
 /**
  * Confirmação de pagamento — a ÚNICA função do sistema que marca um pedido
@@ -284,6 +285,10 @@ export async function confirmarPagamento(
   });
 
   await avisarVendaPaga(supabase, pedido.id);
+
+  // Confirmação ao CLIENTE, com a informação de desistência (07/10/2026).
+  // Mesmo contrato do aviso acima: nunca lança, uma vez por pedido.
+  await enviarConfirmacaoAoCliente(supabase, pedido.id);
 
   return { estado: "pago", jaEstavaPago: false };
 }

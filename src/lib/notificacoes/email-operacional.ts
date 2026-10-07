@@ -34,7 +34,7 @@ function destinatarios(): string[] {
     .filter(Boolean);
 }
 
-function remetente(): string {
+export function remetente(): string {
   return (
     process.env.REVERA_ALERT_EMAIL_FROM?.trim() ||
     process.env.RESEND_FROM?.trim() ||
@@ -56,8 +56,19 @@ export function emailOperacionalDisponivel(): boolean {
 export async function enviarEmailOperacional(
   mensagem: MensagemOperacional
 ): Promise<ResultadoEmail> {
+  return enviarEmail({ ...mensagem, para: destinatarios(), de: remetente() });
+}
+
+/**
+ * Envio pelo Resend para QUALQUER destinatário (07/10/2026: e-mail de
+ * confirmação ao cliente). O operacional acima é este mesmo envio, com a
+ * equipe como destino. Nunca lança.
+ */
+export async function enviarEmail(
+  mensagem: MensagemOperacional & { para: string[]; de: string; responderPara?: string }
+): Promise<ResultadoEmail> {
   const chave = process.env.RESEND_API_KEY?.trim();
-  const para = destinatarios();
+  const para = mensagem.para;
 
   if (!chave || para.length === 0) return { estado: "desligado" };
 
@@ -73,8 +84,9 @@ export async function enviarEmailOperacional(
         ...(mensagem.idempotencyKey ? { "Idempotency-Key": mensagem.idempotencyKey } : {}),
       },
       body: JSON.stringify({
-        from: remetente(),
+        from: mensagem.de,
         to: para,
+        ...(mensagem.responderPara ? { reply_to: mensagem.responderPara } : {}),
         subject: mensagem.assunto,
         text: texto,
         html,
