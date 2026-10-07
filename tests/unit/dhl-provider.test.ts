@@ -5,11 +5,20 @@ import {
   baseDhl,
   exigirAmbienteDhlParaTransacao,
   interpretarDhlRates,
+  indiceEtiquetaDhl,
   MyDhlProvider,
   modoDhl,
   montarPayloadDhlRating,
   montarPayloadDhlShipment,
 } from "@/lib/shipping/dhl/mydhl-provider";
+
+describe("seleção de etiqueta na resposta DHL", () => {
+  it("usa o PDF identificado e o primeiro quando typeCode está ausente", () => {
+    expect(indiceEtiquetaDhl([{ typeCode: null }, { typeCode: "label" }])).toBe(1);
+    expect(indiceEtiquetaDhl([{ typeCode: null }, { typeCode: "waybillDoc" }])).toBe(0);
+    expect(indiceEtiquetaDhl([{ typeCode: "waybillDoc" }, { typeCode: "invoice" }])).toBe(-1);
+  });
+});
 
 const ORIGINAL = { ...process.env };
 
@@ -114,11 +123,12 @@ describe("payload DHL shipment", () => {
     const payload = montarPayloadDhlShipment({
       orderId: "11111111-1111-4111-8111-111111111111", productCode: "P",
       plannedShippingDate: "2026-10-08T12:00:00.000Z", currency: "USD", declaredValueCents: 10000,
+      incoterm: "DAP",
       packageInfo: { weightGrams: 500, lengthCm: 20, widthCm: 15, heightCm: 10 },
       shipper: { legalName: "Exportadora", contactName: "Maria Exportação", taxId: "ID-REAL", phone: "+551100000000", email: "export@example.com", countryCode: "BR", postalCode: "00000000", cityName: "Cidade", provinceCode: "SP", addressLine1: "Rua 1" },
       receiver: { name: "Buyer", phone: "+12020000000", email: "buyer@example.com", countryCode: "US", postalCode: "10001", cityName: "New York", provinceCode: "NY", addressLine1: "Street 1", addressLine2: "Apt 2" },
-      lineItems: [{ description: "Hair system", quantity: 1, valueCents: 10000, weightGrams: 500, hsCode: "670420", originCountry: "BR" }],
-      requestPickup: false,
+      lineItems: [{ description: "Hair system", quantity: 2, valueCents: 10000, weightGrams: 500, hsCode: "670420", originCountry: "BR" }],
+      requestPickup: false, requestInvoice: true,
     }, "123456789");
     expect(payload).toMatchObject({
       pickup: { isRequested: false }, productCode: "P",
@@ -127,7 +137,9 @@ describe("payload DHL shipment", () => {
         receiverDetails: { postalAddress: { addressLine1: "Street 1", addressLine2: "Apt 2" } },
       },
       content: { isCustomsDeclarable: true, declaredValue: 100, declaredValueCurrency: "USD",
-        exportDeclaration: { lineItems: [{ commodityCodes: [{ typeCode: "outbound", value: "670420" }], manufacturerCountry: "BR" }] } },
+        incoterm: "DAP", description: "Hair system",
+        exportDeclaration: { lineItems: [{ commodityCodes: [{ typeCode: "outbound", value: "670420" }], manufacturerCountry: "BR", price: 50 }] } },
+      outputImageProperties: { imageOptions: [{ typeCode: "label" }, { typeCode: "waybillDoc" }, { typeCode: "invoice", templateName: "COMMERCIAL_INVOICE_P_10" }] },
     });
   });
 

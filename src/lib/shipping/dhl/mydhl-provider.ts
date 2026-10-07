@@ -305,12 +305,15 @@ export function montarPayloadDhlShipment(input: DhlShipmentRequest, accountNumbe
     pickup: { isRequested: input.requestPickup },
     productCode: input.productCode,
     accounts: [{ typeCode: "shipper", number: accountNumber }],
-    outputImageProperties: { encodingFormat: "pdf", imageOptions: [{ typeCode: "label" }, { typeCode: "waybillDoc" }] },
+    outputImageProperties: { encodingFormat: "pdf", imageOptions: [
+      { typeCode: "label" }, { typeCode: "waybillDoc" },
+      ...(input.requestInvoice ? [{ typeCode: "invoice", templateName: "COMMERCIAL_INVOICE_P_10" }] : []),
+    ] },
     customerDetails: {
       shipperDetails: {
         postalAddress: { postalCode: input.shipper.postalCode, cityName: input.shipper.cityName, countryCode: input.shipper.countryCode, provinceCode: input.shipper.provinceCode, addressLine1: input.shipper.addressLine1, addressLine2: input.shipper.addressLine2 ?? undefined },
         contactInformation: { companyName: input.shipper.legalName, fullName: input.shipper.contactName, phone: input.shipper.phone, email: input.shipper.email },
-        registrationNumbers: [{ typeCode: "VAT", number: input.shipper.taxId, issuerCountryCode: input.shipper.countryCode }],
+        registrationNumbers: [{ typeCode: input.shipper.countryCode === "BR" ? "CNP" : "VAT", number: input.shipper.taxId, issuerCountryCode: input.shipper.countryCode }],
       },
       receiverDetails: {
         postalAddress: { postalCode: input.receiver.postalCode, cityName: input.receiver.cityName, countryCode: input.receiver.countryCode, provinceCode: input.receiver.provinceCode, addressLine1: input.receiver.addressLine1, addressLine2: input.receiver.addressLine2 ?? undefined },
@@ -318,6 +321,8 @@ export function montarPayloadDhlShipment(input: DhlShipmentRequest, accountNumbe
       },
     },
     content: {
+      incoterm: input.incoterm,
+      description: input.lineItems.map(item => item.description).join("; ").slice(0, 70),
       packages: [{
         weight: kg(input.packageInfo.weightGrams),
         dimensions: { length: cm(input.packageInfo.lengthCm, "Comprimento"), width: cm(input.packageInfo.widthCm, "Largura"), height: cm(input.packageInfo.heightCm, "Altura") },
@@ -330,7 +335,7 @@ export function montarPayloadDhlShipment(input: DhlShipmentRequest, accountNumbe
         lineItems: input.lineItems.map((item, index) => ({
           number: index + 1,
           description: item.description,
-          price: item.valueCents / 100,
+          price: Number((item.valueCents / item.quantity / 100).toFixed(2)),
           quantity: { value: item.quantity, unitOfMeasurement: "PCS" },
           commodityCodes: [{ typeCode: "outbound", value: item.hsCode }],
           exportReasonType: "permanent",
@@ -354,6 +359,14 @@ export function interpretarDhlShipment(resposta: unknown): DhlShipmentResult {
     const content = primeiroTexto(d.content);
     return content ? [{ typeCode: primeiroTexto(d.typeCode), contentBase64: content }] : [];
   });
-  const label = documents.find((d) => d.typeCode?.toLowerCase().includes("label"))?.contentBase64 ?? documents[0]?.contentBase64 ?? null;
+  const label = documents[indiceEtiquetaDhl(documents)]?.contentBase64 ?? null;
   return { shipmentId, trackingNumber, labelBase64: label, documents, raw: resposta };
+}
+
+export function indiceEtiquetaDhl(docs: Array<{ typeCode: string | null }>): number {
+  const index = docs.findIndex(d => d.typeCode?.toLowerCase().includes("label"));
+  if (index >= 0) return index;
+  // Algumas respostas omitem typeCode por completo. Um PDF sem tipo pode ser
+  // a etiqueta; um waybillDoc ou invoice explicitamente tipado não pode.
+  return docs.findIndex(d => !d.typeCode);
 }

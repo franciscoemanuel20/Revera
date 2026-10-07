@@ -33,11 +33,13 @@ export function StatusActions({
   paymentStatus,
   shippingStatus,
   canceladoEm,
+  pendenciasDespacho = [],
 }: {
   orderId: string;
   paymentStatus: PaymentStatusValue;
   shippingStatus: ShippingStatusValue;
   canceladoEm: string | null;
+  pendenciasDespacho?: string[];
 }) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
@@ -45,10 +47,12 @@ export function StatusActions({
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
   const [motivo, setMotivo] = useState("");
 
-  const disponiveis = canceladoEm ? [] : transicoesEnvioDisponiveis(shippingStatus);
+  const disponiveis = canceladoEm ? [] : transicoesEnvioDisponiveis(shippingStatus).filter(
+    destino => destino !== "shipped" || pendenciasDespacho.length === 0
+  );
   // Enviado ou entregue não volta por botão: seria "descancelar" a realidade.
   const podeCancelar =
-    !canceladoEm && !["shipped", "delivered"].includes(shippingStatus);
+    !canceladoEm && !["label_processing", "shipped", "delivered"].includes(shippingStatus);
 
   async function aplicarEnvio(destino: ShippingStatusValue) {
     setErro(null);
@@ -96,6 +100,9 @@ export function StatusActions({
       ) : null}
 
       <div className="flex flex-wrap gap-3">
+        {pendenciasDespacho.length > 0 && shippingStatus === "label_created" ? (
+          <p className="w-full text-sm text-amber-800">Envio bloqueado: {pendenciasDespacho.join(" ")}</p>
+        ) : null}
         {disponiveis.map((destino) => (
           <Button
             key={destino}

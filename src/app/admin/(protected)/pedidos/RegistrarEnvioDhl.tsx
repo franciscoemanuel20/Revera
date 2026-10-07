@@ -17,19 +17,28 @@ import { registrarEnvioDhlAction } from "./envio-dhl";
 export function RegistrarEnvioDhl({
   orderId,
   guiaRegistrada,
+  disabled = false,
 }: {
   orderId: string;
   guiaRegistrada: string | null;
+  disabled?: boolean;
 }) {
   const router = useRouter();
   const [awb, setAwb] = useState(guiaRegistrada ?? "");
+  const [consulta, setConsulta] = useState("");
+  const [comprovante, setComprovante] = useState<File | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState<{ texto: string; tipo: "success" | "error" } | null>(null);
 
   async function salvar() {
     setAviso(null);
     setOcupado(true);
-    const r = await registrarEnvioDhlAction({ orderId, awb });
+    const dados = new FormData(); dados.set("orderId", orderId); dados.set("awb", awb);
+    if (!guiaRegistrada) {
+      dados.set("lookupReference", consulta);
+      if (comprovante) dados.set("file", comprovante);
+    }
+    const r = await registrarEnvioDhlAction(dados);
     setOcupado(false);
     if ("error" in r) {
       setAviso({ texto: r.error, tipo: "error" });
@@ -68,7 +77,13 @@ export function RegistrarEnvioDhl({
           className="min-h-12 rounded-md border border-sand bg-white px-3 text-ink"
         />
       </label>
-      <Button type="button" onClick={salvar} disabled={ocupado || awb.trim().length === 0}>
+      {!guiaRegistrada ? <>
+        <label className="flex flex-col gap-1 text-sm text-ink">Referência da guia no MyDHL
+          <input value={consulta} onChange={e => setConsulta(e.target.value)} className="min-h-12 rounded-md border border-sand bg-white px-3 text-ink" /></label>
+        <label className="flex flex-col gap-1 text-sm text-ink">Comprovante da guia no MyDHL (PDF ou imagem)
+          <input type="file" accept="application/pdf,image/png,image/jpeg" onChange={e => setComprovante(e.target.files?.[0] ?? null)} /></label>
+      </> : null}
+      <Button type="button" onClick={salvar} disabled={ocupado || disabled || awb.trim().length === 0 || (!guiaRegistrada && (!consulta.trim() || !comprovante))}>
         {ocupado ? "Salvando…" : guiaRegistrada ? "Reenviar rastreio ao PayPal" : "Registrar guia DHL"}
       </Button>
     </div>

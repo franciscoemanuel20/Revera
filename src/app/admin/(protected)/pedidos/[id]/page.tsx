@@ -19,12 +19,9 @@ import { LiberarReservaButton } from "../LiberarReservaButton";
 import { ChecklistExportacao } from "../ChecklistExportacao";
 import { RegistrarEnvioDhl } from "../RegistrarEnvioDhl";
 import { GerarEtiquetaDhl } from "../GerarEtiquetaDhl";
-import {
-  derivarExportStatus,
-  montarChecklist,
-  provedoresConfigurados,
-  type DadosFiscaisProduto,
-} from "@/lib/internacional/exportacao";
+import { RecuperarInvoiceDhl } from "../RecuperarInvoiceDhl";
+import { ExportacaoOperacao } from "../ExportacaoOperacao";
+import { carregarProcessosExportacao } from "@/lib/internacional/processo-exportacao-server";
 import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacional/endereco";
 import { ehInternacional } from "@/lib/internacional/paises";
 
@@ -141,6 +138,7 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         provider_shipment_id: string | null;
         label_url: string | null;
         status: string | null;
+        updated_at: string | null;
       }
     | undefined;
 
@@ -172,42 +170,14 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
   const linhasDoEndereco = enderecoDominio ? formatarEndereco(enderecoDominio) : [];
   const pedidoInternacional = ehInternacional(paisDoPedido);
 
-  const produtosFiscais: DadosFiscaisProduto[] = pedidoInternacional
-    ? ((pedido.order_items ?? []) as Array<{
-        product_name_snapshot: string;
-        product_variants?: {
-          products?: {
-            ncm?: string | null;
-            hs_code?: string | null;
-            country_of_origin?: string | null;
-            description_en?: string | null;
-            net_weight_g?: number | null;
-          } | null;
-        } | null;
-      }>).map((item) => {
-        const prod = item.product_variants?.products ?? null;
-        return {
-          nome: item.product_name_snapshot,
-          ncm: prod?.ncm ?? null,
-          hsCode: prod?.hs_code ?? null,
-          paisOrigem: prod?.country_of_origin ?? null,
-          descricaoEn: prod?.description_en ?? null,
-          pesoLiquidoG: prod?.net_weight_g ?? null,
-        };
-      })
-    : [];
-
-  const etapasExportacao = pedidoInternacional
-    ? montarChecklist({
-        pago: paymentStatus === "paid",
-        endereco: enderecoLinha ? daLinha(enderecoLinha, cliente?.phone ?? "") : null,
-        clienteTemContato: Boolean(cliente?.phone || cliente?.email),
-        produtos: produtosFiscais,
-        provedores: provedoresConfigurados(),
-      })
-    : [];
-
-  const exportStatus = derivarExportStatus(pedidoInternacional, etapasExportacao);
+  const processoExportacao = pedidoInternacional
+    ? (await carregarProcessosExportacao(supabase, [id])).get(id) ?? null
+    : null;
+  const avaliacaoExportacao = processoExportacao?.avaliacao ?? null;
+  const documentosExportacao = await Promise.all((processoExportacao?.entrada.documentos ?? []).map(async doc => {
+    const { data } = await supabase.storage.from("export-documents").createSignedUrl(doc.storage_path, 300);
+    return { ...doc, url: data?.signedUrl ?? null };
+  }));
 
   return (
     <div className="flex flex-col gap-8 pb-12">
@@ -397,9 +367,17 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
       {pedidoInternacional ? (
         <ChecklistExportacao
           pais={paisDoPedido}
-          etapas={etapasExportacao}
-          status={exportStatus}
+          etapas={avaliacaoExportacao?.etapas ?? []}
+          status={avaliacaoExportacao?.status ?? "pending_data"}
+          bloqueios={avaliacaoExportacao?.bloqueiosDespacho ?? ["Não foi possível avaliar a exportação."]}
         />
+      ) : null}
+      {pedidoInternacional && processoExportacao && avaliacaoExportacao ? (
+        <ExportacaoOperacao orderId={id} moeda={processoExportacao.entrada.moedaPedido} linhas={processoExportacao.entrada.linhas}
+          itens={processoExportacao.entrada.itens} pacote={processoExportacao.entrada.pacote}
+          documentos={documentosExportacao} reservaDhl={envio?.provider === "dhl" ? { status: envio.status, updated_at: envio.updated_at } : null}
+          bloqueiosEtiqueta={avaliacaoExportacao.bloqueiosEtiqueta}
+          bloqueiosDespacho={avaliacaoExportacao.bloqueiosDespacho} />
       ) : null}
 
       <section className="flex flex-col gap-3 print:hidden">
@@ -407,8 +385,10 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         {pedidoInternacional ? (
           paymentStatus === "paid" && !canceladoEm ? (
             <div className="flex flex-col gap-3">
-              <GerarEtiquetaDhl orderId={pedido.id} disabled={Boolean(envio)} />
-              <RegistrarEnvioDhl orderId={pedido.id} guiaRegistrada={envio?.tracking_code ?? null} />
+              <GerarEtiquetaDhl orderId={pedido.id} disabled={Boolean(envio) || !avaliacaoExportacao?.podeCriarEtiqueta} />
+              {envio?.provider === "dhl" && envio.status === "label_created" ? <RecuperarInvoiceDhl orderId={pedido.id} /> : null}
+              <RegistrarEnvioDhl orderId={pedido.id} guiaRegistrada={envio?.tracking_code ?? null}
+                disabled={envio?.status === "creation_unknown" || (!envio?.tracking_code && !avaliacaoExportacao?.podeRegistrarGuia)} />
             </div>
           ) : (
             <div className="rounded-md border border-sand bg-sand/40 p-3 text-sm text-ink/70">
@@ -430,6 +410,7 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
           paymentStatus={paymentStatus}
           shippingStatus={shippingStatus}
           canceladoEm={canceladoEm}
+          pendenciasDespacho={pedidoInternacional ? avaliacaoExportacao?.bloqueiosDespacho ?? ["Exportação não avaliada."] : []}
         />
       </section>
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
+import { carregarProcessosExportacao } from "@/lib/internacional/processo-exportacao-server";
 import {
   ENVIO_LABEL,
   validarTransicaoEnvio,
@@ -88,6 +89,13 @@ export async function marcarEnvioAction(input: MarcarEnvioInput): Promise<AcaoPe
   }
 
   const atual = pedido.shipping_status as ShippingStatusValue;
+  if (novoEnvio === "shipped") {
+    const processo = (await carregarProcessosExportacao(supabase, [orderId])).get(orderId);
+    if (processo?.entrada.internacional && !processo.avaliacao.podeDespachar) {
+      return { error: `Despacho bloqueado: ${processo.avaliacao.bloqueiosDespacho.join(" ")}` };
+    }
+    if (!processo) return { error: "Não foi possível conferir a documentação da exportação." };
+  }
   const validacao = validarTransicaoEnvio(atual, novoEnvio as ShippingStatusValue);
   if (!validacao.ok) {
     return { error: validacao.erro };
@@ -101,6 +109,8 @@ export async function marcarEnvioAction(input: MarcarEnvioInput): Promise<AcaoPe
     // se a situação ainda for a que esta tela leu — evita duas abas do admin
     // resolvendo a mesma transição uma em cima da outra.
     .eq("shipping_status", atual)
+    .eq("payment_status", "paid")
+    .is("canceled_at", null)
     .select("id")
     .maybeSingle();
 
@@ -161,6 +171,9 @@ export async function cancelarPedidoAction(
   if (pedido.canceled_at) {
     return { error: "Este pedido já está cancelado." };
   }
+  if (pedido.shipping_status === "label_processing") {
+    return { error: "A DHL ainda está criando a remessa. Confira o resultado antes de cancelar." };
+  }
   if (["shipped", "delivered"].includes(pedido.shipping_status as string)) {
     return {
       error:
@@ -177,6 +190,7 @@ export async function cancelarPedidoAction(
     })
     .eq("id", orderId)
     .is("canceled_at", null)
+    .eq("shipping_status", pedido.shipping_status)
     .select("id")
     .maybeSingle();
 

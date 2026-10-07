@@ -51,11 +51,13 @@ export interface DhlShipmentRequest {
   plannedShippingDate: string;
   currency: string;
   declaredValueCents: number;
+  incoterm: "DAP" | "DDP";
   packageInfo: DhlPackageInfo;
   shipper: DhlParty & { legalName: string; contactName: string; taxId: string; phone: string; email: string };
   receiver: DhlParty & { name: string; phone: string; email: string };
   lineItems: DhlShipmentLineItem[];
   requestPickup: boolean;
+  requestInvoice?: boolean;
 }
 
 export interface DhlShipmentResult {
