@@ -22,7 +22,9 @@ type RemessaComDocumentos = {
 
 function modoInvoiceRemessa(remessa: RemessaComDocumentos): string | undefined {
   return remessa.metadata?.exporter_snapshot?.invoice_mode ??
-    remessa.metadata?.request_snapshot?.exporter_snapshot?.invoice_mode;
+    remessa.metadata?.request_snapshot?.exporter_snapshot?.invoice_mode ??
+    (remessa.metadata?.request_snapshot?.request?.requestInvoice === true ? "api" :
+      remessa.metadata?.request_snapshot?.request?.requestInvoice === false ? "external" : undefined);
 }
 
 function caminhoInvoiceDhl(orderId: string, remessa: RemessaComDocumentos): string | null {
@@ -137,10 +139,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     return { error: "Criação DHL indisponível: confira configuração de ambiente, conta e credenciais antes de criar a tentativa." };
   }
 
-  const { data: lock, error: lockError } = await s.from("shipments").insert({ order_id: orderId, provider: "dhl", service_name: "DHL Express", status: "creating", metadata: {
-    message_reference: orderId, communication: "prepared_not_sent",
-    exporter_snapshot: { invoice_mode: processo.entrada.invoiceModeForOrder },
-  } }).select("id").single();
+  const { data: lock, error: lockError } = await s.from("shipments").insert({ order_id: orderId, provider: "dhl", service_name: "DHL Express", status: "creating", metadata: { message_reference: orderId, communication: "prepared_not_sent", exporter_snapshot: { invoice_mode: processo.entrada.invoiceModeForOrder } } }).select("id").single();
   if (lockError || !lock) return { error: "Outra tentativa já existe. Recarregue e confira o MyDHL antes de tentar novamente." };
   const { data: estadoAplicado } = await s.from("orders").update({ shipping_status: "label_processing", updated_at: new Date().toISOString() })
     .eq("id", orderId).eq("shipping_status", order.shipping_status).eq("payment_status", "paid")
@@ -169,8 +168,10 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
     return { error: "Pedido ou exportador mudou antes da chamada DHL. Recarregue." };
   }
-  const invoiceMode = processoTravado.entrada.invoiceModeForOrder;
-  if (invoiceMode !== exporterAtCall.invoice_mode) {
+  const invoiceDocument = processoTravado.entrada.documentos.find(d => d.kind === "invoice" && d.status === "verified");
+  const invoiceMode = invoiceDocument?.source === "dhl" ? "api"
+    : invoiceDocument?.source === "external" ? "external" : exporterAtCall.invoice_mode;
+  if (invoiceMode !== processoTravado.entrada.invoiceModeForOrder) {
     await s.from("shipments").delete().eq("id", lock.id).eq("status", "creating");
     await s.from("orders").update({ shipping_status: order.shipping_status, updated_at: new Date().toISOString() })
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);

@@ -10,6 +10,13 @@ export type DocumentoExportacao = {
   storage_path: string;
   regime: "DRE" | "DUE" | null;
 };
+
+export function escolherModoInvoicePedido(remessaPresente: boolean, modoRemessa: string | null,
+  invoice: DocumentoExportacao | undefined, modoGlobal: string | null): string | null {
+  if (remessaPresente) return modoRemessa;
+  if (invoice?.status === "verified") return invoice.source === "dhl" ? "api" : "external";
+  return modoGlobal;
+}
 export type ItemExportacao = {
   order_item_id: string;
   ncm: string;
@@ -50,7 +57,7 @@ export type EntradaProcesso = {
   documentos: DocumentoExportacao[];
   exportador: Exportador | null;
   invoiceModeForOrder?: string | null;
-  invoiceApiRetornada?: boolean;
+  invoiceDhlComprovada?: boolean;
   rastreio: string | null;
   remessaEmProcessamento: boolean;
 };
@@ -119,7 +126,7 @@ export function avaliarExportacao(e: EntradaProcesso): AvaliacaoExportacao {
   const modo = e.invoiceModeForOrder === undefined ? x?.invoice_mode : e.invoiceModeForOrder;
   const invoice = documentoValido(docs.invoice) &&
     ((modo === "external" && docs.invoice?.source === "external") ||
-      (modo === "api" && docs.invoice?.source === "dhl" && e.invoiceApiRetornada === true));
+      (modo === "api" && docs.invoice?.source === "dhl" && e.invoiceDhlComprovada === true));
   adicionar("invoice", "Commercial Invoice", invoice,
     docs.invoice?.status === "pending" ? "Documento recebido; falta conferência." : "Anexe e confira a fatura comercial.");
   const declaracao = documentoValido(docs.declaration) && Boolean(docs.declaration?.regime);

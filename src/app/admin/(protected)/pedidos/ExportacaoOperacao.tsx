@@ -11,12 +11,13 @@ type Doc = DocumentoExportacao & { url: string | null };
 const tipos = [
   ["nfe", "NF-e de exportação"], ["invoice", "Commercial Invoice"], ["declaration", "Declaração aduaneira"],
 ] as const;
-export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, documentos, reservaDhl, invoiceMode, bloqueiosEtiqueta,
+export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, documentos, reservaDhl, invoiceMode, guideFinal, bloqueiosEtiqueta,
   bloqueiosDespacho }: { orderId: string; linhas: { id: string; nome: string; quantity: number }[];
   moeda: string;
   itens: ItemExportacao[]; pacote: PacoteExportacao | null; documentos: Doc[];
   reservaDhl: { status: string | null; updated_at: string | null } | null;
   invoiceMode: string | null;
+  guideFinal: boolean;
   bloqueiosEtiqueta: string[]; bloqueiosDespacho: string[] }) {
   const router = useRouter();
   const [aviso, setAviso] = useState<string | null>(null);
@@ -99,10 +100,16 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, docu
           <button disabled={busy} onClick={() => void executar(() => conferirDocumentoExportacaoAction({ orderId, kind, aprovado: false }))}
             className="rounded border border-red-300 px-3 py-2 text-sm">Rejeitar</button>
         </div> : null}
-        {kind === "invoice" && invoiceMode === "api" && !d ? <p className="mt-2 text-xs text-ink/60">A invoice da DHL precisa retornar pela API. Se a guia não trouxe o PDF, o despacho permanece bloqueado até resolver a emissão com a DHL.</p> : null}
-        {d?.status !== "verified" && !(kind === "invoice" && invoiceMode === "api") ? <form className="mt-3 grid gap-2 md:grid-cols-3" onSubmit={ev => { ev.preventDefault();
+        {kind === "invoice" && invoiceMode === "api" && !guideFinal ? <p className="mt-2 text-xs text-ink/60">A invoice será obtida da DHL após a emissão da guia.</p> : null}
+        {d?.status !== "verified" && !(kind === "invoice" && invoiceMode === "api" && !guideFinal) ? <form className="mt-3 grid gap-2 md:grid-cols-3" onSubmit={ev => { ev.preventDefault();
           const f = new FormData(ev.currentTarget); f.set("orderId", orderId); f.set("kind", kind);
           void executar(() => anexarDocumentoExportacaoAction(f)); }}>
+          {kind === "invoice" && invoiceMode === "api" ? <>
+            <input type="hidden" name="source" value="dhl" />
+            <label className="flex flex-col gap-1 text-xs md:col-span-3">Referência da consulta MyDHL+
+              <input required name="myDhlReference" className="min-h-10 rounded border border-sand p-2" /></label>
+            <label className="flex items-center gap-2 text-xs md:col-span-3"><input required type="checkbox" name="myDhlConfirmed" value="yes" />Confirmei que este PDF é a Commercial Invoice desta guia no MyDHL+.</label>
+          </> : null}
           <label className="flex flex-col gap-1 text-xs">{kind === "nfe" ? "Chave da NF-e (44 dígitos)" : "Referência do documento"}
             <input required name="reference" className="min-h-10 rounded border border-sand p-2" /></label>
           {kind === "declaration" ? <label className="flex flex-col gap-1 text-xs">Regime<select name="regime" required className="min-h-10 rounded border border-sand p-2">

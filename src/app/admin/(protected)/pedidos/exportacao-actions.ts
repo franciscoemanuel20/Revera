@@ -111,7 +111,9 @@ export async function anexarDocumentoExportacaoAction(form: FormData): Promise<R
     source: form.get("source") || "external" });
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Documento inválido." };
   const d = p.data; if (d.kind === "declaration" && !d.regime) return { error: "Informe DRE ou DU-E." };
-  if (d.source === "dhl") return { error: "Invoice DHL exige PDF retornado pela API e registrado na remessa." };
+  const myDhlReference = String(form.get("myDhlReference") ?? "").trim();
+  if (d.source === "dhl" && (d.kind !== "invoice" || form.get("myDhlConfirmed") !== "yes" || myDhlReference.length < 3))
+    return { error: "Confirme a invoice no MyDHL+ e informe a referência da consulta." };
   if (d.kind === "nfe" && !/^\d{44}$/.test(d.reference)) return { error: "A chave da NF-e deve ter 44 dígitos." };
   const arquivo = form.get("file");
   if (!(arquivo instanceof File) || !arquivo.size || arquivo.size > 10_000_000) return { error: "Envie um PDF ou imagem de até 10 MB." };
@@ -120,9 +122,12 @@ export async function anexarDocumentoExportacaoAction(form: FormData): Promise<R
   const png = bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
   const jpg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   if (!pdf && !png && !jpg) return { error: "Formato de arquivo inválido." };
+  if (d.source === "dhl" && !pdf) return { error: "A invoice recuperada no MyDHL+ deve ser PDF." };
   const a = await admin(); if (!a) return { error: "Acesso administrativo necessário." };
   const processo = (await carregarProcessosExportacao(a.s, [d.orderId])).get(d.orderId);
   if (!processo?.entrada.internacional || processo.entrada.cancelado) return { error: "Pedido internacional indisponível." };
+  if (d.source === "dhl" && (processo.entrada.invoiceModeForOrder !== "api" || !processo.entrada.rastreio))
+    return { error: "A invoice recuperada exige guia DHL final e modo API fixado na remessa." };
   if (d.kind === "invoice" && d.source === "external" && processo.entrada.rastreio &&
       processo.entrada.invoiceModeForOrder === "api")
     return { error: "Esta remessa exige invoice devolvida pela API DHL. Consulte a DHL para resolver a emissão." };
@@ -130,10 +135,19 @@ export async function anexarDocumentoExportacaoAction(form: FormData): Promise<R
   if (atual?.status === "verified") return { error: "Documento já conferido. Uma substituição exige reconciliação fiscal." };
   if (atual?.status === "pending") return { error: "Documento já aguarda conferência. Rejeite antes de substituí-lo." };
   const ext = pdf ? "pdf" : png ? "png" : "jpg";
-  const path = `${d.orderId}/${d.kind}/${randomUUID()}.${ext}`;
+  const path = d.source === "dhl" ? `${d.orderId}/dhl/invoice-manual/${randomUUID()}.pdf`
+    : `${d.orderId}/${d.kind}/${randomUUID()}.${ext}`;
   const { error: uploadError } = await a.s.storage.from(BUCKET).upload(path, bytes,
     { contentType: pdf ? "application/pdf" : png ? "image/png" : "image/jpeg", upsert: false });
   if (uploadError) return { error: "Não foi possível guardar o documento privado." };
+  if (d.source === "dhl") {
+    const { error: rpcError } = await a.s.rpc("register_manual_dhl_invoice" as never, {
+      p_order_id: d.orderId, p_storage_path: path,
+      p_invoice_reference: d.reference, p_lookup_reference: myDhlReference,
+    } as never);
+    if (rpcError) { await a.s.storage.from(BUCKET).remove([path]); return { error: "Não foi possível vincular a invoice à guia. Recarregue e confira o MyDHL+." }; }
+    atualizar(d.orderId); return { ok: true };
+  }
   const payload = { order_id: d.orderId, kind: d.kind,
     source: d.source, status: "pending", reference: d.reference, storage_path: path, regime: d.regime,
     validated_by: null, validated_at: null, updated_at: new Date().toISOString() };

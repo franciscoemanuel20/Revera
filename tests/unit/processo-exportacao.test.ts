@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avaliarExportacao, guiaDhlValida, type EntradaProcesso } from "@/lib/internacional/processo-exportacao";
+import { avaliarExportacao, escolherModoInvoicePedido, guiaDhlValida, type EntradaProcesso } from "@/lib/internacional/processo-exportacao";
 
 const base = (): EntradaProcesso => ({
   internacional: true, pago: true, cancelado: false,
@@ -23,6 +23,11 @@ const base = (): EntradaProcesso => ({
 });
 
 describe("regra única da exportação", () => {
+  it("mantém a invoice verificada do pedido quando o modo global muda e falha fechado em remessa legada sem modo", () => {
+    const invoice = base().documentos.find(d => d.kind === "invoice")!;
+    expect(escolherModoInvoicePedido(false, null, invoice, "api")).toBe("external");
+    expect(escolherModoInvoicePedido(true, null, invoice, "api")).toBeNull();
+  });
   it("recusa rastreio de outro provedor ou remessa DHL ainda incerta", () => {
     expect(guiaDhlValida([{ provider: "superfrete", tracking_code: "123", status: "label_created" }])).toBeNull();
     expect(guiaDhlValida([{ provider: "dhl", tracking_code: "123", status: "creation_unknown" }])).toBeNull();
@@ -73,7 +78,7 @@ describe("regra única da exportação", () => {
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
     e.documentos[2]!.status = "verified";
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
-    e.invoiceApiRetornada = true;
+    e.invoiceDhlComprovada = true;
     expect(avaliarExportacao(e).podeDespachar).toBe(true);
   });
   it("documento rejeitado ou declaração sem regime nunca vale como pronta", () => {
@@ -87,7 +92,7 @@ describe("regra única da exportação", () => {
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
     e.exportador!.invoice_mode = "api";
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
-    e.invoiceApiRetornada = true;
+    e.invoiceDhlComprovada = true;
     expect(avaliarExportacao(e).podeDespachar).toBe(true);
   });
   it("mantém o modo fiscal fixado na remessa quando a configuração global muda", () => {

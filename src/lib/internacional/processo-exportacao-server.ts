@@ -1,6 +1,6 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
-import { avaliarExportacao, guiaDhlValida, type DocumentoExportacao, type EntradaProcesso,
+import { avaliarExportacao, escolherModoInvoicePedido, guiaDhlValida, type DocumentoExportacao, type EntradaProcesso,
   type Exportador, type ItemExportacao, type PacoteExportacao } from "./processo-exportacao";
 
 type Cliente = Awaited<ReturnType<typeof createClient>>;
@@ -13,7 +13,9 @@ type PedidoLinha = {
   shipments: { id: string; provider: string; tracking_code: string | null; status: string | null;
     metadata?: { documents?: Array<{ typeCode?: string | null; storagePath?: string }>;
       exporter_snapshot?: { invoice_mode?: string };
-      request_snapshot?: { exporter_snapshot?: { invoice_mode?: string }; request?: { requestInvoice?: boolean } } } | null }[];
+      request_snapshot?: { exporter_snapshot?: { invoice_mode?: string }; request?: { requestInvoice?: boolean } };
+      invoice_recovery?: { storage_path?: string; invoice_reference?: string; lookup_reference?: string;
+        confirmed_by?: string; confirmed_at?: string } } | null }[];
 };
 const um = <T>(x: T | T[] | null | undefined): T | null => Array.isArray(x) ? (x[0] ?? null) : (x ?? null);
 
@@ -37,13 +39,23 @@ export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
     const documentosPedido = (documentos.data ?? []).filter(i => i.order_id === p.id) as DocumentoExportacao[];
     const remessa = envios.find(e => e.provider === "dhl");
     const modoRemessa = remessa?.metadata?.exporter_snapshot?.invoice_mode ??
-      remessa?.metadata?.request_snapshot?.exporter_snapshot?.invoice_mode;
-    const modoInvoice = remessa ? (modoRemessa ?? null) : (exporter?.invoice_mode ?? null);
+      remessa?.metadata?.request_snapshot?.exporter_snapshot?.invoice_mode ??
+      (remessa?.metadata?.request_snapshot?.request?.requestInvoice === true ? "api" :
+        remessa?.metadata?.request_snapshot?.request?.requestInvoice === false ? "external" : null);
     const invoiceDoc = documentosPedido.find(d => d.kind === "invoice");
-    const invoiceApiRetornada = Boolean(invoiceDoc && remessa?.metadata?.documents?.some(d =>
+    const modoInvoice = escolherModoInvoicePedido(Boolean(remessa), modoRemessa ?? null,
+      invoiceDoc, exporter?.invoice_mode ?? null);
+    const invoiceDaApi = Boolean(invoiceDoc && remessa?.metadata?.documents?.some(d =>
       /invoice|commercial|^inv$/i.test(d.typeCode ?? "") &&
       d.storagePath === invoiceDoc.storage_path &&
       d.storagePath?.startsWith(`${p.id}/dhl/${remessa.id}/`)));
+    const recuperacao = remessa?.metadata?.invoice_recovery;
+    const invoiceManual = Boolean(invoiceDoc && recuperacao &&
+      invoiceDoc.storage_path === recuperacao.storage_path &&
+      invoiceDoc.reference === recuperacao.invoice_reference &&
+      invoiceDoc.storage_path.startsWith(`${p.id}/dhl/invoice-manual/`) &&
+      (recuperacao.lookup_reference?.length ?? 0) >= 3 &&
+      recuperacao.confirmed_by && recuperacao.confirmed_at);
     const entrada: EntradaProcesso = {
       internacional: a?.country !== "BR",
       pago: p.payment_status === "paid", cancelado: Boolean(p.canceled_at),
@@ -56,7 +68,7 @@ export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
       documentos: documentosPedido,
       exportador: exporter,
       invoiceModeForOrder: modoInvoice,
-      invoiceApiRetornada,
+      invoiceDhlComprovada: invoiceDaApi || invoiceManual,
       rastreio: guiaDhlValida(envios),
       remessaEmProcessamento: envios.some(e => e.provider === "dhl" && ["creating", "creation_unknown"].includes(e.status ?? "")),
     };

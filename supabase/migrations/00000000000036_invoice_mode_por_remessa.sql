@@ -1,11 +1,56 @@
 -- Congela a origem da invoice quando ela é fixada na remessa.
+create table if not exists order_export_invoice_recoveries (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references orders(id) on delete restrict,
+  shipment_id uuid not null references shipments(id) on delete restrict,
+  storage_path text not null unique,
+  invoice_reference text not null,
+  lookup_reference text not null,
+  confirmed_by uuid not null references auth.users(id),
+  confirmed_at timestamptz not null default now()
+);
+alter table order_export_invoice_recoveries enable row level security;
+create policy "admin read invoice recovery history" on order_export_invoice_recoveries for select
+  using (exists(select 1 from admin_users where id = auth.uid()));
+create or replace function protect_invoice_recovery_history() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  raise exception 'Histórico de invoice MyDHL é imutável';
+end $$;
+create trigger protect_invoice_recovery_history before update or delete
+  on order_export_invoice_recoveries for each row execute function protect_invoice_recovery_history();
+
 create or replace function export_freeze_shipment_invoice_mode() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare modo_antigo text;
 declare modo_novo text;
+declare modo_manual text;
 begin
   if new.provider <> 'dhl' then return new; end if;
+  if tg_op = 'INSERT' and coalesce(new.metadata, '{}'::jsonb) ? 'invoice_recovery' then
+    raise exception 'Prova MyDHL só pode ser vinculada a remessa final pela recuperação auditada';
+  end if;
+  if tg_op = 'INSERT' and new.status = 'registrado_manual'
+     and coalesce(new.metadata->'exporter_snapshot'->>'invoice_mode',
+       new.metadata->'request_snapshot'->'exporter_snapshot'->>'invoice_mode') is null then
+    select case source when 'dhl' then 'api' when 'external' then 'external' end
+      into modo_manual from order_export_documents where order_id = new.order_id
+      and kind = 'invoice' and status = 'verified';
+    if modo_manual is null then
+      select invoice_mode into modo_manual from international_export_settings
+        where singleton = true for update;
+    end if;
+    if modo_manual not in ('api','external') or modo_manual is null then
+      raise exception 'Defina o modo da invoice antes de registrar guia manual';
+    end if;
+    new.metadata := coalesce(new.metadata, '{}'::jsonb) ||
+      jsonb_build_object('exporter_snapshot', jsonb_build_object('invoice_mode', modo_manual));
+  end if;
   if tg_op = 'UPDATE' then
+    if new.metadata->'invoice_recovery' is distinct from old.metadata->'invoice_recovery'
+       and current_setting('revera.registering_manual_dhl_invoice', true) is distinct from 'on' then
+      raise exception 'Prova MyDHL só pode mudar pela recuperação auditada';
+    end if;
     modo_antigo := coalesce(old.metadata->'exporter_snapshot'->>'invoice_mode',
       old.metadata->'request_snapshot'->'exporter_snapshot'->>'invoice_mode');
     modo_novo := coalesce(new.metadata->'exporter_snapshot'->>'invoice_mode',
@@ -21,6 +66,91 @@ begin
   end if;
   return new;
 end $$;
+
+-- Vincula um PDF obtido no MyDHL à remessa e ao documento fiscal em uma só
+-- transação. O upload privado já deve existir; só o admin que o enviou pode
+-- confirmar sua procedência. A conferência fiscal continua separada.
+create or replace function register_manual_dhl_invoice(
+  p_order_id uuid, p_storage_path text, p_invoice_reference text, p_lookup_reference text)
+returns void language plpgsql security definer set search_path = public, storage, pg_temp as $$
+declare r record;
+declare p record;
+declare existente record;
+declare modo text;
+begin
+  if not exists(select 1 from admin_users where id = auth.uid()) then
+    raise exception 'Acesso administrativo necessário';
+  end if;
+  if length(trim(coalesce(p_invoice_reference,''))) < 1
+     or length(trim(coalesce(p_lookup_reference,''))) < 3 then
+    raise exception 'Referências da invoice e da consulta MyDHL obrigatórias';
+  end if;
+  select payment_status, canceled_at into p from orders where id = p_order_id for update;
+  if not found or p.payment_status <> 'paid' or p.canceled_at is not null then
+    raise exception 'Pedido deve estar pago e não cancelado';
+  end if;
+  select * into r from shipments where order_id = p_order_id and provider = 'dhl' for update;
+  if not found or r.status not in ('label_created','registrado_manual')
+     or regexp_replace(coalesce(r.tracking_code,''), '[^0-9]', '', 'g') !~ '^[0-9]{10}$' then
+    raise exception 'Invoice recuperada exige guia DHL final';
+  end if;
+  modo := coalesce(r.metadata->'exporter_snapshot'->>'invoice_mode',
+    r.metadata->'request_snapshot'->'exporter_snapshot'->>'invoice_mode',
+    case when r.metadata->'request_snapshot'->'request'->>'requestInvoice' = 'true'
+      then 'api' end);
+  if modo <> 'api' or modo is null then
+    raise exception 'Esta remessa não usa invoice DHL';
+  end if;
+  if p_storage_path not like p_order_id::text || '/dhl/invoice-manual/%.pdf' then
+    raise exception 'Caminho da invoice não pertence a este pedido';
+  end if;
+  perform 1 from storage.objects where bucket_id = 'export-documents'
+    and name = p_storage_path and owner_id = auth.uid()::text
+    and metadata->>'mimetype' = 'application/pdf' for update;
+  if not found then raise exception 'PDF privado da invoice não encontrado'; end if;
+  select status, storage_path into existente from order_export_documents
+    where order_id = p_order_id and kind = 'invoice' for update;
+  if found then
+    if existente.status <> 'rejected' then
+      raise exception 'Invoice existente deve ser rejeitada antes de substituição';
+    end if;
+    update order_export_documents set source = 'dhl', status = 'pending',
+      reference = p_invoice_reference, storage_path = p_storage_path,
+      regime = null, validated_by = null, validated_at = null, updated_at = now()
+      where order_id = p_order_id and kind = 'invoice';
+  else
+    insert into order_export_documents(order_id,kind,source,status,reference,storage_path,regime)
+      values(p_order_id,'invoice','dhl','pending',p_invoice_reference,p_storage_path,null);
+  end if;
+  insert into order_export_invoice_recoveries(order_id,shipment_id,storage_path,
+    invoice_reference,lookup_reference,confirmed_by)
+    values(p_order_id,r.id,p_storage_path,p_invoice_reference,p_lookup_reference,auth.uid());
+  perform set_config('revera.registering_manual_dhl_invoice', 'on', true);
+  update shipments set metadata = coalesce(r.metadata, '{}'::jsonb) ||
+    jsonb_build_object('invoice_recovery', jsonb_build_object(
+      'storage_path',p_storage_path,'invoice_reference',p_invoice_reference,
+      'lookup_reference',p_lookup_reference,'confirmed_by',auth.uid(),'confirmed_at',now())),
+    updated_at = now() where id = r.id;
+  insert into audit_logs(admin_user_id,action,entity_type,entity_id,diff)
+    values(auth.uid(),'exportacao.recuperar_invoice_mydhl','orders',p_order_id::text,
+      jsonb_build_object('shipment_id',r.id,'storage_path',p_storage_path,
+        'invoice_reference',p_invoice_reference,'lookup_reference',p_lookup_reference));
+end $$;
+revoke all on function register_manual_dhl_invoice(uuid,text,text,text) from public;
+grant execute on function register_manual_dhl_invoice(uuid,text,text,text) to authenticated;
+
+create or replace function protect_manual_dhl_invoice_object() returns trigger
+language plpgsql security definer set search_path = public, storage, pg_temp as $$
+begin
+  if old.bucket_id = 'export-documents' and exists(
+    select 1 from order_export_invoice_recoveries
+      where storage_path = old.name) then
+    raise exception 'Invoice MyDHL vinculada à remessa não pode ser removida';
+  end if;
+  return old;
+end $$;
+create trigger protect_manual_dhl_invoice_object before delete on storage.objects
+  for each row execute function protect_manual_dhl_invoice_object();
 drop trigger if exists export_freeze_shipment_invoice_mode_trigger on shipments;
 create trigger export_freeze_shipment_invoice_mode_trigger before insert or update on shipments
   for each row execute function export_freeze_shipment_invoice_mode();
@@ -54,6 +184,11 @@ begin
   end if;
   modo := case documento.source when 'external' then 'external' when 'dhl' then 'api' end;
   if modo is null then raise exception 'Origem da invoice inválida'; end if;
+  if remessa.metadata->'request_snapshot'->'request'->>'requestInvoice' in ('true','false')
+     and (remessa.metadata->'request_snapshot'->'request'->>'requestInvoice' = 'true')
+         is distinct from (modo = 'api') then
+    raise exception 'Origem da invoice contradiz o pedido enviado à DHL; reconciliação especial necessária';
+  end if;
   if modo = 'api' and not exists (
     select 1 from jsonb_array_elements(
       case when jsonb_typeof(remessa.metadata->'documents') = 'array'
@@ -160,7 +295,9 @@ begin
       and status in ('label_created','registrado_manual') limit 1;
   modo_invoice := coalesce(
     remessa_meta->'exporter_snapshot'->>'invoice_mode',
-    remessa_meta->'request_snapshot'->'exporter_snapshot'->>'invoice_mode'
+    remessa_meta->'request_snapshot'->'exporter_snapshot'->>'invoice_mode',
+    case when remessa_meta->'request_snapshot'->'request'->>'requestInvoice' = 'true' then 'api'
+      when remessa_meta->'request_snapshot'->'request'->>'requestInvoice' = 'false' then 'external' end
   );
   select legal_name is not null and length(trim(legal_name)) > 0 and
     tax_id is not null and length(trim(tax_id)) > 0 and country is not null and
@@ -171,7 +308,8 @@ begin
     phone is not null and length(trim(phone)) > 0 and
     email is not null and length(trim(email)) > 0 and dhl_account_confirmed
     into exportador_ok from international_export_settings where singleton = true;
-  if not found or not exportador_ok or modo_invoice not in ('external', 'api') then
+  if not found or not exportador_ok or modo_invoice is null
+     or modo_invoice not in ('external', 'api') then
     raise exception 'Despacho internacional exige exportador e modo de invoice fixado no pedido';
   end if;
 
@@ -199,7 +337,7 @@ begin
       and exists (select 1 from storage.objects o
         where o.bucket_id = 'export-documents' and o.name = d.storage_path
           and o.metadata->>'mimetype' = 'application/pdf')
-      and exists (
+      and (exists (
         select 1 from jsonb_array_elements(
           case when jsonb_typeof(remessa_meta->'documents') = 'array'
             then remessa_meta->'documents' else '[]'::jsonb end
@@ -207,9 +345,16 @@ begin
         where coalesce(documento->>'typeCode', '') ~* '(invoice|commercial|^inv$)'
           and documento->>'storagePath' = d.storage_path
           and d.storage_path like new.id::text || '/dhl/' || remessa_id::text || '/%'
-      )
+      ) or (
+        d.storage_path like new.id::text || '/dhl/invoice-manual/%.pdf'
+        and remessa_meta->'invoice_recovery'->>'storage_path' = d.storage_path
+        and remessa_meta->'invoice_recovery'->>'invoice_reference' = d.reference
+        and length(coalesce(remessa_meta->'invoice_recovery'->>'lookup_reference','')) >= 3
+        and coalesce(remessa_meta->'invoice_recovery'->>'confirmed_by','') <> ''
+        and coalesce(remessa_meta->'invoice_recovery'->>'confirmed_at','') <> ''
+      ))
   ) then
-    raise exception 'Invoice DHL exige PDF retornado pela API nesta remessa e conferido';
+    raise exception 'Invoice DHL exige PDF da API ou recuperação MyDHL documentada e conferida';
   end if;
   return new;
 end $$;
