@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Política de Privacidade" };
 
 export default function PrivacidadePage() {
   return (
-    <PaginaLegal titulo="Política de Privacidade" atualizadoEm="9 de setembro de 2026">
+    <PaginaLegal titulo="Política de Privacidade" atualizadoEm="7 de outubro de 2026">
       <p>
         A Reverá trata os dados necessários para vender, cobrar, entregar e atender quem entra em contato com a loja. Esta página explica, em linguagem direta, como esses dados são usados.
       </p>

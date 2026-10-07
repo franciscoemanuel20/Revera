@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Termos de Uso" };
 
 export default function TermosPage() {
   return (
-    <PaginaLegal titulo="Termos de Uso" atualizadoEm="9 de setembro de 2026">
+    <PaginaLegal titulo="Termos de Uso" atualizadoEm="7 de outubro de 2026">
       <p>Ao navegar e comprar na Reverá, você concorda em usar o site de forma lícita e em fornecer dados corretos para pagamento e entrega.</p>
       <Secao titulo="Compra e disponibilidade"><p>Os produtos, preços, condições de entrega e disponibilidade exibidos no site podem mudar antes da confirmação do pedido. A compra só é considerada aprovada após a confirmação do pagamento pelo intermediador correspondente.</p></Secao>
       <Secao titulo="Entrega e atendimento"><p>O prazo e o valor do frete dependem do CEP, da transportadora e das condições informadas no checkout. É responsabilidade de quem compra conferir os dados de entrega antes de finalizar o pedido.</p></Secao>

@@ -19,7 +19,9 @@ export const EMPRESA = {
     pais: "Brasil",
     paisEn: "Brazil",
   },
-  responsavel: "Francisco Oliveira",
+  /** Sócio-administrador no CNPJ (Receita Federal, consulta de 07/10/2026). */
+  representanteLegal: "Fabricio Augusto Batista de Oliveira",
+  naturezaJuridica: "Sociedade Empresária Limitada",
   email: "franciscoemanuel20@gmail.com",
   whatsapp: "+55 12 98140-9901",
   whatsappLink: "https://wa.me/5512981409901",
