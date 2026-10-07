@@ -174,7 +174,7 @@ export async function enviarConfirmacaoAoCliente(supabase: Supa, orderId: string
 }
 
 /**
- * Reenvio das reservas que ficaram sem `sent_at` (Resend fora do ar, função
+ * Reenvio (até 20 h depois) das reservas que ficaram sem `sent_at` (Resend fora do ar, função
  * encerrada no meio). Chamado pela conferência periódica. O
  * Idempotency-Key do Resend impede e-mail duplicado dentro de 24 h.
  */
@@ -185,9 +185,11 @@ export async function reenviarConfirmacoesPendentes(supabase: Supa, agora = Date
     .eq("kind", KIND)
     .is("sent_at", null)
     .lte("created_at", new Date(agora - 5 * 60_000).toISOString())
-    .gte("created_at", new Date(agora - 7 * 86_400_000).toISOString())
+    // Menos de 24 h: dentro da janela do Idempotency-Key do Resend, um
+    // reenvio nunca vira e-mail duplicado (mesmo se o sent_at não gravou).
+    .gte("created_at", new Date(agora - 20 * 3_600_000).toISOString())
     .lt("attempts", 5)
-    .limit(20);
+    .limit(10);
   let reenviados = 0;
   for (const linha of data ?? []) {
     if (await enviarReservada(supabase, linha.order_id as string)) reenviados++;

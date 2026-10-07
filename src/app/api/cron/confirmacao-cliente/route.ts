@@ -4,6 +4,7 @@ import { reenviarConfirmacoesPendentes } from "@/lib/notificacoes/confirmacao-cl
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
  * Reenvia os e-mails de confirmação ao cliente que não saíram (07/10/2026).
