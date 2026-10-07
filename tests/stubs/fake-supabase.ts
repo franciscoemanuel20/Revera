@@ -105,6 +105,12 @@ class Consulta {
     return this;
   }
 
+  private comparacoes: Array<{ coluna: string; op: "gte" | "lte" | "lt"; valor: unknown }> = [];
+
+  gte(coluna: string, valor: unknown) { this.comparacoes.push({ coluna, op: "gte", valor }); return this; }
+  lte(coluna: string, valor: unknown) { this.comparacoes.push({ coluna, op: "lte", valor }); return this; }
+  lt(coluna: string, valor: unknown) { this.comparacoes.push({ coluna, op: "lt", valor }); return this; }
+
   /** Só o `not(coluna, "is", null)` que o código usa: "coluna preenchida". */
   not(coluna: string, operador: string, valor: unknown) {
     if (operador !== "is") throw new Error(`FakeSupabase: not(${operador}) não emulado`);
@@ -124,7 +130,12 @@ class Consulta {
   private casam(): Linha[] {
     const achadas = this.linhas.filter((l) =>
       this.filtros.every((f) => l[f.coluna] === f.valor) &&
-        this.negados.every((f) => (l[f.coluna] ?? null) !== f.valor)
+        this.negados.every((f) => (l[f.coluna] ?? null) !== f.valor) &&
+        this.comparacoes.every((c) => {
+          const v = l[c.coluna] as string | number;
+          const alvo = c.valor as string | number;
+          return c.op === "gte" ? v >= alvo : c.op === "lte" ? v <= alvo : v < alvo;
+        })
     );
     return this.limite != null ? achadas.slice(0, this.limite) : achadas;
   }
