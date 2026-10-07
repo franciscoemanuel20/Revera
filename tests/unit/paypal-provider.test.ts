@@ -390,4 +390,57 @@ describe("PayPalProvider", () => {
       });
     });
   });
+
+  it("endereço recusado pelo PayPal (422) refaz a ordem sem entrega, com outro Request-Id", async () => {
+    const chamadas: Array<{ requestId: string | null; corpo: any }> = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+      const headers = new Headers(init?.headers);
+      const corpo = JSON.parse(String(init?.body));
+      chamadas.push({ requestId: headers.get("PayPal-Request-Id"), corpo });
+      if (corpo.purchase_units[0].shipping) {
+        return new Response(JSON.stringify({ name: "UNPROCESSABLE_ENTITY" }), { status: 422 });
+      }
+      return new Response(JSON.stringify({ id: "PAYPAL-ORDER-2", status: "CREATED", links: [{ rel: "payer-action", href: "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-2" }] }), { status: 201 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await provider();
+    await expect(p.createCharge({
+      orderId: ORDER,
+      orderNumber: "REV-X",
+      amountCents: 1000,
+      currency: "USD",
+      redirectUrl: "https://revera.test/pedido/t",
+      webhookUrl: "https://revera.test/api/webhooks/pagamento/s",
+      expiresAt: new Date(Date.now() + 6 * 60 * 60_000 + 20_000),
+      items: [{ description: "Produto", quantity: 1, priceCents: 1000 }],
+      shippingAddress: { line1: "350 Fifth Avenue", city: "New York", region: "New York", postalCode: "10118", countryCode: "US" },
+    })).resolves.toMatchObject({ providerPaymentId: "PAYPAL-ORDER-2" });
+    expect(chamadas).toHaveLength(2);
+    expect(chamadas[0]?.requestId).toBe(ORDER);
+    expect(chamadas[1]?.requestId).toBe(`${ORDER}:sem-entrega`);
+    expect(chamadas[1]?.corpo.payment_source.paypal.experience_context.shipping_preference).toBe("NO_SHIPPING");
+  });
+
+  it("sem endereço, o Request-Id continua sendo o id do pedido (pedidos antigos não duplicam)", async () => {
+    let requestId: string | null = null;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+      requestId = new Headers(init?.headers).get("PayPal-Request-Id");
+      return new Response(JSON.stringify({ id: "PAYPAL-ORDER-1", status: "CREATED", links: [{ rel: "approve", href: "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-1" }] }), { status: 201 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await provider();
+    await p.createCharge({
+      orderId: ORDER,
+      orderNumber: "REV-X",
+      amountCents: 1000,
+      currency: "USD",
+      redirectUrl: "https://revera.test/pedido/t",
+      webhookUrl: "https://revera.test/api/webhooks/pagamento/s",
+      expiresAt: new Date(Date.now() + 6 * 60 * 60_000 + 20_000),
+      items: [{ description: "Produto", quantity: 1, priceCents: 1000 }],
+    });
+    expect(requestId).toBe(ORDER);
+  });
 });

@@ -238,45 +238,64 @@ export class PayPalProvider implements PaymentProvider {
     // troca (SET_PROVIDED_ADDRESS): o endereço cotado na DHL é o que vale.
     const entrega = enderecoEntregaPayPal(charge.shippingAddress);
 
-    let res: Response;
-    try {
-      res = await this.chamar("/v2/checkout/orders", {
-        method: "POST",
-        requestId: charge.orderId,
-        signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
-        body: {
-          intent: "CAPTURE",
-          purchase_units: [
-            {
-              reference_id: charge.orderId,
-              custom_id: charge.orderId,
-              invoice_id: charge.orderNumber,
-              description: `Pedido ${charge.orderNumber} - Revera`,
-              amount: {
-                currency_code: charge.currency,
-                value: valorPayPal(charge.amountCents),
-              },
-              ...(entrega ? { shipping: entrega } : {}),
-            },
-          ],
-          payment_source: {
-            paypal: {
-              experience_context: {
-                brand_name: "Revera",
-                locale: localePayPal(charge.locale),
-                landing_page: "LOGIN",
-                shipping_preference: entrega ? "SET_PROVIDED_ADDRESS" : "NO_SHIPPING",
-                user_action: "PAY_NOW",
-                return_url: charge.redirectUrl,
-                cancel_url: charge.redirectUrl,
-              },
-            },
+    const corpo = (comEntrega: boolean) => ({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          reference_id: charge.orderId,
+          custom_id: charge.orderId,
+          invoice_id: charge.orderNumber,
+          description: `Pedido ${charge.orderNumber} - Revera`,
+          amount: {
+            currency_code: charge.currency,
+            value: valorPayPal(charge.amountCents),
+          },
+          ...(comEntrega && entrega ? { shipping: entrega } : {}),
+        },
+      ],
+      payment_source: {
+        paypal: {
+          experience_context: {
+            brand_name: "Revera",
+            locale: localePayPal(charge.locale),
+            landing_page: "LOGIN",
+            shipping_preference: comEntrega && entrega ? "SET_PROVIDED_ADDRESS" : "NO_SHIPPING",
+            user_action: "PAY_NOW",
+            return_url: charge.redirectUrl,
+            cancel_url: charge.redirectUrl,
           },
         },
-      });
-    } catch (erro) {
-      console.error("[paypal] falha de rede ao criar order", erro);
-      throw new AmbiguousChargeError("Falha de rede ao criar a ordem PayPal.", { cause: erro });
+      },
+    });
+
+    const criar = async (comEntrega: boolean, recuperacao = false): Promise<Response> => {
+      try {
+        return await this.chamar("/v2/checkout/orders", {
+          method: "POST",
+          // Id próprio para a tentativa sem endereço: o PayPal guarda a
+          // resposta por Request-Id, e repetir o id da tentativa recusada
+          // devolveria a mesma recusa.
+          requestId: recuperacao ? `${charge.orderId}:sem-entrega` : charge.orderId,
+          signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
+          body: corpo(comEntrega),
+        });
+      } catch (erro) {
+        console.error("[paypal] falha de rede ao criar order", erro);
+        throw new AmbiguousChargeError("Falha de rede ao criar a ordem PayPal.", { cause: erro });
+      }
+    };
+
+    let res = await criar(Boolean(entrega));
+
+    // Endereço recusado (4xx) NÃO pode travar a venda. O estado é texto livre
+    // no checkout ("New York" em vez de "NY") e o PayPal só aceita código.
+    // 4xx garante que nenhuma ordem foi criada, então tentar de novo sem
+    // endereço não cobra duas vezes; perde-se só a Proteção ao Vendedor
+    // nesta venda — o comportamento de antes de 06/10/2026.
+    if (!res.ok && entrega && res.status >= 400 && res.status < 500) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[paypal] endereço recusado; criando sem entrega", res.status, detalhe.slice(0, 500));
+      res = await criar(false, true);
     }
 
     if (!res.ok) {

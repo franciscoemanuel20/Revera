@@ -73,8 +73,19 @@ export async function registrarEnvioDhlAction(input: unknown): Promise<Registrar
     return { error: "A situação do envio não permite registrar guia agora. Recarregue a página." };
   }
 
+  const agora = new Date().toISOString();
+  if (repetindo && (atual === "awaiting_label" || atual === "shipping_error")) {
+    // A guia foi gravada mas a situação não andou (falha entre as duas
+    // escritas). Sem isto, o reenvio só falaria com o PayPal e o pedido
+    // ficaria para sempre em "aguardando etiqueta".
+    await supabase
+      .from("orders")
+      .update({ shipping_status: "label_created", updated_at: agora })
+      .eq("id", orderId)
+      .eq("shipping_status", atual);
+  }
+
   if (!repetindo) {
-    const agora = new Date().toISOString();
     const { error: erroEnvio } = envioExistente
       ? await supabase
           .from("shipments")
