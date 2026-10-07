@@ -49,6 +49,56 @@ function valorPayPal(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+// Países em que o PayPal exige estado/província (admin_area_1) no endereço.
+const PAISES_COM_REGIAO_OBRIGATORIA = new Set(["US", "CA", "AU"]);
+
+function campo(valor: string | null | undefined, max: number): string | undefined {
+  const limpo = valor?.replace(/\s+/g, " ").trim();
+  return limpo ? limpo.slice(0, max) : undefined;
+}
+
+/**
+ * Endereço de entrega no formato do Orders v2, ou null quando falta algo.
+ *
+ * Por que existe (06/10/2026): a ordem era criada com NO_SHIPPING e sem
+ * endereço, e o PayPal mostrava na transação "Pagamentos sem endereço de
+ * entrega não são cobertos pela Proteção ao Vendedor". Produto físico enviado
+ * por DHL ao exterior sem essa proteção perde qualquer disputa de "não
+ * recebi".
+ *
+ * Endereço incompleto devolve null e a ordem segue como antes (NO_SHIPPING):
+ * mandar endereço pela metade faz o PayPal recusar a ordem (422), e aí o
+ * cliente não pagaria nada. Perder a proteção num caso raro é melhor que
+ * perder a venda.
+ */
+export function enderecoEntregaPayPal(
+  endereco: PaymentCharge["shippingAddress"]
+): Record<string, unknown> | null {
+  if (!endereco) return null;
+  const pais = campo(endereco.countryCode, 2)?.toUpperCase();
+  const linha1 = campo(endereco.line1, 300);
+  const cidade = campo(endereco.city, 120);
+  const cep = campo(endereco.postalCode, 60);
+  const regiao = campo(endereco.region, 300);
+  const nome = campo(endereco.recipientName, 300);
+  if (!pais || !/^[A-Z]{2}$/.test(pais) || pais === "BR") return null;
+  if (!linha1 || !cidade || !cep) return null;
+  if (PAISES_COM_REGIAO_OBRIGATORIA.has(pais) && !regiao) return null;
+  const linha2 = campo(endereco.line2, 300);
+  return {
+    type: "SHIPPING",
+    ...(nome ? { name: { full_name: nome } } : {}),
+    address: {
+      address_line_1: linha1,
+      ...(linha2 ? { address_line_2: linha2 } : {}),
+      admin_area_2: cidade,
+      ...(regiao ? { admin_area_1: regiao } : {}),
+      postal_code: cep,
+      country_code: pais,
+    },
+  };
+}
+
 function urlCheckoutPayPalSegura(url: string): boolean {
   try {
     const u = new URL(url);
@@ -184,6 +234,10 @@ export class PayPalProvider implements PaymentProvider {
     requireClientId();
     requireClientSecret();
 
+    // Com endereço completo, o PayPal grava a entrega na transação e trava a
+    // troca (SET_PROVIDED_ADDRESS): o endereço cotado na DHL é o que vale.
+    const entrega = enderecoEntregaPayPal(charge.shippingAddress);
+
     let res: Response;
     try {
       res = await this.chamar("/v2/checkout/orders", {
@@ -202,6 +256,7 @@ export class PayPalProvider implements PaymentProvider {
                 currency_code: charge.currency,
                 value: valorPayPal(charge.amountCents),
               },
+              ...(entrega ? { shipping: entrega } : {}),
             },
           ],
           payment_source: {
@@ -210,7 +265,7 @@ export class PayPalProvider implements PaymentProvider {
                 brand_name: "Revera",
                 locale: localePayPal(charge.locale),
                 landing_page: "LOGIN",
-                shipping_preference: "NO_SHIPPING",
+                shipping_preference: entrega ? "SET_PROVIDED_ADDRESS" : "NO_SHIPPING",
                 user_action: "PAY_NOW",
                 return_url: charge.redirectUrl,
                 cancel_url: charge.redirectUrl,

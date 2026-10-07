@@ -263,4 +263,66 @@ describe("PayPalProvider", () => {
       kind: "pagamento",
     });
   });
+
+  describe("endereço de entrega na ordem (Proteção ao Vendedor, 06/10/2026)", () => {
+    async function criarOrdem(shippingAddress?: Record<string, string | null>) {
+      let corpo: any;
+      const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        corpo = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ id: "PAYPAL-ORDER-1", status: "CREATED", links: [{ rel: "payer-action", href: "https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-1" }] }), { status: 201 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const p = await provider();
+      await p.createCharge({
+        orderId: ORDER,
+        orderNumber: "REV-X",
+        amountCents: 23281,
+        currency: "EUR",
+        redirectUrl: "https://revera.test/pedido/t",
+        webhookUrl: "https://revera.test/api/webhooks/pagamento/s",
+        expiresAt: new Date(Date.now() + 6 * 60 * 60_000 + 20_000),
+        items: [{ description: "Micropele", quantity: 1, priceCents: 23281 }],
+        shippingAddress: shippingAddress as never,
+      });
+      return corpo;
+    }
+
+    it("manda o endereço completo e trava a troca no PayPal", async () => {
+      const corpo = await criarOrdem({
+        recipientName: "  Ivan   Teste ", line1: "Hauptstraße 1", line2: null,
+        city: "Ottobrunn", region: "Bayern", postalCode: "85521", countryCode: "de",
+      });
+      expect(corpo.purchase_units[0].shipping).toEqual({
+        type: "SHIPPING",
+        name: { full_name: "Ivan Teste" },
+        address: {
+          address_line_1: "Hauptstraße 1",
+          admin_area_2: "Ottobrunn",
+          admin_area_1: "Bayern",
+          postal_code: "85521",
+          country_code: "DE",
+        },
+      });
+      expect(corpo.payment_source.paypal.experience_context.shipping_preference).toBe("SET_PROVIDED_ADDRESS");
+    });
+
+    it("endereço incompleto não quebra a venda: segue sem entrega, como antes", async () => {
+      const corpo = await criarOrdem({ line1: "Hauptstraße 1", city: "Ottobrunn", postalCode: null, countryCode: "DE" });
+      expect(corpo.purchase_units[0].shipping).toBeUndefined();
+      expect(corpo.payment_source.paypal.experience_context.shipping_preference).toBe("NO_SHIPPING");
+    });
+
+    it("EUA sem estado não manda endereço (o PayPal recusaria a ordem)", async () => {
+      const corpo = await criarOrdem({ line1: "350 Fifth Avenue", city: "New York", region: "", postalCode: "10118", countryCode: "US" });
+      expect(corpo.purchase_units[0].shipping).toBeUndefined();
+      expect(corpo.payment_source.paypal.experience_context.shipping_preference).toBe("NO_SHIPPING");
+    });
+
+    it("sem endereço nenhum mantém o comportamento antigo", async () => {
+      const corpo = await criarOrdem(undefined);
+      expect(corpo.purchase_units[0].shipping).toBeUndefined();
+      expect(corpo.payment_source.paypal.experience_context.shipping_preference).toBe("NO_SHIPPING");
+    });
+  });
 });
