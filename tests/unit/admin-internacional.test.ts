@@ -334,6 +334,10 @@ describe("ordem de cidade e código postal por país (07/10/2026)", () => {
     expect(linhas).toContain("SW1A 1AA");
   });
 
+  it("países fora da lista mantêm cidade antes do código (Índia)", () => {
+    expect(formatarEndereco(daLinha(linha("IN", "New Delhi", "110001", "DL"), "91")!)).toContain("New Delhi, DL, 110001");
+  });
+
   it("Espanha no idioma do cliente", () => {
     expect(formatarEndereco(daLinha(linha("ES", "Madrid", "28013"), "34")!, "es")).toEqual(["Cliente", "Rua 1", "28013 Madrid", "España"]);
   });

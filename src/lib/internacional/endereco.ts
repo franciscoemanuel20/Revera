@@ -353,10 +353,19 @@ function linhasDeCidade(pais: string, cidade: string, regiao: string | null, pos
     case "IE":
       return [c, ...(r ? [r] : []), ...(p ? [p] : [])].filter(Boolean);
     default:
-      // Europa continental e afins: código postal antes da cidade.
-      return [[p, c].filter(Boolean).join(" "), ...(r ? [r] : [])].filter(Boolean);
+      // Código postal antes da cidade só onde é a convenção do país; nos
+      // demais (IN, NZ, ZA, CN…), o formato antigo, que já estava certo.
+      if (CEP_ANTES_DA_CIDADE.has(pais)) {
+        return [[p, c].filter(Boolean).join(" "), ...(r ? [r] : [])].filter(Boolean);
+      }
+      return [[c, r, p].filter(Boolean).join(", ")];
   }
 }
+
+const CEP_ANTES_DA_CIDADE = new Set([
+  "DE", "AT", "CH", "FR", "BE", "LU", "NL", "ES", "PT", "IT", "DK", "SE", "NO", "FI", "PL", "CZ",
+  "MX", "CL", "AR", "EC", "GT", "PA", "UY", "PY", "PE", "BO",
+]);
 
 /**
  * Uma linha por vez, para etiqueta, invoice e tela do admin.
