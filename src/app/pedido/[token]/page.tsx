@@ -346,7 +346,11 @@ async function capturaPayPalRetida(
       .limit(1)
       .maybeSingle();
     if (!data?.provider_payment_id) return false;
-    const estado = await new PayPalProvider().estadoCaptura(data.provider_payment_id as string, orderId);
+    // Timeout curto: é só o texto da tela, e confirmarPagamento() já
+    // consultou o PayPal logo acima.
+    const estado = await new PayPalProvider().estadoCaptura(data.provider_payment_id as string, orderId, {
+      timeoutMs: 5_000,
+    });
     return estado.estado === "pendente";
   } catch {
     return false;

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { reavaliarCapturaPayPal } from "@/lib/payments/paypal-captura";
+import { PayPalProvider } from "@/lib/payments/paypal-provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,13 @@ export const maxDuration = 60;
 const JANELA_DIAS = 7;
 // Dá tempo ao fluxo normal (retorno do cliente + webhook) antes de conferir.
 const MATURACAO_MINUTOS = 10;
-const LIMITE_POR_RODADA = 40;
+const LIMITE_POR_RODADA = 25;
+// Reserva ainda 'pending' depois disto é, quase sempre, checkout abandonado
+// antes da aprovação: sai da fila para não tomar o lugar dos recentes.
+// Captura RETIDA também fica 'pending', mas o webhook PENDING já avisou.
+const PENDENTE_MAX_HORAS = 24;
+// 25 pedidos × 8 s ainda cabe nos 60 s mesmo com o PayPal lento.
+const TIMEOUT_POR_PEDIDO_MS = 8_000;
 
 export async function GET(req: NextRequest) {
   const segredo = (process.env.CRON_SECRET ?? "").trim();
@@ -35,13 +42,16 @@ export async function GET(req: NextRequest) {
     .from("payments")
     .select("order_id, provider_payment_id, orders!inner(payment_status, canceled_at, currency, created_at)")
     .eq("provider", "paypal")
-    .in("status", ["pending", "approved"])
+    .or(
+      `status.eq.approved,and(status.eq.pending,created_at.gte.${new Date(agora - PENDENTE_MAX_HORAS * 3_600_000).toISOString()})`
+    )
     .not("provider_payment_id", "is", null)
     .eq("orders.payment_status", "pending")
     .is("orders.canceled_at", null)
     .neq("orders.currency", "BRL")
     .gte("orders.created_at", new Date(agora - JANELA_DIAS * 86_400_000).toISOString())
     .lte("orders.created_at", new Date(agora - MATURACAO_MINUTOS * 60_000).toISOString())
+    .order("created_at", { ascending: false })
     .limit(LIMITE_POR_RODADA);
 
   if (error) {
@@ -49,16 +59,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false });
   }
 
+  // Uma instância só: o token OAuth é guardado por instância.
+  const paypal = new PayPalProvider();
+  const inicio = Date.now();
   const vistos = new Set<string>();
   const resultados: Record<string, number> = {};
   for (const linha of data ?? []) {
     const orderId = linha.order_id as string;
     if (vistos.has(orderId)) continue;
+    if (Date.now() - inicio > 45_000) break; // a próxima rodada continua
     vistos.add(orderId);
-    const r = await reavaliarCapturaPayPal(orderId, {
-      eventId: null,
-      paypalOrderId: linha.provider_payment_id as string,
-    });
+    const r = await reavaliarCapturaPayPal(
+      orderId,
+      { eventId: null, paypalOrderId: linha.provider_payment_id as string },
+      paypal,
+      { timeoutMs: TIMEOUT_POR_PEDIDO_MS }
+    );
     resultados[r.estado] = (resultados[r.estado] ?? 0) + 1;
   }
 

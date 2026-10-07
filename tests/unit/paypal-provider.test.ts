@@ -495,4 +495,41 @@ describe("PayPalProvider", () => {
       await expect(p.estadoCaptura("PAYPAL-ORDER-1", ORDER)).resolves.toEqual({ estado: "outro_pedido" });
     });
   });
+
+  describe("reembolso sem custom_id e status desconhecido (revisão 06/10/2026)", () => {
+    it("REFUNDED sem custom_id leva a captura do link rel=up para a rota resolver", async () => {
+      const p = await provider();
+      const hint = p.parseWebhookHint(JSON.stringify({
+        id: "WH-R",
+        event_type: "PAYMENT.CAPTURE.REFUNDED",
+        resource: { id: "REFUND-1", links: [{ rel: "up", href: "https://api.paypal.com/v2/payments/captures/CAP-77" }] },
+      }));
+      expect(hint).toMatchObject({ kind: "captura_paypal", orderId: "", transactionId: null, invoiceSlug: "CAP-77", eventoGateway: "PAYMENT.CAPTURE.REFUNDED" });
+    });
+
+    it("evento de captura ilegível vira ignorar (200), nunca null (400 em loop)", async () => {
+      const p = await provider();
+      const hint = p.parseWebhookHint(JSON.stringify({ id: "WH-Z", event_type: "PAYMENT.CAPTURE.REFUNDED", resource: {} }));
+      expect(hint?.kind).toBe("ignorar");
+    });
+
+    it("status de captura desconhecido não vira estorno", async () => {
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        return Response.json({ id: "PAYPAL-ORDER-1", status: "COMPLETED", purchase_units: [{ custom_id: ORDER, payments: { captures: [{ status: "NOVO_STATUS" }] } }] });
+      }));
+      const p = await provider();
+      await expect(p.estadoCaptura("PAYPAL-ORDER-1", ORDER)).resolves.toEqual({ estado: "desconhecida", status: "NOVO_STATUS" });
+    });
+
+    it("pedidoDaCaptura lê custom_id e a ordem relacionada", async () => {
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        expect(url).toContain("/v2/payments/captures/CAP-77");
+        return Response.json({ custom_id: ORDER, supplementary_data: { related_ids: { order_id: "PAYPAL-ORDER-1" } } });
+      }));
+      const p = await provider();
+      await expect(p.pedidoDaCaptura("CAP-77")).resolves.toEqual({ orderId: ORDER, paypalOrderId: "PAYPAL-ORDER-1" });
+    });
+  });
 });

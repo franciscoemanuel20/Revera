@@ -165,6 +165,8 @@ export interface WebhookHint {
    * histórico — os adapters antigos não precisam mudar.
    */
   kind?: TipoDeAviso;
+  /** Tipo do evento no gateway (ex.: PAYMENT.CAPTURE.REVERSED), quando importa. */
+  eventoGateway?: string | null;
 }
 
 /** Resultado de uma verificação ATIVA junto ao gateway. É isto que vale. */

@@ -34,7 +34,15 @@ export type ResultadoReavaliacao =
 
 export async function reavaliarCapturaPayPal(
   orderId: string,
-  origem: { eventId: string | null; paypalOrderId?: string | null }
+  origem: {
+    eventId: string | null;
+    paypalOrderId?: string | null;
+    /** Tipo do evento PayPal, quando veio de webhook (ex.: PAYMENT.CAPTURE.REVERSED). */
+    eventoGateway?: string | null;
+  },
+  /** A conferência periódica passa uma instância só, para reaproveitar o token. */
+  paypal: PayPalProvider = new PayPalProvider(),
+  opcoes?: { timeoutMs?: number }
 ): Promise<ResultadoReavaliacao> {
   const supabase = createAdminClient();
 
@@ -64,7 +72,7 @@ export async function reavaliarCapturaPayPal(
 
   let estado: EstadoCapturaPayPal;
   try {
-    estado = await new PayPalProvider().estadoCaptura(paypalOrderId, orderId);
+    estado = await paypal.estadoCaptura(paypalOrderId, orderId, opcoes);
   } catch (erro) {
     console.error("[paypal-captura] PayPal não respondeu", erro);
     return { estado: "indisponivel", motivo: "PayPal não respondeu" };
@@ -82,6 +90,24 @@ export async function reavaliarCapturaPayPal(
     }).then((r) => {
       if (r.estado === "erro") console.error("[paypal-captura] e-mail falhou", r.motivo);
     });
+
+  // O PayPal AVISOU estorno/disputa mas a ordem ainda lê "concluída" (um
+  // chargeback pode não aparecer como REVERSED no GET da ordem). Não dá para
+  // estornar no painel com base só no aviso, mas a equipe precisa saber
+  // antes de despachar.
+  const avisoDeEstorno =
+    origem.eventoGateway === "PAYMENT.CAPTURE.REVERSED" ||
+    origem.eventoGateway === "PAYMENT.CAPTURE.REFUNDED";
+  if (avisoDeEstorno && estado.estado === "concluida" && pedido.payment_status === "paid") {
+    await avisar(`alerta-${origem.eventoGateway}`, `PayPal avisou estorno/disputa — ${numero}`, [
+      "AVISO DE ESTORNO OU DISPUTA NO PAYPAL",
+      "",
+      `Evento: ${origem.eventoGateway}`,
+      "A cobrança ainda aparece como concluída no PayPal, então o pedido segue pago no painel.",
+      "Confira a transação e as disputas no PayPal ANTES de despachar.",
+    ]);
+    return { estado: "nada_a_fazer", detalhe: "aviso de estorno com captura concluída" };
+  }
 
   switch (estado.estado) {
     case "concluida":
@@ -117,6 +143,10 @@ export async function reavaliarCapturaPayPal(
     }
 
     case "recusada": {
+      // Outra ordem do mesmo pedido já pagou: a recusa desta não muda nada.
+      if (pedido.payment_status !== "pending") {
+        return { estado: "nada_a_fazer", detalhe: `recusa com pedido ${pedido.payment_status}` };
+      }
       // Libera a reserva para o cliente poder tentar de novo. Só sai de
       // 'pending': uma linha já aprovada nunca volta para trás por aqui.
       await supabase
@@ -156,6 +186,16 @@ export async function reavaliarCapturaPayPal(
         "O pedido continua pago no painel. Confira no PayPal o valor devolvido e decida o que fazer.",
       ]);
       return { estado: "parcial" };
+    }
+
+    case "desconhecida": {
+      await avisar(`status-${estado.status}`, `PayPal: situação desconhecida — ${numero}`, [
+        "SITUAÇÃO DE PAGAMENTO DESCONHECIDA NO PAYPAL",
+        "",
+        `Status da captura: ${estado.status}`,
+        "O pedido não foi alterado. Confira a transação no PayPal antes de despachar.",
+      ]);
+      return { estado: "nada_a_fazer", detalhe: `status ${estado.status}` };
     }
 
     case "outro_pedido":

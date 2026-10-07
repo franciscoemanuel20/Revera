@@ -90,6 +90,23 @@ export async function POST(
   }
 
   const supabase = createAdminClient();
+  // Reembolso do PayPal sem custom_id nem ordem no aviso: o pedido sai da
+  // captura (rel="up"). Falha de rede aqui é 503 para o PayPal reenviar.
+  if (
+    provider.name === "paypal" &&
+    hint.kind === "captura_paypal" &&
+    !UUID.test(hint.orderId) &&
+    !hint.transactionId &&
+    hint.invoiceSlug
+  ) {
+    try {
+      const daCaptura = await new PayPalProvider().pedidoDaCaptura(hint.invoiceSlug);
+      hint.orderId = daCaptura.orderId ?? "";
+      hint.transactionId = daCaptura.paypalOrderId;
+    } catch {
+      return NextResponse.json({ erro: "captura PayPal indisponível" }, { status: 503 });
+    }
+  }
   if (provider.name === "paypal" && !UUID.test(hint.orderId)) {
     const resolvido = await resolverPedidoPorPagamento(supabase, provider.name, hint.transactionId);
     if (resolvido === "erro") {
@@ -162,6 +179,7 @@ export async function POST(
     const resultado = await reavaliarCapturaPayPal(hint.orderId, {
       eventId: hint.eventId,
       paypalOrderId: hint.transactionId,
+      eventoGateway: hint.eventoGateway ?? null,
     });
     if (resultado.estado === "indisponivel") {
       // Sem resposta do PayPal: apaga o evento para o reenvio ser processado.

@@ -26,7 +26,7 @@ vi.mock("@/lib/notificacoes/email-operacional", () => ({
 }));
 vi.mock("@/lib/payments/paypal-provider", () => ({
   PayPalProvider: class {
-    async estadoCaptura(ordem: string, pedido: string) {
+    async estadoCaptura(ordem: string, pedido: string, _opcoes?: unknown) {
       expect(ordem).toBe(ORDEM);
       expect(pedido).toBe(PEDIDO);
       if (estado instanceof Error) throw estado;
@@ -42,9 +42,9 @@ function banco(paymentStatus = "pending", pagamentoStatus = "pending") {
   });
 }
 
-async function reavaliar() {
+async function reavaliar(eventoGateway: string | null = null) {
   const { reavaliarCapturaPayPal } = await import("@/lib/payments/paypal-captura");
-  return reavaliarCapturaPayPal(PEDIDO, { eventId: "WH-1", paypalOrderId: ORDEM });
+  return reavaliarCapturaPayPal(PEDIDO, { eventId: "WH-1", paypalOrderId: ORDEM, eventoGateway });
 }
 
 beforeEach(() => {
@@ -119,5 +119,30 @@ describe("reavaliarCapturaPayPal", () => {
     });
     estado = { estado: "concluida" };
     await expect(reavaliar()).resolves.toEqual({ estado: "sem_paypal" });
+  });
+
+  it("aviso de chargeback com captura ainda concluída: alerta a equipe, não mexe no pedido", async () => {
+    banco("paid", "approved");
+    estado = { estado: "concluida" };
+    await expect(reavaliar("PAYMENT.CAPTURE.REVERSED")).resolves.toMatchObject({ estado: "nada_a_fazer" });
+    expect(reembolsar).not.toHaveBeenCalled();
+    expect(email).toHaveBeenCalledTimes(1);
+    expect((email.mock.calls[0]?.[0] as { texto: string }).texto).toContain("ANTES de despachar");
+  });
+
+  it("recusa de uma ordem num pedido já pago não muda nada nem avisa", async () => {
+    banco("paid", "pending");
+    estado = { estado: "recusada", motivo: null };
+    await expect(reavaliar()).resolves.toMatchObject({ estado: "nada_a_fazer" });
+    expect(fake.tabela("payments")[0]?.status).toBe("pending");
+    expect(email).not.toHaveBeenCalled();
+  });
+
+  it("status desconhecido só avisa", async () => {
+    banco("paid", "approved");
+    estado = { estado: "desconhecida", status: "NOVO_STATUS" };
+    await expect(reavaliar()).resolves.toMatchObject({ estado: "nada_a_fazer" });
+    expect(reembolsar).not.toHaveBeenCalled();
+    expect(email).toHaveBeenCalledTimes(1);
   });
 });
