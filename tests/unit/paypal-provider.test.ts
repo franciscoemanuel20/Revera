@@ -532,4 +532,61 @@ describe("PayPalProvider", () => {
       await expect(p.pedidoDaCaptura("CAP-77")).resolves.toEqual({ orderId: ORDER, paypalOrderId: "PAYPAL-ORDER-1" });
     });
   });
+
+  describe("rastreio repetido não é falha (06/10/2026)", () => {
+    function ordemCom(trackers: Array<{ id: string; status: string }>) {
+      return Response.json({
+        id: "PAYPAL-ORDER-1",
+        status: "COMPLETED",
+        purchase_units: [{ custom_id: ORDER, shipping: { trackers }, payments: { captures: [{ id: "CAPTURE-1", status: "COMPLETED" }] } }],
+      });
+    }
+
+    it("guia já registrada no PayPal: sucesso sem chamar /track", async () => {
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        if (url.endsWith("/track")) throw new Error("não devia chamar /track");
+        return ordemCom([{ id: "CAPTURE-1-1234567890", status: "SHIPPED" }]);
+      }));
+      const p = await provider();
+      await expect(p.adicionarRastreio("PAYPAL-ORDER-1", ORDER, "1234567890")).resolves.toEqual({ ok: true });
+    });
+
+    it("422 numa corrida, mas a guia está lá depois: sucesso", async () => {
+      let leituras = 0;
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        if (url.endsWith("/track")) return new Response("{}", { status: 422 });
+        leituras++;
+        return ordemCom(leituras === 1 ? [] : [{ id: "CAPTURE-1-1234567890", status: "SHIPPED" }]);
+      }));
+      const p = await provider();
+      await expect(p.adicionarRastreio("PAYPAL-ORDER-1", ORDER, "1234567890")).resolves.toEqual({ ok: true });
+    });
+
+    it("tracker cancelado não conta como registrado", async () => {
+      let chamouTrack = false;
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        if (url.endsWith("/v1/oauth2/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+        if (url.endsWith("/track")) { chamouTrack = true; return Response.json({}, { status: 201 }); }
+        return ordemCom([{ id: "CAPTURE-1-1234567890", status: "CANCELLED" }]);
+      }));
+      const p = await provider();
+      await expect(p.adicionarRastreio("PAYPAL-ORDER-1", ORDER, "1234567890")).resolves.toEqual({ ok: true });
+      expect(chamouTrack).toBe(true);
+    });
+
+    it("timeout curto vale também para o token (mesmo prazo da consulta)", async () => {
+      const sinais: Record<string, AbortSignal | null | undefined> = {};
+      vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith("/v1/oauth2/token")) { sinais.token = init?.signal; return Response.json({ access_token: "access", expires_in: 3600 }); }
+        sinais.ordem = init?.signal;
+        return Response.json({ id: "PAYPAL-ORDER-1", status: "COMPLETED", purchase_units: [{ custom_id: ORDER, payments: { captures: [{ status: "COMPLETED" }] } }] });
+      }));
+      const p = await provider();
+      await p.estadoCaptura("PAYPAL-ORDER-1", ORDER, { timeoutMs: 5_000 });
+      expect(sinais.token).toBeDefined();
+      expect(sinais.token).toBe(sinais.ordem);
+    });
+  });
 });
