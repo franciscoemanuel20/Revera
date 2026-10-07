@@ -376,6 +376,7 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         <ExportacaoOperacao orderId={id} moeda={processoExportacao.entrada.moedaPedido} linhas={processoExportacao.entrada.linhas}
           itens={processoExportacao.entrada.itens} pacote={processoExportacao.entrada.pacote}
           documentos={documentosExportacao} reservaDhl={envio?.provider === "dhl" ? { status: envio.status, updated_at: envio.updated_at } : null}
+          invoiceMode={processoExportacao.entrada.invoiceModeForOrder ?? null}
           bloqueiosEtiqueta={avaliacaoExportacao.bloqueiosEtiqueta}
           bloqueiosDespacho={avaliacaoExportacao.bloqueiosDespacho} />
       ) : null}

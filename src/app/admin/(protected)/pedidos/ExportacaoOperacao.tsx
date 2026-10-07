@@ -4,18 +4,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { DocumentoExportacao, ItemExportacao, PacoteExportacao } from "@/lib/internacional/processo-exportacao";
 import { anexarDocumentoExportacaoAction, conferirDocumentoExportacaoAction,
-  reconciliarReservaDhlAction, salvarItemExportacaoAction, salvarPacoteExportacaoAction } from "./exportacao-actions";
+  reconciliarModoInvoiceLegadoAction, reconciliarReservaDhlAction, salvarItemExportacaoAction, salvarPacoteExportacaoAction } from "./exportacao-actions";
 import { reconciliarGuiaDhlAction } from "./envio-dhl";
 
 type Doc = DocumentoExportacao & { url: string | null };
 const tipos = [
   ["nfe", "NF-e de exportação"], ["invoice", "Commercial Invoice"], ["declaration", "Declaração aduaneira"],
 ] as const;
-export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, documentos, reservaDhl, bloqueiosEtiqueta,
+export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, documentos, reservaDhl, invoiceMode, bloqueiosEtiqueta,
   bloqueiosDespacho }: { orderId: string; linhas: { id: string; nome: string; quantity: number }[];
   moeda: string;
   itens: ItemExportacao[]; pacote: PacoteExportacao | null; documentos: Doc[];
   reservaDhl: { status: string | null; updated_at: string | null } | null;
+  invoiceMode: string | null;
   bloqueiosEtiqueta: string[]; bloqueiosDespacho: string[] }) {
   const router = useRouter();
   const [aviso, setAviso] = useState<string | null>(null);
@@ -29,6 +30,12 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, docu
     <h2 className="font-display text-lg">Preparar exportação</h2>
     <p className="text-sm text-ink/70">Registre apenas dados medidos ou validados. Cada arquivo fica privado e precisa de conferência antes do despacho.</p>
     {aviso ? <p role="status" className="rounded bg-sand p-2 text-sm">{aviso}</p> : null}
+    {invoiceMode === null && reservaDhl && ["label_created", "registrado_manual", "creation_unknown"].includes(reservaDhl.status ?? "") ?
+      <div className="rounded border border-amber-400 bg-amber-50 p-3 text-sm">
+        <p>Esta remessa antiga não tem modo de invoice registrado. Confira a Commercial Invoice e seu arquivo antes de fixar a origem para o pedido.</p>
+        <button disabled={busy} onClick={() => void executar(() => reconciliarModoInvoiceLegadoAction({ orderId }))}
+          className="mt-2 rounded border border-ink px-3 py-2 disabled:opacity-50">Fixar modo pela invoice conferida</button>
+      </div> : null}
     {reservaDhl?.status === "creating" ? <div className="rounded border border-amber-400 bg-amber-50 p-3 text-sm">
       <p>Há uma tentativa DHL em andamento desde {reservaDhl.updated_at ? new Date(reservaDhl.updated_at).toLocaleString("pt-BR") : "horário desconhecido"}. Se ela não terminou, aguarde 15 minutos e reconcilie. A operação vai liberar apenas a reserva comprovadamente não enviada; qualquer chamada incerta exigirá consulta no MyDHL antes de registrar a guia.</p>
       <button disabled={busy} onClick={() => void executar(() => reconciliarReservaDhlAction({ orderId }))}
@@ -92,7 +99,8 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, docu
           <button disabled={busy} onClick={() => void executar(() => conferirDocumentoExportacaoAction({ orderId, kind, aprovado: false }))}
             className="rounded border border-red-300 px-3 py-2 text-sm">Rejeitar</button>
         </div> : null}
-        {d?.status !== "verified" ? <form className="mt-3 grid gap-2 md:grid-cols-3" onSubmit={ev => { ev.preventDefault();
+        {kind === "invoice" && invoiceMode === "api" && !d ? <p className="mt-2 text-xs text-ink/60">A invoice da DHL precisa retornar pela API. Se a guia não trouxe o PDF, o despacho permanece bloqueado até resolver a emissão com a DHL.</p> : null}
+        {d?.status !== "verified" && !(kind === "invoice" && invoiceMode === "api") ? <form className="mt-3 grid gap-2 md:grid-cols-3" onSubmit={ev => { ev.preventDefault();
           const f = new FormData(ev.currentTarget); f.set("orderId", orderId); f.set("kind", kind);
           void executar(() => anexarDocumentoExportacaoAction(f)); }}>
           <label className="flex flex-col gap-1 text-xs">{kind === "nfe" ? "Chave da NF-e (44 dígitos)" : "Referência do documento"}

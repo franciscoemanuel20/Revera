@@ -14,7 +14,8 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
       async maybeSingle() {
         if (table === "orders") return { data: { id: orderId, order_number: "REV-1", shipments: [{
           id: shipmentId, provider: "dhl", status: "label_created", tracking_code: "1234567890",
-          metadata: { exporter_snapshot: { invoice_mode: "api" }, documents: [{ typeCode: "invoice", storagePath: invoicePath }] },
+          metadata: { request_snapshot: { exporter_snapshot: { invoice_mode: "api" } },
+            documents: [{ typeCode: "invoice", storagePath: invoicePath }] },
         }] }, error: null };
         return { data: state.document, error: null };
       },
@@ -23,6 +24,16 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
         if (state.failedWrites > 0) { state.failedWrites--; return { error: { code: "timeout" } }; }
         state.document = { source: "dhl", storage_path: invoicePath, status: "pending" };
         return { error: null };
+      },
+      update() {
+        return {
+          eq() { return this; }, select() { return this; },
+          async maybeSingle() {
+            if (state.document?.status !== "rejected") return { data: null, error: null };
+            state.document.status = "pending";
+            return { data: { order_id: orderId }, error: null };
+          },
+        };
       },
     };
   },
@@ -42,5 +53,13 @@ describe("recuperação da invoice após guia DHL final", () => {
     expect(await recuperarInvoiceDhlAction({ orderId })).toHaveProperty("ok", true);
     expect(state.writes).toBe(2);
     expect(state.document!.status).toBe("verified");
+  });
+  it("recoloca invoice DHL rejeitada em conferência sem gerar segunda remessa", async () => {
+    state.failedWrites = 0;
+    expect(await recuperarInvoiceDhlAction({ orderId })).toHaveProperty("ok", true);
+    state.document!.status = "rejected";
+    expect(await recuperarInvoiceDhlAction({ orderId })).toHaveProperty("ok", true);
+    expect(state.document!.status).toBe("pending");
+    expect(state.writes).toBe(1);
   });
 });

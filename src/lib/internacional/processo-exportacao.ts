@@ -49,6 +49,8 @@ export type EntradaProcesso = {
   pacote: PacoteExportacao | null;
   documentos: DocumentoExportacao[];
   exportador: Exportador | null;
+  invoiceModeForOrder?: string | null;
+  invoiceApiRetornada?: boolean;
   rastreio: string | null;
   remessaEmProcessamento: boolean;
 };
@@ -114,10 +116,10 @@ export function avaliarExportacao(e: EntradaProcesso): AvaliacaoExportacao {
   const docs = Object.fromEntries(e.documentos.map(d => [d.kind, d])) as Partial<Record<DocumentoTipo, DocumentoExportacao>>;
   const nfe = documentoValido(docs.nfe);
   adicionar("nfe", "NF-e de exportação", nfe, "Anexe a NF-e e registre sua chave após emissão e conferência.");
-  const modo = x?.invoice_mode;
+  const modo = e.invoiceModeForOrder === undefined ? x?.invoice_mode : e.invoiceModeForOrder;
   const invoice = documentoValido(docs.invoice) &&
     ((modo === "external" && docs.invoice?.source === "external") ||
-      (modo === "api" && docs.invoice?.source === "dhl"));
+      (modo === "api" && docs.invoice?.source === "dhl" && e.invoiceApiRetornada === true));
   adicionar("invoice", "Commercial Invoice", invoice,
     docs.invoice?.status === "pending" ? "Documento recebido; falta conferência." : "Anexe e confira a fatura comercial.");
   const declaracao = documentoValido(docs.declaration) && Boolean(docs.declaration?.regime);
@@ -130,8 +132,10 @@ export function avaliarExportacao(e: EntradaProcesso): AvaliacaoExportacao {
   const bloqueiosEtiqueta = [...base,
     ...(modo === "external" && !invoice ? ["Commercial Invoice externa ainda não conferida."] : []),
     ...(modo !== "external" && modo !== "api" ? ["Defina o modo de emissão da Commercial Invoice."] : [])];
-  const bloqueiosGuia = [...base, ...(!invoice ? ["Commercial Invoice ainda não conferida."] : [])];
+  const bloqueiosGuia = [...base,
+    ...(modo === "external" && !invoice ? ["Commercial Invoice externa ainda não conferida."] : [])];
   const bloqueiosDespacho = [...bloqueiosGuia,
+    ...(!invoice ? ["Commercial Invoice ainda não conferida."] : []),
     ...(!declaracao ? ["Declaração aduaneira ainda não conferida."] : []),
     ...(!e.rastreio ? ["Guia DHL ainda não registrada."] : [])];
   const dadosOk = ["pagamento","cliente","endereco","fiscal_produto","pacote","exportador"].every(k => etapas.find(t => t.chave === k)?.estado === "pronto");
