@@ -14,6 +14,8 @@ const SEO: Record<Exclude<SiteLocale, "pt">, Record<string, SeoText>> = {
     "/privacidade": { title: "Privacy Policy", description: "How Revera processes personal data for international purchases, delivery and support." },
     "/termos": { title: "Terms of Use", description: "Terms for browsing and purchasing from Revera internationally." },
     "/cookies": { title: "Cookie Policy", description: "How necessary and optional cookies are used on the Revera website." },
+    "/devolucao": { title: "Returns and withdrawal", description: "14-day right of withdrawal, how to return a Revera order and how refunds work." },
+    "/aviso-legal": { title: "Legal notice", description: "Company information for Revera Prótese Capilar e Comércio Ltda." },
   },
   es: {
     "/": { title: "Prótesis capilares naturales", description: "Prótesis capilares Reverá de aspecto natural, pago internacional seguro y entrega DHL rastreada." },
@@ -25,6 +27,8 @@ const SEO: Record<Exclude<SiteLocale, "pt">, Record<string, SeoText>> = {
     "/privacidade": { title: "Política de privacidad", description: "Cómo Reverá trata los datos personales en compras, entregas y atención internacional." },
     "/termos": { title: "Términos de uso", description: "Condiciones para navegar y comprar internacionalmente en Reverá." },
     "/cookies": { title: "Política de cookies", description: "Cómo se utilizan las cookies necesarias y opcionales en el sitio Reverá." },
+    "/devolucao": { title: "Devoluciones y desistimiento", description: "Derecho de desistimiento de 14 días, cómo devolver un pedido de Reverá y cómo funciona el reembolso." },
+    "/aviso-legal": { title: "Aviso legal", description: "Datos de la empresa Revera Prótese Capilar e Comércio Ltda." },
   },
   fr: {
     "/": { title: "Prothèses capillaires naturelles", description: "Prothèses capillaires Reverá d’aspect naturel, paiement international sécurisé et livraison DHL suivie." },
@@ -36,6 +40,8 @@ const SEO: Record<Exclude<SiteLocale, "pt">, Record<string, SeoText>> = {
     "/privacidade": { title: "Politique de confidentialité", description: "Comment Reverá traite les données personnelles pour les achats, livraisons et l’assistance internationale." },
     "/termos": { title: "Conditions d’utilisation", description: "Conditions applicables à la navigation et aux achats internationaux chez Reverá." },
     "/cookies": { title: "Politique relative aux cookies", description: "Comment les cookies nécessaires et facultatifs sont utilisés sur le site Reverá." },
+    "/devolucao": { title: "Retours et rétractation", description: "Droit de rétractation de 14 jours, retour d’une commande Reverá et remboursement." },
+    "/aviso-legal": { title: "Mentions légales", description: "Informations sur la société Revera Prótese Capilar e Comércio Ltda." },
   },
   de: {
     "/": { title: "Natürlich wirkende Haarsysteme", description: "Natürlich wirkende Reverá Haarsysteme mit sicherer internationaler Zahlung und DHL-Versand mit Tracking." },
@@ -47,6 +53,8 @@ const SEO: Record<Exclude<SiteLocale, "pt">, Record<string, SeoText>> = {
     "/privacidade": { title: "Datenschutzerklärung", description: "Wie Reverá personenbezogene Daten für internationale Käufe, Lieferungen und Support verarbeitet." },
     "/termos": { title: "Nutzungsbedingungen", description: "Bedingungen für die Nutzung und internationale Käufe bei Reverá." },
     "/cookies": { title: "Cookie-Richtlinie", description: "Wie notwendige und optionale Cookies auf der Reverá Website verwendet werden." },
+    "/devolucao": { title: "Widerrufsbelehrung", description: "14-tägiges Widerrufsrecht, Rücksendung einer Reverá-Bestellung und Erstattung." },
+    "/aviso-legal": { title: "Impressum", description: "Anbieterkennzeichnung der Revera Prótese Capilar e Comércio Ltda." },
   },
 };
 

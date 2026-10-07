@@ -170,14 +170,14 @@ export const GARANTIA = {
     pagina: "garantia",
     rotulo: "PRAZO PROMETIDO para desistir da compra (em negrito)",
     tipo: "texto",
-    padrao: "7 dias",
+    padrao: "14 dias",
   },
   "garantia.prazos.desistir.depois": {
     pagina: "garantia",
     rotulo: "Desistência — final da frase",
     tipo: "paragrafo",
     padrao:
-      "do recebimento, com a peça sem uso e sem alteração — é só falar com a gente.",
+      "do recebimento, sem precisar explicar o motivo. Veja como na página de devolução.",
   },
   "garantia.prazos.cuidados.antes": {
     pagina: "garantia",

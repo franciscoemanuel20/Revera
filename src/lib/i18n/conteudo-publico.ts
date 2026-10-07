@@ -141,9 +141,9 @@ const EN: TraducoesDeConteudo = {
   "garantia.prazos.defeito.depois":
     "from receipt to report a manufacturing defect, and the strand test is exactly what reveals this on the first day.",
   "garantia.prazos.desistir.antes": "Changed your mind? You may withdraw from the purchase within",
-  "garantia.prazos.desistir.prazo": "7 days",
+  "garantia.prazos.desistir.prazo": "14 days",
   "garantia.prazos.desistir.depois":
-    "of receipt, with the piece unused and unchanged. Just contact us.",
+    "of receipt, without giving any reason. See how on our returns page.",
   "garantia.prazos.cuidados.antes":
     "Durability after that depends on daily care. What to use, how to wash and what to avoid is explained in",
   "garantia.prazos.cuidados.link": "Care",
@@ -330,10 +330,10 @@ const ES: TraducoesDeConteudo = {
   "garantia.prazos.defeito.prazo": "7 dias habiles",
   "garantia.prazos.defeito.depois":
     "desde la recepcion para comunicar un defecto de fabricacion; la prueba de los cabellos es justamente lo que lo revela el primer dia.",
-  "garantia.prazos.desistir.antes": "Cambiaste de idea? Puedes desistir de la compra hasta",
-  "garantia.prazos.desistir.prazo": "7 dias",
+  "garantia.prazos.desistir.antes": "¿Cambiaste de idea? Puedes desistir de la compra hasta",
+  "garantia.prazos.desistir.prazo": "14 días",
   "garantia.prazos.desistir.depois":
-    "despues de recibirla, con la pieza sin uso y sin alteraciones. Solo habla con nosotros.",
+    "después de recibirla, sin indicar el motivo. Consulta cómo en nuestra página de devoluciones.",
   "garantia.prazos.cuidados.antes":
     "La durabilidad despues de eso depende de los cuidados diarios. Que usar, como lavar y que evitar esta en",
   "garantia.prazos.cuidados.link": "Cuidados",
@@ -416,10 +416,10 @@ const FR: TraducoesDeConteudo = {
   "garantia.prazos.defeito.prazo": "7 jours ouvrables",
   "garantia.prazos.defeito.depois":
     "a partir de la reception pour signaler un defaut de fabrication; le test des cheveux est exactement ce qui le revele le premier jour.",
-  "garantia.prazos.desistir.antes": "Vous avez change d'avis ? Vous pouvez vous retracter jusqu'a",
-  "garantia.prazos.desistir.prazo": "7 jours",
+  "garantia.prazos.desistir.antes": "Vous avez changé d’avis ? Vous pouvez vous rétracter jusqu’à",
+  "garantia.prazos.desistir.prazo": "14 jours",
   "garantia.prazos.desistir.depois":
-    "apres reception, avec la piece non utilisee et non modifiee. Il suffit de nous contacter.",
+    "après réception, sans avoir à vous justifier. Voir la page retours.",
   "garantia.prazos.cuidados.antes":
     "La durabilite ensuite depend de l'entretien quotidien. Ce qu'il faut utiliser, comment laver et quoi eviter est explique dans",
   "garantia.prazos.cuidados.link": "Entretien",
@@ -476,10 +476,10 @@ const DE: TraducoesDeConteudo = {
   "garantia.prazos.defeito.prazo": "7 Werktage",
   "garantia.prazos.defeito.depois":
     "ab Erhalt, um einen Herstellungsfehler zu melden; genau dafur ist der Haartest am ersten Tag da.",
-  "garantia.prazos.desistir.antes": "Meinung geandert? Sie konnen bis zu",
-  "garantia.prazos.desistir.prazo": "7 Tage",
+  "garantia.prazos.desistir.antes": "Meinung geändert? Sie können binnen",
+  "garantia.prazos.desistir.prazo": "14 Tagen",
   "garantia.prazos.desistir.depois":
-    "nach Erhalt vom Kauf zurucktreten, solange das System unbenutzt und unverandert ist. Kontaktieren Sie uns einfach.",
+    "nach Erhalt ohne Angabe von Gründen widerrufen. Einzelheiten in unserer Widerrufsbelehrung.",
   "garantia.prazos.cuidados.antes":
     "Die Haltbarkeit danach hangt von der taglichen Pflege ab. Was zu verwenden ist, wie man wascht und was zu vermeiden ist, steht unter",
   "garantia.prazos.cuidados.link": "Pflege",
