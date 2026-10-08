@@ -193,6 +193,38 @@ describe("rodada com a Clint recusando tudo", () => {
     // O que importa: 1 reserva (o teto), não 10 nem 20.
     expect(reservas).toBe(1);
     expect(r.pulados.envio_recusado).toBe(1);
+    expect(r.reservasSemConfirmacao).toBe(1);
+  });
+
+  it("reserva recusada bloqueia novo pedido da mesma pessoa, sem chamada à Clint", async () => {
+    pedidos = [
+      {
+        id: "pedido-reservado", access_token: "token-a",
+        created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+        total_cents: 67000, currency: "BRL",
+        customers: { phone: "48999887766", email: "ficticio@exemplo.test", full_name: "Teste" },
+      },
+      {
+        id: "pedido-novo", access_token: "token-b",
+        created_at: new Date(AGORA.getTime() - 60 * 60_000).toISOString(),
+        total_cents: 68000, currency: "BRL",
+        customers: { phone: "48999887766", email: "ficticio@exemplo.test", full_name: "Teste" },
+      },
+    ];
+    notificacoes = [{
+      order_id: "pedido-reservado", kind: "checkout_abandonado_primeiro",
+      created_at: new Date(AGORA.getTime() - 50 * 60_000).toISOString(), sent_at: null,
+    }];
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+    expect(r.enviados).toBe(0);
+    expect(r.reservasSemConfirmacao).toBe(0);
+    expect(r.pulados.mesma_pessoa_nesta_rodada).toBe(1);
+    expect(r.pulados.reserva_sem_confirmacao).toBe(1);
+    expect(reservas).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   /**

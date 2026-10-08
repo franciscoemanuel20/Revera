@@ -119,8 +119,10 @@ export default async function RecuperacaoPage() {
         <Cartao label="Prontos para enviar" valor={resumo.elegiveis} />
         <Cartao label="1º aviso enviado" valor={resumo.primeiroEnviado} />
         <Cartao label="Último aviso enviado" valor={resumo.ultimoEnviado} />
+        <Cartao label="Envio confirmado pela API" valor={resumo.envioConfirmado} />
+        <Cartao label="Reserva sem confirmação" valor={resumo.reservaSemConfirmacao} destaque={resumo.reservaSemConfirmacao > 0} />
         <Cartao
-          label="Recusados de verdade"
+          label="Erros de envio registrados"
           valor={resumo.recusadosDeVerdade}
           destaque={resumo.recusadosDeVerdade > 0}
         />
@@ -151,7 +153,9 @@ const BADGE_TOM: Record<EtapaExibida, string> = {
   primeiro_enviado: "bg-emerald-100 text-emerald-800",
   ultimo_enviado: "bg-emerald-100 text-emerald-800",
   primeiro_recusado: "bg-red-100 text-red-800",
+  primeiro_sem_confirmacao: "bg-amber-100 text-amber-900",
   ultimo_recusado: "bg-red-100 text-red-800",
+  ultimo_sem_confirmacao: "bg-amber-100 text-amber-900",
   fora_da_janela: "bg-sand text-ink/50",
   nao_elegivel: "bg-sand text-ink/50",
 };
@@ -170,10 +174,23 @@ function detalheDoPedido(p: {
   primeiro: { ultimoErro: string | null } | null;
   ultimo: { ultimoErro: string | null } | null;
 }): string {
-  if (p.etapa === "primeiro_recusado") return p.primeiro?.ultimoErro ?? "";
-  if (p.etapa === "ultimo_recusado") return p.ultimo?.ultimoErro ?? "";
+  if (p.etapa === "primeiro_recusado") return detalheSeguroDoErro(p.primeiro?.ultimoErro);
+  if (p.etapa === "ultimo_recusado") return detalheSeguroDoErro(p.ultimo?.ultimoErro);
+  if (p.etapa === "primeiro_sem_confirmacao" || p.etapa === "ultimo_sem_confirmacao") {
+    return "Aceite não confirmado; sem reenvio automático.";
+  }
   if (p.motivoNaoElegivel) return p.motivoNaoElegivel;
   return "";
+}
+
+function detalheSeguroDoErro(erro: string | null | undefined): string {
+  if (/rate.limit|limite de requisi|code=rate_limit/i.test(erro ?? "")) {
+    return "Clint: limite de requisições; aceite não confirmado.";
+  }
+  if (/channel account is not connected|code=channel_disconnected/i.test(erro ?? "")) {
+    return "Clint: canal desconectado; aceite não confirmado.";
+  }
+  return "Erro registrado; aceite não confirmado. Verifique o provedor antes de qualquer reenvio.";
 }
 
 // Idade em texto simples, sem biblioteca — mesmo padrão do resto do admin

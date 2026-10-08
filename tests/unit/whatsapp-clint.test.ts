@@ -158,7 +158,7 @@ describe("modo clint", () => {
     expect(JSON.parse(String(envio?.init?.body)).contact_id).toBe("c-novo");
   });
 
-  it("recusa da Clint vira erro com o motivo dela, sem lançar", async () => {
+  it("recusa da Clint guarda apenas status e código, sem corpo bruto", async () => {
     configurarClint();
     vi.stubGlobal(
       "fetch",
@@ -172,8 +172,32 @@ describe("modo clint", () => {
 
     expect(r.estado).toBe("erro");
     expect(r.estado === "erro" && r.motivo).toBe(
-      "Clint recusou: Template must have APPROVED status"
+      "Clint recusou: HTTP 400; code=template_not_approved"
     );
+  });
+
+  it("limite da Clint não grava o corpo da resposta", async () => {
+    configurarClint();
+    vi.stubGlobal("fetch", fetchFalso((c) => {
+      if (c.url.includes("/v1/contacts?")) return respostaJson(200, [{ id: "c1", phone: DESTINO }]);
+      return respostaJson(429, { error: "Rate limit exceeded: dado privado fictício" });
+    }));
+
+    expect(await enviarWhatsApp({ para: DESTINO, texto: "x", parametros: [] })).toEqual({
+      estado: "erro", motivo: "Clint recusou: HTTP 429; code=rate_limit",
+    });
+  });
+
+  it("canal desconectado recebe código seguro sem gravar resposta bruta", async () => {
+    configurarClint();
+    vi.stubGlobal("fetch", fetchFalso((c) => {
+      if (c.url.includes("/v1/contacts?")) return respostaJson(200, [{ id: "c1", phone: DESTINO }]);
+      return respostaJson(400, { message: "Channel account is not connected: dado privado fictício" });
+    }));
+
+    expect(await enviarWhatsApp({ para: DESTINO, texto: "x", parametros: [] })).toEqual({
+      estado: "erro", motivo: "Clint recusou: HTTP 400; code=channel_disconnected",
+    });
   });
 
   it("falha de rede vira erro, não exceção", async () => {
@@ -187,6 +211,6 @@ describe("modo clint", () => {
 
     const r = await enviarWhatsApp({ para: DESTINO, texto: "x", parametros: [] });
 
-    expect(r).toEqual({ estado: "erro", motivo: "Clint: rede caiu" });
+    expect(r).toEqual({ estado: "erro", motivo: "Clint: transport_error" });
   });
 });

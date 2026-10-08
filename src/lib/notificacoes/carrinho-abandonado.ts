@@ -58,6 +58,8 @@ export interface ResultadoRodada {
   motivo?: string;
   vistos: number;
   enviados: number;
+  /** Reservas desta rodada sem confirmação de aceite pelo provedor. Não autoriza reenvio. */
+  reservasSemConfirmacao: number;
   pulados: Partial<
     Record<
       | MotivoPulo
@@ -72,7 +74,8 @@ export interface ResultadoRodada {
       | "envio_recusado"
       | "mudou_de_estado"
       | "comprou_em_outro_pedido"
-      | "mesma_pessoa_nesta_rodada",
+      | "mesma_pessoa_nesta_rodada"
+      | "reserva_sem_confirmacao",
       number
     >
   >;
@@ -103,7 +106,7 @@ function textoDaEtapa(etapa: Etapa): string {
 export async function rodadaDeCarrinhoAbandonado(
   agora: Date = new Date()
 ): Promise<ResultadoRodada> {
-  const vazio: ResultadoRodada = { executou: false, vistos: 0, enviados: 0, pulados: {} };
+  const vazio: ResultadoRodada = { executou: false, vistos: 0, enviados: 0, reservasSemConfirmacao: 0, pulados: {} };
   try {
     const modo = modoWhatsApp();
     if (modo === "desligado") return { ...vazio, motivo: "whatsapp desligado" };
@@ -166,7 +169,7 @@ export async function rodadaDeCarrinhoAbandonado(
       return { ...vazio, motivo: "não deu para montar a fila com segurança" };
     }
 
-    const resultado: ResultadoRodada = { executou: true, vistos: 0, enviados: 0, pulados: {} };
+    const resultado: ResultadoRodada = { executou: true, vistos: 0, enviados: 0, reservasSemConfirmacao: 0, pulados: {} };
     const conta = (m: keyof ResultadoRodada["pulados"]) => {
       resultado.pulados[m] = (resultado.pulados[m] ?? 0) + 1;
     };
@@ -221,6 +224,11 @@ export async function rodadaDeCarrinhoAbandonado(
         telefoneJaAvisado(telefonesAvisadosNestaEtapa, pedido.telefone, destino)
       ) {
         conta("mesma_pessoa_nesta_rodada");
+        if (telefoneJaAvisado(
+          etapa === "primeiro" ? historico.telefonesComPrimeiroSemConfirmacao : historico.telefonesComUltimoSemConfirmacao,
+          pedido.telefone,
+          destino
+        )) conta("reserva_sem_confirmacao");
         continue;
       }
 
@@ -247,6 +255,11 @@ export async function rodadaDeCarrinhoAbandonado(
         etapa === "primeiro" ? recente.telefonesComPrimeiro : recente.telefonesComUltimo;
       if (telefoneJaAvisado(recentesNestaEtapa, pedido.telefone, destino)) {
         conta("mesma_pessoa_nesta_rodada");
+        if (telefoneJaAvisado(
+          etapa === "primeiro" ? recente.telefonesComPrimeiroSemConfirmacao : recente.telefonesComUltimoSemConfirmacao,
+          pedido.telefone,
+          destino
+        )) conta("reserva_sem_confirmacao");
         continue;
       }
 
@@ -382,6 +395,7 @@ export async function rodadaDeCarrinhoAbandonado(
         // trecho ficou quando a paginação virou laço externo — achado do
         // Codex em 05/09/2026.
         if (erroBaixa) {
+          resultado.reservasSemConfirmacao += 1;
           console.error("[carrinho] enviado mas não anotado", erroBaixa.message);
           return resultado;
         }
@@ -403,6 +417,7 @@ export async function rodadaDeCarrinhoAbandonado(
           .is("provider_message_id", null);
 
         if (erroLiberacao) {
+          resultado.reservasSemConfirmacao += 1;
           await supabase
             .from("order_notifications")
             .update({ last_error: "whatsapp desligado" })
@@ -429,6 +444,7 @@ export async function rodadaDeCarrinhoAbandonado(
         .update({ last_error: envio.motivo })
         .eq("order_id", pedido.id)
         .eq("kind", kindDaEtapa(etapa));
+      resultado.reservasSemConfirmacao += 1;
       conta("envio_recusado");
     }
 
@@ -534,6 +550,8 @@ interface Historico {
   porPedido: Map<string, Array<{ kind: string; createdAt: string; sentAt: string | null }>>;
   telefonesComPrimeiro: Set<string>;
   telefonesComUltimo: Set<string>;
+  telefonesComPrimeiroSemConfirmacao: Set<string>;
+  telefonesComUltimoSemConfirmacao: Set<string>;
   desde: string;
 }
 
@@ -576,6 +594,8 @@ async function lerHistorico(
   }
   const telefonesComPrimeiro = new Set<string>();
   const telefonesComUltimo = new Set<string>();
+  const telefonesComPrimeiroSemConfirmacao = new Set<string>();
+  const telefonesComUltimoSemConfirmacao = new Set<string>();
 
   if (porPedido.size > 0) {
     const { data: pedidos, error: erroPedidos } = await supabase
@@ -599,10 +619,17 @@ async function lerHistorico(
         telefonesComPrimeiro.add(digitos);
       }
       if (eventos.some((e) => e.kind === KIND_ULTIMO)) telefonesComUltimo.add(digitos);
+      if (eventos.some((e) => (e.kind === KIND_LEGADO || e.kind === KIND_PRIMEIRO) && !e.sentAt)) {
+        telefonesComPrimeiroSemConfirmacao.add(digitos);
+      }
+      if (eventos.some((e) => e.kind === KIND_ULTIMO && !e.sentAt)) {
+        telefonesComUltimoSemConfirmacao.add(digitos);
+      }
     }
   }
 
-  return { erro: false, porPedido, telefonesComPrimeiro, telefonesComUltimo, desde };
+  return { erro: false, porPedido, telefonesComPrimeiro, telefonesComUltimo,
+    telefonesComPrimeiroSemConfirmacao, telefonesComUltimoSemConfirmacao, desde };
 }
 
 /**

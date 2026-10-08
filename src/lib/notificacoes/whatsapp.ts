@@ -300,10 +300,8 @@ async function contatoNaClint(
       return { erro: `Clint não criou o contato (HTTP ${criado.status})` };
     }
     return { id };
-  } catch (erro) {
-    return {
-      erro: erro instanceof Error ? erro.message : "erro de rede ao criar contato na Clint",
-    };
+  } catch {
+    return { erro: "transport_error" };
   }
 }
 
@@ -355,16 +353,24 @@ async function enviarPelaClint(mensagem: MensagemWhatsApp): Promise<ResultadoEnv
         (typeof erro === "string" ? erro : erro?.message) ??
         corpo?.message ??
         `HTTP ${resposta.status}`;
-      // A resposta da Clint não carrega o token; guardar o motivo é seguro
-      // e é o que diz se o template sumiu, foi reprovado ou o canal caiu.
-      return { estado: "erro", motivo: `Clint recusou: ${motivo}` };
+      // Guarde apenas status e código conhecido. O corpo do provedor pode
+      // incluir dados de contato e não deve ir ao banco ou aos logs.
+      const codigo =
+        resposta.status === 429 || /rate limit exceeded|too many requests/i.test(motivo)
+          ? "rate_limit"
+          : /channel account is not connected/i.test(motivo)
+            ? "channel_disconnected"
+          : /template.*(?:not approved|approved status)/i.test(motivo)
+            ? "template_not_approved"
+            : "provider_rejected";
+      return { estado: "erro", motivo: `Clint recusou: HTTP ${resposta.status}; code=${codigo}` };
     }
 
     return { estado: "enviado", providerMessageId: corpo?.data?.id ?? corpo?.id ?? null };
   } catch (erro) {
-    return {
-      estado: "erro",
-      motivo: erro instanceof Error ? erro.message : "falha desconhecida ao chamar a Clint",
-    };
+    const nome = erro instanceof Error
+      ? /^(CLINT_API_TOKEN|CLINT_CANAL_ID|CLINT_TEMPLATE_ID) não definida\./.exec(erro.message)?.[1]
+      : null;
+    return { estado: "erro", motivo: nome ? `Clint: ${nome} não definida` : "Clint: transport_error" };
   }
 }

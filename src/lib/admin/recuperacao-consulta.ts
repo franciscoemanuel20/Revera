@@ -51,9 +51,11 @@ export type EtapaExibida =
   | "elegivel_primeiro"
   | "primeiro_enviado"
   | "primeiro_recusado"
+  | "primeiro_sem_confirmacao"
   | "elegivel_ultimo"
   | "ultimo_enviado"
   | "ultimo_recusado"
+  | "ultimo_sem_confirmacao"
   | "fora_da_janela"
   | "nao_elegivel";
 
@@ -61,10 +63,12 @@ export const ETAPA_LABEL: Record<EtapaExibida, string> = {
   aguardando_janela: "Aguardando janela de espera",
   elegivel_primeiro: "Pronto para o 1º aviso",
   primeiro_enviado: "1º aviso enviado",
-  primeiro_recusado: "1º aviso recusado",
+  primeiro_recusado: "1ª reserva sem confirmação (recusa registrada)",
+  primeiro_sem_confirmacao: "1ª reserva sem confirmação",
   elegivel_ultimo: "Pronto para o último lembrete",
   ultimo_enviado: "Último lembrete enviado",
-  ultimo_recusado: "Último lembrete recusado",
+  ultimo_recusado: "Última reserva sem confirmação (recusa registrada)",
+  ultimo_sem_confirmacao: "Última reserva sem confirmação",
   fora_da_janela: "Fora da janela de recuperação",
   nao_elegivel: "Não elegível",
 };
@@ -98,6 +102,8 @@ export interface ResumoRecuperacao {
   elegiveis: number;
   primeiroEnviado: number;
   ultimoEnviado: number;
+  envioConfirmado: number;
+  reservaSemConfirmacao: number;
   recusadosDeVerdade: number;
   foraDaJanelaOuNaoElegivel: number;
 }
@@ -115,6 +121,8 @@ function vazio(): ResumoRecuperacao {
     elegiveis: 0,
     primeiroEnviado: 0,
     ultimoEnviado: 0,
+    envioConfirmado: 0,
+    reservaSemConfirmacao: 0,
     recusadosDeVerdade: 0,
     foraDaJanelaOuNaoElegivel: 0,
   };
@@ -228,6 +236,7 @@ function etapaDoPedido(
   const erroUltimoConfiguracao = erroDeConfiguracao(ultimo?.ultimoErro ?? null);
   if (erroUltimoConfiguracao) return { etapa: "nao_elegivel", motivoNaoElegivel: erroUltimoConfiguracao };
   if (ultimo?.ultimoErro) return { etapa: "ultimo_recusado", motivoNaoElegivel: null };
+  if (ultimo) return { etapa: "ultimo_sem_confirmacao", motivoNaoElegivel: null };
 
   if (primeiro?.enviadoEm) {
     const decisao = decidir(
@@ -256,6 +265,7 @@ function etapaDoPedido(
   const erroPrimeiroConfiguracao = erroDeConfiguracao(primeiro?.ultimoErro ?? null);
   if (erroPrimeiroConfiguracao) return { etapa: "nao_elegivel", motivoNaoElegivel: erroPrimeiroConfiguracao };
   if (primeiro?.ultimoErro) return { etapa: "primeiro_recusado", motivoNaoElegivel: null };
+  if (primeiro) return { etapa: "primeiro_sem_confirmacao", motivoNaoElegivel: null };
 
   const decisao = decidir(
     { id: "", criadoEm: pedido.criadoEm, telefone: pedido.telefone, moeda: pedido.moeda },
@@ -343,6 +353,12 @@ export async function buscarRecuperacao(
 
     const primeiro = achar(KIND_PRIMEIRO) ?? achar(KIND_LEGADO);
     const ultimo = achar(KIND_ULTIMO);
+    for (const aviso of [primeiro, ultimo]) {
+      if (!aviso) continue;
+      // Confirmação aqui significa aceite registrado pela API, não entrega ao cliente.
+      if (aviso.enviadoEm) resumo.envioConfirmado += 1;
+      else resumo.reservaSemConfirmacao += 1;
+    }
 
     let { etapa, motivoNaoElegivel } = etapaDoPedido(
       { telefone: cliente?.phone ?? null, moeda: linha.currency, criadoEm: linha.created_at },
@@ -381,6 +397,9 @@ export async function buscarRecuperacao(
       case "primeiro_recusado":
       case "ultimo_recusado":
         resumo.recusadosDeVerdade += 1;
+        break;
+      case "primeiro_sem_confirmacao":
+      case "ultimo_sem_confirmacao":
         break;
       case "fora_da_janela":
       case "nao_elegivel":
