@@ -103,7 +103,11 @@ export async function emitirFocusNfeAction(input: unknown): Promise<Result> {
     const fresh = (await carregarProcessosExportacao(a.s, [orderId])).get(orderId);
     if (!fresh || JSON.stringify(fresh.entrada.itens) !== JSON.stringify(processo.entrada.itens) ||
       JSON.stringify(fresh.entrada.pacote) !== JSON.stringify(processo.entrada.pacote) ||
-      JSON.stringify(fresh.entrada.destino) !== JSON.stringify(processo.entrada.destino))
+      JSON.stringify(fresh.entrada.destino) !== JSON.stringify(processo.entrada.destino) ||
+      JSON.stringify(fresh.entrada.contato) !== JSON.stringify(processo.entrada.contato) ||
+      JSON.stringify(fresh.entrada.exportador) !== JSON.stringify(processo.entrada.exportador) ||
+      !fresh.entrada.pago || fresh.entrada.cancelado ||
+      fresh.entrada.documentos.some(d => d.kind === "nfe"))
       throw new Error("Snapshot do pedido mudou antes da emissão; referência reservada para reconciliação manual.");
     // Este update acontece antes do POST. Se o processo morrer depois dele,
     // a resposta é ambígua; se morrer antes, a reserva pode ser liberada.

@@ -8,7 +8,8 @@ type PedidoLinha = {
   id: string; payment_status: string; canceled_at: string | null; shipping_status: string;
   subtotal_cents: number; discount_cents: number; currency: string;
   customers: { full_name: string | null; email: string | null; phone: string | null } | null;
-  addresses: { country: string | null; city: string | null; postal_code: string | null; line1: string | null } | null;
+  addresses: { country: string | null; city: string | null; postal_code: string | null;
+    line1: string | null; recipient_name: string | null } | null;
   order_items: { id: string; product_name_snapshot: string; quantity: number }[];
   shipments: { id: string; provider: string; tracking_code: string | null; status: string | null;
     metadata?: { documents?: Array<{ typeCode?: string | null; storagePath?: string }>;
@@ -23,7 +24,7 @@ export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
   const resultado = new Map<string, { entrada: EntradaProcesso; avaliacao: ReturnType<typeof avaliarExportacao> }>();
   if (!ids.length) return resultado;
   const [pedidos, itens, pacotes, documentos, config, focusNotas] = await Promise.all([
-    s.from("orders").select("id,payment_status,canceled_at,shipping_status,subtotal_cents,discount_cents,currency,customers(full_name,email,phone),addresses(country,city,postal_code,line1),order_items(id,product_name_snapshot,quantity),shipments(id,provider,tracking_code,status,metadata)").in("id", ids),
+    s.from("orders").select("id,payment_status,canceled_at,shipping_status,subtotal_cents,discount_cents,currency,customers(full_name,email,phone),addresses(country,city,postal_code,line1,recipient_name),order_items(id,product_name_snapshot,quantity),shipments(id,provider,tracking_code,status,metadata)").in("id", ids),
     s.from("order_export_items").select("order_id,order_item_id,ncm,hs_code,country_of_origin,description_en,net_weight_g,customs_value_cents,fiscal_value_brl_cents,fx_rate_brl_per_unit,fx_source,fx_date").in("order_id", ids),
     s.from("order_export_packages").select("*").in("order_id", ids),
     s.from("order_export_documents").select("*").in("order_id", ids),

@@ -3,6 +3,8 @@ import { FocusNfeProvider, FocusRequestError, focusReference } from "@/lib/fisca
 import { issueWithPermanentReservation } from "@/lib/fiscal/focus-idempotency";
 import { focusBlockers, validateFocusPayload, type FiscalSettings } from "@/lib/fiscal/focus-validation";
 import type { EntradaProcesso } from "@/lib/internacional/processo-exportacao";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const orderId = "2c4d3a59-0c6e-453d-b5af-78c10cd8c120";
 const ok = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -72,6 +74,16 @@ describe("reserva permanente da emissão", () => {
   });
 });
 
+describe("travas persistidas da reserva Focus", () => {
+  const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/00000000000039_focus_nfe.sql"), "utf8");
+  it("congela itens fiscais e impede NF-e manual concorrente", () => {
+    expect(migration).toContain("create trigger freeze_focus_export_items before insert or update or delete on order_export_items");
+    expect(migration).toContain("create trigger guard_focus_nfe_document before insert or update or delete on order_export_documents");
+    expect(migration).toContain("NF-e Focus vinculada: documento manual ou substituição bloqueada");
+    expect(migration).toContain("perform 1 from orders where id = pedido_id for update");
+  });
+});
+
 const settings: FiscalSettings = { cfop: "7501", natureza_operacao: "validada", tributacao: "validada",
   regime_exportacao: "validado", serie: "1", numeracao: "Focus", emitente_confirmado: true, contador_validou: true };
 const entrada: EntradaProcesso = { internacional: true, pago: true, cancelado: false,
@@ -96,5 +108,25 @@ describe("trava fiscal", () => {
       items: [{ codigo_ncm: "39191000", cfop: "7501", quantidade_comercial: 1, valor_bruto: 60,
         descricao: "Produto", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
     expect(validateFocusPayload(payload, entrada, settings).join(" ")).toContain("diverge");
+  });
+  it("compara emitente e destinatário com o pedido, não só com formato de CPF/CNPJ", () => {
+    const order: EntradaProcesso = { ...entrada,
+      destino: { ...entrada.destino, recipient_name: "Cliente Confirmado", postal_code: "10115" },
+      exportador: { legal_name: "Revera Ltda", tax_id: "12345678000199", country: "BR",
+        postal_code: "12216530", city: "São José dos Campos", address_line1: "Rua das Flores 10",
+        contact_name: "Contato", phone: "5511999999999", email: "fiscal@example.com",
+        invoice_mode: "external", dhl_account_confirmed: true } };
+    const payload = { natureza_operacao: "validada", serie: "1", tipo_documento: 1, local_destino: 3,
+      cnpj_emitente: "12345678000199", nome_emitente: "Revera Ltda", municipio_emitente: "São José dos Campos",
+      cep_emitente: "12216530", logradouro_emitente: "Rua das Flores", nome_destinatario: "Cliente Confirmado",
+      pais_destinatario: "Alemanha", municipio_destinatario: "Berlin", cep_destinatario: "10115",
+      logradouro_destinatario: "Rua 1", valor_produtos: 60, valor_total: 60,
+      items: [{ codigo_ncm: "67042000", cfop: "7501", quantidade_comercial: 1,
+        valor_bruto: 60, descricao: "Produto", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
+    expect(validateFocusPayload(payload, order, settings)).toEqual([]);
+    expect(validateFocusPayload({ ...payload, cnpj_emitente: "99999999000199" }, order, settings))
+      .toContain("Identidade do emitente difere do exportador confirmado.");
+    expect(validateFocusPayload({ ...payload, nome_destinatario: "Outra Pessoa" }, order, settings))
+      .toContain("Destinatário da NF-e difere do pedido.");
   });
 });

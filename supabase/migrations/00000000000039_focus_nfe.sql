@@ -146,10 +146,13 @@ create or replace function freeze_snapshot_after_focus() returns trigger languag
 security definer set search_path = public, pg_temp as $$
 declare pedido_id uuid;
 begin
-  if tg_table_name = 'addresses' then
+  if tg_table_name = 'addresses' or tg_table_name = 'customers' then
+    perform 1 from orders o where (tg_table_name = 'addresses' and o.address_id = old.id)
+      or (tg_table_name = 'customers' and o.customer_id = old.id) for update;
     if exists(select 1 from orders o join order_focus_nfe n on n.order_id = o.id
-      where o.address_id = old.id) then
-      raise exception 'Endereço congelado após tentativa Focus';
+      where (tg_table_name = 'addresses' and o.address_id = old.id)
+        or (tg_table_name = 'customers' and o.customer_id = old.id)) then
+      raise exception 'Destinatário congelado após tentativa Focus';
     end if;
   else
     pedido_id := case when tg_op = 'DELETE' then old.order_id else new.order_id end;
@@ -169,8 +172,56 @@ create trigger freeze_focus_packages before insert or update or delete on order_
   for each row execute function freeze_snapshot_after_focus();
 create trigger freeze_focus_addresses before update or delete on addresses
   for each row execute function freeze_snapshot_after_focus();
+create trigger freeze_focus_customers before update or delete on customers
+  for each row execute function freeze_snapshot_after_focus();
 create trigger freeze_facts_fiscal before insert or update or delete on order_export_item_facts
   for each row execute function freeze_export_item_facts();
+
+create or replace function guard_focus_order_identity() returns trigger language plpgsql
+security definer set search_path = public, pg_temp as $$
+begin
+  if (new.address_id is distinct from old.address_id or new.customer_id is distinct from old.customer_id)
+    and exists(select 1 from order_focus_nfe where order_id = old.id) then
+    raise exception 'Identidade do destinatário congelada após tentativa Focus';
+  end if;
+  return new;
+end $$;
+create trigger guard_focus_order_identity before update on orders
+  for each row execute function guard_focus_order_identity();
+
+create or replace function guard_focus_nfe_document() returns trigger language plpgsql
+security definer set search_path = public, pg_temp as $$
+declare nota record;
+declare pedido_id uuid;
+begin
+  pedido_id := case when tg_op = 'DELETE' then old.order_id else new.order_id end;
+  perform 1 from orders where id = pedido_id for update;
+  if (case when tg_op = 'DELETE' then old.kind else new.kind end) <> 'nfe' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  select status, access_key, danfe_storage_path into nota from order_focus_nfe
+    where order_id = pedido_id;
+  if found then
+    if tg_op = 'INSERT' and auth.role() = 'service_role'
+      and nota.status = 'authorized' and nota.access_key = new.reference
+      and nota.danfe_storage_path = new.storage_path and new.status = 'pending'
+      and new.source = 'external' then
+      return new;
+    end if;
+    if tg_op = 'UPDATE' and old.status = 'pending'
+      and new.status in ('verified','rejected')
+      and new.reference = old.reference and new.storage_path = old.storage_path
+      and new.source = old.source and new.regime is not distinct from old.regime then
+      return new;
+    end if;
+    raise exception 'NF-e Focus vinculada: documento manual ou substituição bloqueada';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $$;
+create trigger guard_focus_nfe_document before insert or update or delete on order_export_documents
+  for each row execute function guard_focus_nfe_document();
 
 create table if not exists order_focus_nfe_events (
   id bigint generated always as identity primary key,

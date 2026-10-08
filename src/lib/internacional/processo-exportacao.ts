@@ -48,7 +48,8 @@ export type EntradaProcesso = {
   pago: boolean;
   cancelado: boolean;
   contato: { nome?: string | null; email?: string | null; telefone?: string | null };
-  destino: { country?: string | null; city?: string | null; postal_code?: string | null; line1?: string | null } | null;
+  destino: { country?: string | null; city?: string | null; postal_code?: string | null;
+    line1?: string | null; recipient_name?: string | null } | null;
   linhas: { id: string; nome: string; quantity: number }[];
   valorMercadoriasCents: number;
   moedaPedido: string;
