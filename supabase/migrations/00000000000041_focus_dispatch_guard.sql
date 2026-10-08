@@ -19,6 +19,18 @@ where s.provider = 'dhl' and s.status in ('label_created','registrado_manual')
   and d.validated_by is not null and d.validated_at is not null
 on conflict(shipment_id) do nothing;
 
+-- Marca somente reservas novas que passaram pela trava Focus no INSERT.
+-- A marca permite persistir a resposta real da DHL após timeout local ou
+-- expiração dos 60 segundos, sem liberar despacho antes de nova consulta.
+create table if not exists focus_dhl_reservations (
+  shipment_id uuid primary key references shipments(id) on delete cascade,
+  order_id uuid not null references orders(id),
+  captured_at timestamptz not null default now()
+);
+alter table focus_dhl_reservations enable row level security;
+create policy "admin read Focus DHL reservations" on focus_dhl_reservations for select to authenticated
+  using (exists(select 1 from admin_users where id = auth.uid()));
+
 create or replace function export_require_documents_for_dispatch() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare pais text;
@@ -191,6 +203,13 @@ begin
       or old.status in ('label_created','registrado_manual') then return new; end if;
     if exists(select 1 from legacy_dhl_shipments l where l.shipment_id = old.id
       and l.order_id = old.order_id) then return new; end if;
+    if exists(select 1 from focus_dhl_reservations r where r.shipment_id = old.id
+      and r.order_id = old.order_id) then
+      if coalesce(auth.role(), '') <> 'service_role' then
+        raise exception 'Resposta DHL Focus exige service role';
+      end if;
+      return new;
+    end if;
   end if;
   perform 1 from orders where id = new.order_id for update;
   if not exists(
@@ -200,6 +219,7 @@ begin
       and n.consulted_at >= statement_timestamp() - interval '60 seconds'
       and n.access_key = d.reference and d.status = 'verified'
       and n.xml_storage_path is not null and n.danfe_storage_path = d.storage_path
+    for update of n
   ) then
     raise exception 'Remessa DHL exige NF-e Focus autorizada e conferida';
   end if;
@@ -207,3 +227,29 @@ begin
 end $$;
 create trigger guard_focus_dhl_reservation before insert or update of status on shipments
   for each row execute function guard_focus_dhl_reservation();
+
+create or replace function mark_focus_dhl_reservation() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if new.provider = 'dhl' then
+    insert into focus_dhl_reservations(shipment_id, order_id) values(new.id, new.order_id);
+  end if;
+  return new;
+end $$;
+create trigger mark_focus_dhl_reservation after insert on shipments
+  for each row execute function mark_focus_dhl_reservation();
+
+create or replace function block_focus_consultation_during_dhl() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if (new.consultation_nonce is distinct from old.consultation_nonce
+      or (new.consulted_at is null and old.consulted_at is not null))
+    and exists(select 1 from focus_dhl_reservations r
+      join shipments s on s.id = r.shipment_id
+      where r.order_id = old.order_id and s.status = 'creating') then
+    raise exception 'Consulta Focus bloqueada durante criação DHL; reconcilie a remessa primeiro';
+  end if;
+  return new;
+end $$;
+create trigger block_focus_consultation_during_dhl before update on order_focus_nfe
+  for each row execute function block_focus_consultation_during_dhl();

@@ -98,6 +98,10 @@ describe("travas persistidas da reserva Focus", () => {
     expect(dispatch).toContain("and d.source = 'external' and d.status = 'verified'");
     expect(dispatch).toContain("create trigger guard_focus_dhl_reservation before insert or update of status on shipments");
     expect(dispatch).toContain("if new.status not in ('label_created','registrado_manual')");
+    expect(dispatch).toContain("create table if not exists focus_dhl_reservations");
+    expect(dispatch).toContain("for update of n");
+    expect(dispatch).toContain("create trigger block_focus_consultation_during_dhl before update on order_focus_nfe");
+    expect(dispatch).toContain("join shipments s on s.id = r.shipment_id");
     expect(dispatch).toContain("and not exists(select 1 from order_focus_nfe n where n.order_id = new.id)");
   });
   it("permite registrar cancelamento consultado sem reautorizar uma nota cancelada", () => {
