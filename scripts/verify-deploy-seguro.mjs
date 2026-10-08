@@ -328,8 +328,26 @@ if (permiteSimulacao && ambiente === "staging") {
   // Chave presente tem de PROVAR de que projeto é. Formato sem `ref` legível
   // (não-JWT) é recusado: aceitar "não sei" seria a mesma brecha de antes.
   for (const nome of ["NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"]) {
-    if (!env(nome)) continue;
-    const refChave = refDaChaveSupabase(env(nome));
+    const chave = env(nome);
+    if (!chave) continue;
+
+    // Chaves modernas do Supabase são opacas e vinculadas ao projeto no
+    // servidor. O project ref não fica mais dentro delas; quem prova o
+    // destino é a URL canônica, já limitada acima à allowlist de staging.
+    // Ainda validamos o tipo para nunca publicar uma sb_secret_ no navegador.
+    if (chave.startsWith("sb_")) {
+      const prefixoEsperado =
+        nome === "NEXT_PUBLIC_SUPABASE_ANON_KEY" ? "sb_publishable_" : "sb_secret_";
+      if (!chave.startsWith(prefixoEsperado)) {
+        problemas.push(
+          `${nome} usa uma chave moderna do tipo errado. Esperado prefixo ` +
+            `${prefixoEsperado} para este campo.`
+        );
+      }
+      continue;
+    }
+
+    const refChave = refDaChaveSupabase(chave);
     if (refChave === SUPABASE_REF_PRODUCAO) {
       problemas.push(
         `${nome} de STAGING é uma chave do projeto Supabase de PRODUÇÃO. ` +
@@ -337,8 +355,8 @@ if (permiteSimulacao && ambiente === "staging") {
       );
     } else if (!refChave) {
       problemas.push(
-        `${nome} de STAGING não permite provar a qual projeto Supabase pertence ` +
-          "(não é uma chave JWT com `ref`). Use a chave JWT do projeto REVERA-STAGING."
+        `${nome} de STAGING não é uma chave reconhecida. Use uma chave moderna ` +
+          "sb_publishable_/sb_secret_ ou a chave JWT legada do projeto REVERA-STAGING."
       );
     } else if (refStaging && refChave !== refStaging) {
       problemas.push(

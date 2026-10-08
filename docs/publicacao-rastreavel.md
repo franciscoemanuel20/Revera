@@ -73,9 +73,11 @@ staging, `verify-deploy-seguro.mjs` só aceita `NEXT_PUBLIC_SUPABASE_URL` na
 forma canônica `https://<ref>.supabase.co` e com o `ref` de um projeto de
 staging conhecido (lista `SUPABASE_REFS_STAGING` no próprio script). Recusa
 URL ausente, domínio próprio, projeto de produção ou projeto desconhecido;
-recusa anon key ou service role que sejam de produção, de outro projeto, ou
-cuja origem não dê para provar (formato não-JWT); e recusa `DATABASE_URL` do
-banco de produção. Sem isso, `mock` + banco real aprovaria pedido de graça
-numa URL pública.
+recusa chaves JWT legadas que sejam de produção ou de outro projeto; nas
+chaves modernas, exige `sb_publishable_` no navegador e `sb_secret_` somente
+no servidor. Como as chaves modernas são opacas, o destino continua provado
+pela URL canônica presa à lista de projetos de staging. Também recusa
+`DATABASE_URL` do banco de produção. Sem isso, `mock` + banco real aprovaria
+pedido de graça numa URL pública.
 
 Mudar essas variáveis é mudança de configuração: vale a senha do `AGENTS.md`.

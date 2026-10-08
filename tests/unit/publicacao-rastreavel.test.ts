@@ -163,12 +163,31 @@ describe("staging nunca no banco de produção (mock + dados reais = pedido de g
     expect(r.saida).toContain("não está na lista de projetos de staging conhecidos");
   });
 
+  it("aceita o par moderno quando os tipos correspondem aos campos", () => {
+    const r = trava({
+      ...STAGING_SOBRE_PREVIEW,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "sb_publishable_teste",
+      SUPABASE_SERVICE_ROLE_KEY: "sb_secret_teste",
+    });
+    expect(r.saida).toContain("OK — configuração segura para este ambiente.");
+    expect(r.codigo).toBe(0);
+  });
+
+  it.each([
+    ["NEXT_PUBLIC_SUPABASE_ANON_KEY", "sb_secret_nao_pode_ir_ao_navegador", "sb_publishable_"],
+    ["SUPABASE_SERVICE_ROLE_KEY", "sb_publishable_sem_privilegio", "sb_secret_"],
+  ])("%s com chave moderna do tipo errado: recusado", (nome, chave, prefixo) => {
+    const r = trava({ ...STAGING_SOBRE_PREVIEW, [nome]: chave });
+    expect(r.codigo).toBe(1);
+    expect(r.saida).toContain(`Esperado prefixo ${prefixo}`);
+  });
+
   it.each(["NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"])(
-    "%s em formato não-JWT (origem não comprovável): recusado",
+    "%s em formato desconhecido: recusado",
     (nome) => {
-      const r = trava({ ...STAGING_SOBRE_PREVIEW, [nome]: "sb_secret_formato_novo_sem_ref" });
+      const r = trava({ ...STAGING_SOBRE_PREVIEW, [nome]: "formato_desconhecido" });
       expect(r.codigo).toBe(1);
-      expect(r.saida).toContain(`${nome} de STAGING não permite provar a qual projeto Supabase pertence`);
+      expect(r.saida).toContain(`${nome} de STAGING não é uma chave reconhecida`);
     }
   );
 
