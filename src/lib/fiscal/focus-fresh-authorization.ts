@@ -9,6 +9,9 @@ export async function exigirFocusAutorizadaRecente(orderId: string): Promise<{ o
     .eq("order_id", orderId).maybeSingle();
   if (!row || row.status !== "authorized" || !row.access_key)
     return { error: "NF-e Focus não está autorizada para este pedido." };
+  const { error: resetError } = await db.from("order_focus_nfe").update({ consulted_at: null })
+    .eq("id", row.id).eq("status", "authorized");
+  if (resetError) return { error: "Não foi possível invalidar a confirmação fiscal anterior." };
   let result;
   try {
     result = await new FocusNfeProvider(row.environment as FocusEnvironment,

@@ -11,7 +11,12 @@ alter table legacy_dhl_shipments enable row level security;
 create policy "admin read legacy DHL" on legacy_dhl_shipments for select to authenticated
   using (exists(select 1 from admin_users where id = auth.uid()));
 insert into legacy_dhl_shipments(shipment_id, order_id)
-select s.id, s.order_id from shipments s where s.provider = 'dhl'
+select s.id, s.order_id from shipments s
+join order_export_documents d on d.order_id = s.order_id and d.kind = 'nfe'
+where s.provider = 'dhl' and s.status in ('label_created','registrado_manual')
+  and regexp_replace(coalesce(s.tracking_code, ''), '[^0-9]', '', 'g') ~ '^[0-9]{10}$'
+  and d.source = 'external' and d.status = 'verified'
+  and d.validated_by is not null and d.validated_at is not null
 on conflict(shipment_id) do nothing;
 
 create or replace function export_require_documents_for_dispatch() returns trigger
@@ -181,6 +186,12 @@ create or replace function guard_focus_dhl_reservation() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if new.provider <> 'dhl' then return new; end if;
+  if tg_op = 'UPDATE' then
+    if new.status not in ('label_created','registrado_manual')
+      or old.status in ('label_created','registrado_manual') then return new; end if;
+    if exists(select 1 from legacy_dhl_shipments l where l.shipment_id = old.id
+      and l.order_id = old.order_id) then return new; end if;
+  end if;
   perform 1 from orders where id = new.order_id for update;
   if not exists(
     select 1 from order_focus_nfe n
@@ -194,5 +205,5 @@ begin
   end if;
   return new;
 end $$;
-create trigger guard_focus_dhl_reservation before insert on shipments
+create trigger guard_focus_dhl_reservation before insert or update of status on shipments
   for each row execute function guard_focus_dhl_reservation();

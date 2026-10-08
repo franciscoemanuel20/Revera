@@ -94,7 +94,10 @@ describe("travas persistidas da reserva Focus", () => {
     expect(dispatch).toContain("Remessa DHL exige NF-e Focus autorizada e conferida");
     expect(dispatch).toContain("n.consulted_at >= statement_timestamp() - interval '60 seconds'");
     expect(dispatch).toContain("insert into legacy_dhl_shipments(shipment_id, order_id)");
-    expect(dispatch).toContain("select s.id, s.order_id from shipments s where s.provider = 'dhl'");
+    expect(dispatch).toContain("where s.provider = 'dhl' and s.status in ('label_created','registrado_manual')");
+    expect(dispatch).toContain("and d.source = 'external' and d.status = 'verified'");
+    expect(dispatch).toContain("create trigger guard_focus_dhl_reservation before insert or update of status on shipments");
+    expect(dispatch).toContain("if new.status not in ('label_created','registrado_manual')");
     expect(dispatch).toContain("and not exists(select 1 from order_focus_nfe n where n.order_id = new.id)");
   });
   it("permite registrar cancelamento consultado sem reautorizar uma nota cancelada", () => {

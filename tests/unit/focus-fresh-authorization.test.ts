@@ -40,17 +40,18 @@ describe("consulta Focus antes de remessa/despacho", () => {
   it("falha fechado em timeout", async () => {
     state.remote = "timeout";
     expect(await exigirFocusAutorizadaRecente("order-1")).toHaveProperty("error");
-    expect(state.updates).toHaveLength(0);
+    expect(state.updates).toEqual([{ consulted_at: null }]);
   });
   it("grava cancelamento externo e bloqueia ação física", async () => {
     state.remote = "cancelled";
     expect(await exigirFocusAutorizadaRecente("order-1")).toHaveProperty("error");
-    expect(state.updates[0]).toMatchObject({ status: "cancelled" });
+    expect(state.updates[1]).toMatchObject({ status: "cancelled" });
     expect(state.events[0]).toMatchObject({ event: "cancelled_detected" });
   });
   it("só libera após consulta autorizada e salva horário recente", async () => {
     expect(await exigirFocusAutorizadaRecente("order-1")).toEqual({ ok: true });
     expect(state.calls).toBe(1);
-    expect(state.updates[0]).toHaveProperty("consulted_at");
+    expect(state.updates[0]).toEqual({ consulted_at: null });
+    expect(state.updates[1]).toHaveProperty("consulted_at");
   });
 });

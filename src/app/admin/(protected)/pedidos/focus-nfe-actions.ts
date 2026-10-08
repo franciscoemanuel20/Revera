@@ -221,8 +221,11 @@ export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
   if (row.status === "reserved_unsent") return { error: "Nenhum POST Focus começou. Libere a reserva não enviada após conferir o snapshot." };
   let focus: FocusNfeProvider;
   try { focus = provider(row.environment as FocusEnvironment); } catch { return { error: "Token Focus indisponível para este ambiente." }; }
-  await db.from("order_focus_nfe").update({ consultation_attempts: row.consultation_attempts + 1,
-    consulted_at: new Date().toISOString() }).eq("id", row.id);
+  // A consulta anterior deixa de autorizar ações físicas antes da chamada externa.
+  const { error: attemptError } = await db.from("order_focus_nfe").update({
+    consultation_attempts: row.consultation_attempts + 1, consulted_at: null,
+  }).eq("id", row.id);
+  if (attemptError) return { error: "Não foi possível iniciar a consulta fiscal com segurança." };
   let result: FocusResult;
   try { result = await focus.consult(row.reference); }
   catch (error) {
@@ -242,6 +245,15 @@ export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
     return { ok: true, message: "NF-e cancelada na Focus. Etiqueta e despacho estão bloqueados; reconcilie o pedido." };
   }
   if (row.status === "cancelled") return { error: "NF-e cancelada. Este pedido exige reconciliação fiscal antes de qualquer envio." };
+  if (row.status === "authorized" && (result.status !== "authorized" || result.accessKey !== row.access_key))
+    return { error: "A Focus não confirmou a autorização e chave desta NF-e. Remessa e despacho bloqueados até reconciliação." };
+  if (row.status === "authorized") {
+    const { error: confirmError } = await db.from("order_focus_nfe").update({
+      consulted_at: new Date().toISOString(), response_sanitized: result.safeResponse,
+      updated_at: new Date().toISOString(),
+    }).eq("id", row.id).eq("status", "authorized");
+    if (confirmError) return { error: "Não foi possível registrar a autorização fiscal recente." };
+  }
   if (row.status !== "authorized" && row.status !== "cancelled") {
     try { await applyResult(db, row, result, a.user.id, true); }
     catch { return { error: "Resposta obtida, mas persistência fiscal falhou. Consulte novamente." }; }
