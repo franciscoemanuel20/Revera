@@ -1,0 +1,4 @@
+# Evita enviar arquivos locais ou segredos num deploy por CLI.
+.env*
+!.env.example
+*.tsbuildinfo

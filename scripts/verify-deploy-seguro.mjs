@@ -55,6 +55,41 @@ function baseAsaasDeProducao(valor) {
   }
 }
 
+/** Project ref do Supabase de PRODUÇÃO. Público: é o subdomínio da URL. */
+const SUPABASE_REF_PRODUCAO = "ngnaemfiytutyplolgxb";
+
+/**
+ * Projetos Supabase em que staging PODE gravar (REVERA-STAGING). Lista
+ * fechada de propósito: staging só é seguro se for provadamente outro banco,
+ * e "qualquer coisa que não pareça produção" não é prova — um domínio próprio
+ * na frente do projeto de produção passaria. Projeto novo de staging entra
+ * aqui, com a senha de mudança do AGENTS.md.
+ */
+const SUPABASE_REFS_STAGING = new Set(["dpeluxmzuuijuveesgtu"]);
+
+/** Só a forma canônica `https://<ref>.supabase.co` prova de qual projeto é. */
+function refDaUrlSupabase(valor) {
+  if (!valor) return null;
+  try {
+    const url = new URL(valor);
+    const m = url.protocol === "https:" ? url.host.match(/^([a-z0-9]+)\.supabase\.co$/) : null;
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/** As chaves JWT do Supabase carregam o `ref` do projeto no payload. */
+function refDaChaveSupabase(jwt) {
+  if (!jwt || jwt.split(".").length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
+    return typeof payload.ref === "string" ? payload.ref : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Mesma regra de src/lib/config/ambiente.ts — na dúvida, é produção.
  *
@@ -110,6 +145,25 @@ console.log(
     env("NODE_ENV") || "ausente"
   }, APP_ENV=${env("APP_ENV") || "ausente"})\n`
 );
+
+// ---------------------------------------------------------------------------
+// Preview só sobe como staging declarado (30/09/2026)
+// ---------------------------------------------------------------------------
+// Até aqui um Preview "puro" passava se recebesse a configuração de produção
+// (REVERA_PAYMENT_PROVIDER=infinitepay): uma URL pública, fora do domínio
+// oficial, cobrando de verdade e gravando no banco real. Preview não é lugar
+// de credencial de produção. O caminho suportado é APP_ENV=staging com o
+// conjunto do staging (mock, Supabase REVERA-STAGING) — ver
+// docs/publicacao-rastreavel.md. As demais checagens abaixo continuam
+// tratando Preview como ambiente com comprador real.
+if (ambiente === "preview") {
+  problemas.push(
+    "Preview sem APP_ENV=staging. Preview é URL pública e não recebe " +
+      "configuração de produção: ou sobe como staging declarado (pagamento " +
+      "simulado, Supabase REVERA-STAGING — docs/publicacao-rastreavel.md), ou " +
+      "não sobe."
+  );
+}
 
 // ---------------------------------------------------------------------------
 // P0-2 — pagamento nunca pode cair em mock onde existe comprador real
@@ -206,6 +260,14 @@ if (permiteSimulacao && ambiente === "staging") {
     }
   }
 
+  if (env("VERCEL_ENV") === "preview") {
+    for (const nome of ["REVERA_PAYMENT_PROVIDER", "PAYMENT_PROVIDER"]) {
+      if (env(nome) && env(nome).toLowerCase() !== "mock") {
+        problemas.push(`Preview de STAGING exige ${nome}=mock; não publicar checkout de gateway.`);
+      }
+    }
+  }
+
   if (provider === "infinitepay" && !env("INFINITEPAY_HANDLE")) {
     problemas.push(
       `INFINITEPAY_HANDLE ausente com ${nomeProvider}=infinitepay. ` +
@@ -236,6 +298,69 @@ if (permiteSimulacao && ambiente === "staging") {
     avisos.push(
       "NEXT_PUBLIC_SITE_URL ausente — o webhook e o redirect do gateway vão " +
         "usar a URL do deploy da Vercel, que muda a cada publicação."
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Staging NUNCA no banco de produção (30/09/2026)
+  // -------------------------------------------------------------------------
+  // Staging autoriza 'mock', e mock aprova pedido sem cobrar. Isso só é
+  // seguro porque o staging grava em OUTRO projeto Supabase. Até aqui essa
+  // separação era só documentada (.env.staging, provar-isolamento-staging):
+  // um Preview da Vercel com APP_ENV=staging e as variáveis de Supabase de
+  // produção passava nesta trava e entregava, numa URL pública, pedido
+  // "pago" de graça em cima dos dados reais. Agora a trava confere.
+  //
+  // O project ref é público (está na URL que vai para o navegador). Se a
+  // produção mudar de projeto Supabase, atualize SUPABASE_REF_PRODUCAO.
+  const refStaging = refDaUrlSupabase(env("NEXT_PUBLIC_SUPABASE_URL"));
+  if (!refStaging) {
+    problemas.push(
+      "NEXT_PUBLIC_SUPABASE_URL ausente ou fora da forma https://<ref>.supabase.co " +
+        "em staging. Sem a URL canônica não dá para provar que este ambiente " +
+        "está fora do banco de produção (domínio próprio não prova nada)."
+    );
+  } else if (refStaging === SUPABASE_REF_PRODUCAO) {
+    problemas.push(
+      "NEXT_PUBLIC_SUPABASE_URL de STAGING aponta para o projeto Supabase de " +
+        "PRODUÇÃO. Staging permite pagamento simulado: pedidos seriam aprovados " +
+        "sem cobrança em cima dos dados reais. Use o projeto REVERA-STAGING."
+    );
+  } else if (!SUPABASE_REFS_STAGING.has(refStaging)) {
+    problemas.push(
+      "NEXT_PUBLIC_SUPABASE_URL de STAGING aponta para um projeto Supabase que " +
+        "não está na lista de projetos de staging conhecidos " +
+        "(SUPABASE_REFS_STAGING). Staging só sobe num banco provadamente separado."
+    );
+  }
+  // Chave presente tem de PROVAR de que projeto é. Formato sem `ref` legível
+  // (não-JWT) é recusado: aceitar "não sei" seria a mesma brecha de antes.
+  for (const nome of ["NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"]) {
+    if (!env(nome)) continue;
+    const refChave = refDaChaveSupabase(env(nome));
+    if (refChave === SUPABASE_REF_PRODUCAO) {
+      problemas.push(
+        `${nome} de STAGING é uma chave do projeto Supabase de PRODUÇÃO. ` +
+          "Use as chaves do projeto REVERA-STAGING."
+      );
+    } else if (!refChave) {
+      problemas.push(
+        `${nome} de STAGING não permite provar a qual projeto Supabase pertence ` +
+          "(não é uma chave JWT com `ref`). Use a chave JWT do projeto REVERA-STAGING."
+      );
+    } else if (refStaging && refChave !== refStaging) {
+      problemas.push(
+        `${nome} pertence a outro projeto Supabase que não o de ` +
+          "NEXT_PUBLIC_SUPABASE_URL. URL e chaves do staging têm de ser do mesmo projeto."
+      );
+    }
+  }
+  // A aplicação web usa a API Supabase. Uma conexão SQL direta não é
+  // necessária no Preview e seu host pode ocultar o projeto de produção.
+  if (env("DATABASE_URL")) {
+    problemas.push(
+      "DATABASE_URL em STAGING não é permitida: a origem de uma " +
+        "conexão SQL direta não pode ser comprovada no build. Remova a variável."
     );
   }
 } else if (provider === "mock") {
