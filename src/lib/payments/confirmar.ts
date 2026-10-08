@@ -45,8 +45,9 @@ export type ResultadoConfirmacao =
 /**
  * @param orderId  orders.id (é o `order_nsu` mandado ao gateway)
  * @param pistas   dados extras vindos do webhook, quando houver. No retorno
- *                 do cliente não temos transaction_nsu — e tudo bem: o
- *                 gateway aceita consultar só pelo order_nsu.
+ *                 A InfinitePay também devolve transaction_nsu e slug no
+ *                 retorno do cliente. Sem essas pistas, uma resposta
+ *                 inconclusiva do gateway mantém a confirmação pendente.
  */
 export async function confirmarPagamento(
   orderId: string,
