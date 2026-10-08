@@ -96,7 +96,7 @@ export async function marcarEnvioAction(input: MarcarEnvioInput): Promise<AcaoPe
       return { error: `Despacho bloqueado: ${processo.avaliacao.bloqueiosDespacho.join(" ")}` };
     }
     if (!processo) return { error: "Não foi possível conferir a documentação da exportação." };
-    if (processo.entrada.internacional) {
+    if (processo.entrada.internacional && !processo.entrada.legacyManualNfe) {
       const focus = await exigirFocusAutorizadaRecente(orderId);
       if ("error" in focus) return { error: focus.error };
     }

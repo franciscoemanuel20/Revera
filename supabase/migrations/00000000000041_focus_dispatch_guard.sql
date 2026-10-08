@@ -1,4 +1,19 @@
 -- Trava de banco para despacho direto e remessas novas após integração Focus.
+-- Snapshot fechado das remessas DHL que já existiam antes desta migração.
+-- Permite concluir um despacho legado com NF-e manual verificada, sem abrir
+-- caminho para uma remessa nova escapar da exigência Focus.
+create table if not exists legacy_dhl_shipments (
+  shipment_id uuid primary key references shipments(id),
+  order_id uuid not null references orders(id),
+  captured_at timestamptz not null default now()
+);
+alter table legacy_dhl_shipments enable row level security;
+create policy "admin read legacy DHL" on legacy_dhl_shipments for select to authenticated
+  using (exists(select 1 from admin_users where id = auth.uid()));
+insert into legacy_dhl_shipments(shipment_id, order_id)
+select s.id, s.order_id from shipments s where s.provider = 'dhl'
+on conflict(shipment_id) do nothing;
+
 create or replace function export_require_documents_for_dispatch() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare pais text;
@@ -103,6 +118,15 @@ begin
         and o.name = n.xml_storage_path)
       and exists(select 1 from storage.objects o where o.bucket_id = 'export-documents'
         and o.name = n.danfe_storage_path)
+  ) and not exists(
+    select 1 from legacy_dhl_shipments l
+    join shipments s on s.id = l.shipment_id and s.order_id = l.order_id
+    join order_export_documents d on d.order_id = l.order_id and d.kind = 'nfe'
+    where l.order_id = new.id and s.id = remessa_id and s.provider = 'dhl'
+      and s.status in ('label_created','registrado_manual')
+      and d.source = 'external' and d.status = 'verified'
+      and d.validated_by is not null and d.validated_at is not null
+      and not exists(select 1 from order_focus_nfe n where n.order_id = new.id)
   ) then
     raise exception 'Despacho exige NF-e autorizada na Focus com XML e DANFE privados';
   end if;

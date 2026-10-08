@@ -42,6 +42,13 @@ describe("regra única da exportação", () => {
     expect(a.podeDespachar).toBe(true);
     expect(a.status).toBe("ready_for_dispatch");
   });
+  it("conclui remessa legada com NF-e manual conferida sem liberar etiqueta nova", () => {
+    const e = base(); e.focusNfeAuthorized = false; e.legacyManualNfe = true;
+    const result = avaliarExportacao(e);
+    expect(result.podeDespachar).toBe(true);
+    expect(result.podeCriarEtiqueta).toBe(false);
+    expect(result.bloqueiosEtiqueta.join(" ")).toContain("Focus");
+  });
   it("não usa catálogo como fallback se faltar snapshot de um item", () => {
     const e = base(); e.itens.pop();
     const a = avaliarExportacao(e);

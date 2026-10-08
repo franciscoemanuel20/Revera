@@ -102,8 +102,10 @@ export function validateFocusPayload(payload: unknown, input: EntradaProcesso, s
     const x = item as Record<string, unknown>;
     const index = remaining.findIndex(i => i.ncm === String(x.codigo_ncm) &&
       i.fiscal_value_brl_cents === Math.round(Number(x.valor_bruto) * 100) &&
-      input.linhas.find(l => l.id === i.order_item_id)?.quantity === Number(x.quantidade_comercial));
-    if (index < 0) errors.push("NCM, quantidade ou valor fiscal de item diverge do snapshot do pedido.");
+      input.linhas.find(l => l.id === i.order_item_id)?.quantity === Number(x.quantidade_comercial) &&
+      [i.description_en, input.linhas.find(l => l.id === i.order_item_id)?.nome]
+        .some(description => description && norm(x.descricao) === norm(description)));
+    if (index < 0) errors.push("Descrição, NCM, quantidade ou valor fiscal de item diverge do snapshot do pedido.");
     else remaining.splice(index, 1);
     if (String(x.cfop) !== settings.cfop) errors.push("CFOP de item diverge da configuração fiscal.");
     if (!x.descricao || !x.unidade_comercial || !x.valor_unitario_comercial)

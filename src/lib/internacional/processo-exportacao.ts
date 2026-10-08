@@ -59,6 +59,7 @@ export type EntradaProcesso = {
   pacote: PacoteExportacao | null;
   documentos: DocumentoExportacao[];
   focusNfeAuthorized?: boolean;
+  legacyManualNfe?: boolean;
   exportador: Exportador | null;
   invoiceModeForOrder?: string | null;
   invoiceDhlComprovada?: boolean;
@@ -125,7 +126,7 @@ export function avaliarExportacao(e: EntradaProcesso): AvaliacaoExportacao {
     x.address_line1, x.contact_name, x.phone, x.email].every(presente));
   adicionar("exportador", "Dados do exportador", exportador, "Complete os dados da empresa exportadora no painel Internacional.");
   const docs = Object.fromEntries(e.documentos.map(d => [d.kind, d])) as Partial<Record<DocumentoTipo, DocumentoExportacao>>;
-  const nfe = documentoValido(docs.nfe) && e.focusNfeAuthorized === true;
+  const nfe = documentoValido(docs.nfe) && (e.focusNfeAuthorized === true || e.legacyManualNfe === true);
   adicionar("nfe", "NF-e de exportação", nfe, "A NF-e deve estar autorizada na Focus, com XML e DANFE privados, e conferida neste pedido.");
   const modo = e.invoiceModeForOrder === undefined ? x?.invoice_mode : e.invoiceModeForOrder;
   const invoice = documentoValido(docs.invoice) &&
@@ -141,6 +142,7 @@ export function avaliarExportacao(e: EntradaProcesso): AvaliacaoExportacao {
 
   const base = etapas.filter(t => ["pagamento","cliente","endereco","fiscal_produto","pacote","exportador","nfe","dhl"].includes(t.chave) && t.estado !== "pronto").map(t => t.detalhe!);
   const bloqueiosEtiqueta = [...base,
+    ...(e.focusNfeAuthorized !== true ? ["Nova remessa DHL exige NF-e autorizada na Focus."] : []),
     ...(!invoice ? ["Commercial Invoice ainda não conferida antes da etiqueta."] : []),
     ...(!declaracao ? ["DRE ou DU-E ainda não conferida antes da etiqueta."] : []),
     ...(modo === "api" ? ["Nova guia exige Commercial Invoice externa conferida antes da DHL; anexe-a para fixar o modo externo."] : []),

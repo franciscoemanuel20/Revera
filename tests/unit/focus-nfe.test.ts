@@ -93,6 +93,9 @@ describe("travas persistidas da reserva Focus", () => {
     expect(dispatch).toContain("Despacho exige NF-e autorizada na Focus com XML e DANFE privados");
     expect(dispatch).toContain("Remessa DHL exige NF-e Focus autorizada e conferida");
     expect(dispatch).toContain("n.consulted_at >= statement_timestamp() - interval '60 seconds'");
+    expect(dispatch).toContain("insert into legacy_dhl_shipments(shipment_id, order_id)");
+    expect(dispatch).toContain("select s.id, s.order_id from shipments s where s.provider = 'dhl'");
+    expect(dispatch).toContain("and not exists(select 1 from order_focus_nfe n where n.order_id = new.id)");
   });
   it("permite registrar cancelamento consultado sem reautorizar uma nota cancelada", () => {
     expect(migration).toContain("new.status = 'cancelled' and coalesce(auth.role(), '') = 'service_role'");
@@ -152,7 +155,7 @@ describe("trava fiscal", () => {
       pais_destinatario: "Alemanha", municipio_destinatario: "Berlin", cep_destinatario: "10115",
       logradouro_destinatario: "Rua 1", valor_produtos: 60, valor_total: 60,
       items: [{ codigo_ncm: "67042000", cfop: "7501", quantidade_comercial: 1,
-        valor_bruto: 60, descricao: "Produto", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
+        valor_bruto: 60, descricao: "Produto teste", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
     expect(validateFocusPayload(payload, order, settings, amounts)).toEqual([]);
     expect(validateFocusPayload({ ...payload, cnpj_emitente: "99999999000199" }, order, settings, amounts))
       .toContain("Identidade do emitente difere do exportador confirmado.");
@@ -162,6 +165,8 @@ describe("trava fiscal", () => {
       .toContain("Valor total da NF-e diverge dos componentes fiscais informados.");
     expect(validateFocusPayload({ ...payload, items: [{ ...payload.items[0], valor_unitario_comercial: 1 }] }, order, settings, amounts))
       .toContain("Valor unitário vezes quantidade diverge do valor bruto do item.");
+    expect(validateFocusPayload({ ...payload, items: [{ ...payload.items[0], descricao: "Outro produto" }] }, order, settings, amounts))
+      .toContain("Descrição, NCM, quantidade ou valor fiscal de item diverge do snapshot do pedido.");
     expect(validateFocusPayload({ ...payload, valor_frete: 5, valor_total: 65 }, order, settings, amounts))
       .toContain("valor_frete difere dos valores aprovados para o pedido.");
   });
