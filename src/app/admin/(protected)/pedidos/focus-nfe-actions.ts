@@ -44,16 +44,18 @@ function statusFrom(result: FocusResult) {
           : result.status === "cancelled" ? "cancelled" : "response_unknown";
 }
 async function applyResult(db: ReturnType<typeof createAdminClient>, row: { id: string; order_id: string; status: string },
-  result: FocusResult, actor: string, reconciled: boolean) {
+  result: FocusResult, actor: string, reconciled: boolean, consultationNonce?: string) {
   const status = statusFrom(result);
-  const { error } = await db.from("order_focus_nfe").update({ status,
+  let update = db.from("order_focus_nfe").update({ status,
     number: result.number, series: result.series, access_key: result.accessKey,
     protocol: result.protocol, rejection_reason: result.rejection,
     response_sanitized: result.safeResponse,
     consulted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     ...(status === "authorized" ? { authorized_at: new Date().toISOString() } : {}),
   }).eq("id", row.id).neq("status", "cancelled");
-  if (error) throw new Error("Falha ao persistir resposta Focus.");
+  if (consultationNonce) update = update.eq("consultation_nonce", consultationNonce);
+  const { data: saved, error } = await update.select("id").maybeSingle();
+  if (error || !saved) throw new Error("Falha ao persistir resposta Focus atual.");
   await event(db, row.id, status === "authorized" ? "authorized" : status === "rejected" ? "rejected"
     : status === "processing" ? "processing" : "response_unknown", actor,
     { status_focus: result.rawStatus });
@@ -222,8 +224,10 @@ export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
   let focus: FocusNfeProvider;
   try { focus = provider(row.environment as FocusEnvironment); } catch { return { error: "Token Focus indisponível para este ambiente." }; }
   // A consulta anterior deixa de autorizar ações físicas antes da chamada externa.
+  const consultationNonce = randomUUID();
   const { error: attemptError } = await db.from("order_focus_nfe").update({
-    consultation_attempts: row.consultation_attempts + 1, consulted_at: null,
+    consultation_attempts: row.consultation_attempts + 1, consultation_nonce: consultationNonce,
+    consulted_at: null,
   }).eq("id", row.id);
   if (attemptError) return { error: "Não foi possível iniciar a consulta fiscal com segurança." };
   let result: FocusResult;
@@ -248,14 +252,15 @@ export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
   if (row.status === "authorized" && (result.status !== "authorized" || result.accessKey !== row.access_key))
     return { error: "A Focus não confirmou a autorização e chave desta NF-e. Remessa e despacho bloqueados até reconciliação." };
   if (row.status === "authorized") {
-    const { error: confirmError } = await db.from("order_focus_nfe").update({
+    const { data: confirmed, error: confirmError } = await db.from("order_focus_nfe").update({
       consulted_at: new Date().toISOString(), response_sanitized: result.safeResponse,
       updated_at: new Date().toISOString(),
-    }).eq("id", row.id).eq("status", "authorized");
-    if (confirmError) return { error: "Não foi possível registrar a autorização fiscal recente." };
+    }).eq("id", row.id).eq("status", "authorized")
+      .eq("consultation_nonce", consultationNonce).select("id").maybeSingle();
+    if (confirmError || !confirmed) return { error: "Consulta substituída por outra tentativa; reconfirme a Focus." };
   }
   if (row.status !== "authorized" && row.status !== "cancelled") {
-    try { await applyResult(db, row, result, a.user.id, true); }
+    try { await applyResult(db, row, result, a.user.id, true, consultationNonce); }
     catch { return { error: "Resposta obtida, mas persistência fiscal falhou. Consulte novamente." }; }
   }
   if (result.status === "authorized" && result.accessKey && result.xmlPath && result.danfePath) {

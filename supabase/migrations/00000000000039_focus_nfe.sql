@@ -113,6 +113,7 @@ create table if not exists order_focus_nfe (
   requested_by uuid not null references auth.users(id),
   requested_at timestamptz not null default now(),
   consulted_at timestamptz,
+  consultation_nonce uuid,
   consultation_attempts integer not null default 0,
   authorized_at timestamptz,
   documents_at timestamptz,
