@@ -62,10 +62,19 @@ export type EntradaProcesso = {
   remessaEmProcessamento: boolean;
 };
 
-export function guiaDhlValida(envios: Array<{ provider: string; tracking_code: string | null; status: string | null }>): string | null {
-  const remessa = envios.find(e => e.provider === "dhl" && e.tracking_code &&
+type RemessaDhl = { provider: string; tracking_code: string | null; status: string | null };
+export function remessaDhlEmAvaliacao<T extends RemessaDhl>(envios: T[]): T | null {
+  const finalizadas = envios.filter(e => e.provider === "dhl" &&
     ["label_created", "registrado_manual"].includes(e.status ?? ""));
-  return remessa?.tracking_code ? normalizarAwbDhl(remessa.tracking_code) : null;
+  if (finalizadas.length) return finalizadas.length === 1 ? finalizadas[0]! : null;
+  const ativas = envios.filter(e => e.provider === "dhl" &&
+    ["creating", "creation_unknown"].includes(e.status ?? ""));
+  return ativas.length === 1 ? ativas[0]! : null;
+}
+export function guiaDhlValida(envios: RemessaDhl[]): string | null {
+  const remessa = remessaDhlEmAvaliacao(envios);
+  return remessa && ["label_created", "registrado_manual"].includes(remessa.status ?? "") && remessa.tracking_code
+    ? normalizarAwbDhl(remessa.tracking_code) : null;
 }
 
 export type AvaliacaoExportacao = {

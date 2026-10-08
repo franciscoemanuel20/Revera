@@ -149,47 +149,27 @@ type Supa = ReturnType<typeof createAdminClient>;
 
 export async function enviarConfirmacaoAoCliente(supabase: Supa, orderId: string): Promise<void> {
   try {
-    // Sem e-mail configurado não se reserva nada: senão o pedido ficaria
-    // "reservado" para sempre e nunca receberia o e-mail depois da chave.
-    if (!process.env.RESEND_API_KEY?.trim()) return;
-
-    const { data: pedido } = await supabase.from("orders").select("customer_id").eq("id", orderId).maybeSingle();
-    if (!pedido?.customer_id) return;
-    const { data: cliente } = await supabase.from("customers").select("email").eq("id", pedido.customer_id).maybeSingle();
-    const email = (cliente?.email as string | null | undefined)?.trim();
-    if (!email || !email.includes("@")) return;
-
-    // Reserva ANTES de enviar: quem colide (23505) sabe que outro já envia.
-    const { error: erroReserva } = await supabase
-      .from("order_notifications")
-      .insert({ order_id: orderId, kind: KIND, channel: "email" });
-    if (erroReserva) {
-      if (erroReserva.code !== "23505") console.error("[confirmacao-cliente] reserva falhou", erroReserva);
-      return;
-    }
+    // A intenção existe mesmo sem credencial ou durante falha do transporte.
+    const { error } = await supabase.rpc("reserve_paid_confirmations", { p_order_id: orderId });
+    if (error) { console.error("[confirmacao-cliente] reserva pendente de recuperação", error.code); return; }
+    if (!transporteHabilitado()) return;
     await enviarReservada(supabase, orderId);
   } catch (erro) {
     console.error("[confirmacao-cliente] falha inesperada", erro);
   }
 }
 
-/**
- * Reenvio (até 20 h depois) das reservas que ficaram sem `sent_at` (Resend fora do ar, função
- * encerrada no meio). Chamado pela conferência periódica. O
- * Idempotency-Key do Resend impede e-mail duplicado dentro de 24 h.
- */
-export async function reenviarConfirmacoesPendentes(supabase: Supa, agora = Date.now()): Promise<number> {
-  const { data } = await supabase
-    .from("order_notifications")
-    .select("order_id, attempts, created_at")
-    .eq("kind", KIND)
-    .is("sent_at", null)
-    .lte("created_at", new Date(agora - 5 * 60_000).toISOString())
-    // Menos de 24 h: dentro da janela do Idempotency-Key do Resend, um
-    // reenvio nunca vira e-mail duplicado (mesmo se o sent_at não gravou).
-    .gte("created_at", new Date(agora - 20 * 3_600_000).toISOString())
-    .lt("attempts", 5)
-    .limit(10);
+function transporteHabilitado(): boolean {
+  return process.env.REVERA_CONFIRMATION_SEND_ENABLED === "1" && Boolean(process.env.RESEND_API_KEY?.trim());
+}
+
+/** Recupera também pedidos pagos cuja reserva inicial não persistiu. */
+export async function reenviarConfirmacoesPendentes(supabase: Supa): Promise<number> {
+  const { error: reservaErro } = await supabase.rpc("reserve_paid_confirmations", { p_order_id: null });
+  if (reservaErro) throw new Error("Não foi possível recuperar reservas de confirmação");
+  if (!transporteHabilitado()) return 0;
+  const { data, error } = await supabase.rpc("paid_confirmation_candidates");
+  if (error) throw new Error("Não foi possível consultar confirmações pendentes");
   let reenviados = 0;
   for (const linha of data ?? []) {
     if (await enviarReservada(supabase, linha.order_id as string)) reenviados++;
@@ -208,7 +188,7 @@ async function enviarReservada(supabase: Supa, orderId: string): Promise<boolean
       .maybeSingle();
     if (!pedido) return false;
 
-    const [{ data: cliente }, { data: endereco }, { data: itens }, { data: reserva }] = await Promise.all([
+    const [{ data: cliente }, { data: endereco }, { data: itens }] = await Promise.all([
       supabase.from("customers").select("full_name, email, phone").eq("id", pedido.customer_id).maybeSingle(),
       pedido.address_id
         ? supabase.from("addresses").select("*").eq("id", pedido.address_id).maybeSingle()
@@ -217,7 +197,6 @@ async function enviarReservada(supabase: Supa, orderId: string): Promise<boolean
         .from("order_items")
         .select("product_name_snapshot, variant_label_snapshot, quantity, subtotal_cents")
         .eq("order_id", orderId),
-      supabase.from("order_notifications").select("attempts").eq("order_id", orderId).eq("kind", KIND).maybeSingle(),
     ]);
     const email = (cliente?.email as string | null | undefined)?.trim();
     if (!email || !email.includes("@")) return false;
@@ -240,7 +219,7 @@ async function enviarReservada(supabase: Supa, orderId: string): Promise<boolean
     });
 
     const nomeRemetente = remetente().replace(/^[^<]*</, "Reverá <");
-    const r = await enviarEmail({
+    const mensagem = {
       para: [email],
       de: nomeRemetente.includes("<") ? nomeRemetente : `Reverá <${remetente()}>`,
       responderPara: EMPRESA.email,
@@ -249,25 +228,23 @@ async function enviarReservada(supabase: Supa, orderId: string): Promise<boolean
       idempotencyKey: `revera-confirmacao-cliente:${orderId}`,
       // Roda dentro da confirmação do pagamento: não segura o webhook.
       timeoutMs: 5_000,
+    };
+    const { data: claims, error: claimError } = await supabase.rpc("claim_paid_confirmation", {
+      p_order_id: orderId, p_payload: mensagem,
     });
+    if (claimError || !claims?.length) return false;
+    const claim = claims[0];
+    const r = await enviarEmail(claim.payload as Parameters<typeof enviarEmail>[0]);
 
-    const tentativas = ((reserva?.attempts as number | null) ?? 0) + 1;
-    if (r.estado === "enviado") {
-      await supabase
-        .from("order_notifications")
-        .update({ sent_at: new Date().toISOString(), provider_message_id: r.id, last_error: null, attempts: tentativas })
-        .eq("order_id", orderId)
-        .eq("kind", KIND);
-      return true;
-    }
-    const motivo = r.estado === "erro" ? r.motivo : r.estado;
-    console.error("[confirmacao-cliente] e-mail não saiu", motivo);
-    await supabase
-      .from("order_notifications")
-      .update({ last_error: motivo.slice(0, 500), attempts: tentativas })
-      .eq("order_id", orderId)
-      .eq("kind", KIND);
-    return false;
+    const sent = r.estado === "enviado";
+    const { data: finished, error: finishError } = await supabase.rpc("finish_paid_confirmation", {
+      p_order_id: orderId, p_lease: claim.lease, p_sent: sent,
+      p_provider_id: sent ? r.id : null,
+      p_error: r.estado === "erro" ? r.motivo : r.estado,
+      p_definite_failure: r.estado === "desligado" || (r.estado === "erro" && r.definiteFailure === true),
+    });
+    if (finishError) console.error("[confirmacao-cliente] resultado pendente de reconciliação", finishError.code);
+    return sent && !finishError && finished === true;
   } catch (erro) {
     console.error("[confirmacao-cliente] falha ao enviar", erro);
     return false;

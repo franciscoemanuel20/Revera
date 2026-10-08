@@ -6,7 +6,7 @@ import { formatarValorNaMoeda } from "@/lib/internacional/moeda";
 type ResultadoEmail =
   | { estado: "enviado"; id: string | null }
   | { estado: "desligado" }
-  | { estado: "erro"; motivo: string };
+  | { estado: "erro"; motivo: string; definiteFailure?: boolean };
 
 type MensagemOperacional = {
   assunto: string;
@@ -101,11 +101,13 @@ export async function enviarEmail(
     if (!resposta.ok) {
       return {
         estado: "erro",
+        definiteFailure: [400, 401, 403, 404, 422, 429].includes(resposta.status),
         motivo: `Resend recusou: ${resposta.status} ${corpo?.message ?? "sem detalhe"}`,
       };
     }
 
-    return { estado: "enviado", id: corpo?.id ?? null };
+    if (!corpo?.id) return { estado: "erro", motivo: "Resposta aceita sem identificador; resultado incerto" };
+    return { estado: "enviado", id: corpo.id };
   } catch (erro) {
     return {
       estado: "erro",
