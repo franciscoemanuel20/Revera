@@ -306,3 +306,39 @@ describe("bug 4 — etiqueta nacional não se oferece a destino estrangeiro", ()
     expect(podeOferecerEtiquetaNacional({ ...pago, paisDestino: "us" })).toBe(false);
   });
 });
+
+describe("ordem de cidade e código postal por país (07/10/2026)", () => {
+  const base = { company: null, cep: null, street: null, number: null, complement: null, neighborhood: null, state: null, line2: null } as const;
+  const linha = (country: string, city: string, postal_code: string, region: string | null = null) =>
+    ({ ...base, country, recipient_name: "Cliente", city, line1: "Rua 1", postal_code, region }) as LinhaEndereco;
+
+  it("Alemanha: CEP antes da cidade; admin em inglês maiúsculo, cliente em alemão", () => {
+    const e = daLinha(linha("DE", "Ottobrunn", "85521"), "49")!;
+    expect(formatarEndereco(e)).toEqual(["Cliente", "Rua 1", "85521 Ottobrunn", "GERMANY"]);
+    expect(formatarEndereco(e, "de")).toEqual(["Cliente", "Rua 1", "85521 Ottobrunn", "Deutschland"]);
+  });
+
+  it("EUA: City, ST ZIP", () => {
+    const e = daLinha(linha("US", "New York", "10118", "NY"), "1")!;
+    expect(formatarEndereco(e)).toContain("New York, NY 10118");
+  });
+
+  it("Canadá e Austrália: cidade, província e código na mesma linha", () => {
+    expect(formatarEndereco(daLinha(linha("CA", "Ottawa", "K1A 0B1", "ON"), "1")!)).toContain("Ottawa ON K1A 0B1");
+    expect(formatarEndereco(daLinha(linha("AU", "Sydney", "2000", "NSW"), "61")!)).toContain("Sydney NSW 2000");
+  });
+
+  it("Reino Unido: código postal em linha própria", () => {
+    const linhas = formatarEndereco(daLinha(linha("GB", "London", "SW1A 1AA"), "44")!);
+    expect(linhas).toContain("London");
+    expect(linhas).toContain("SW1A 1AA");
+  });
+
+  it("países fora da lista mantêm cidade antes do código (Índia)", () => {
+    expect(formatarEndereco(daLinha(linha("IN", "New Delhi", "110001", "DL"), "91")!)).toContain("New Delhi, DL, 110001");
+  });
+
+  it("Espanha no idioma do cliente", () => {
+    expect(formatarEndereco(daLinha(linha("ES", "Madrid", "28013"), "34")!, "es")).toEqual(["Cliente", "Rua 1", "28013 Madrid", "España"]);
+  });
+});

@@ -9,7 +9,19 @@ import { PayPalProvider } from "@/lib/payments/paypal-provider";
 import { StripeProvider } from "@/lib/payments/stripe-provider";
 
 type ProviderNacionalRevera = "asaas" | "infinitepay" | "mock";
-type ProviderInternacionalRevera = "stripe" | "paypal";
+export type ProviderInternacionalRevera = "stripe" | "paypal";
+
+export function paypalWebhookConfigurado(): boolean {
+  return process.env.PAYPAL_WEBHOOK_ENABLED?.trim() === "1" &&
+    Boolean(process.env.PAYPAL_WEBHOOK_ID?.trim()) &&
+    Boolean(process.env.PAYPAL_CLIENT_ID?.trim()) &&
+    Boolean(process.env.PAYPAL_CLIENT_SECRET?.trim());
+}
+
+export function paypalInternacionalConfigurado(): boolean {
+  return process.env.PAYPAL_CHECKOUT_ENABLED?.trim() === "1" &&
+    paypalWebhookConfigurado();
+}
 
 function providerNacionalConfigurado(): string | undefined {
   return (
@@ -53,9 +65,7 @@ export function getReveraProviderByName(name: string): PaymentProvider {
 export function getReveraInternationalProviderName(): ProviderInternacionalRevera {
   const nome = process.env.REVERA_INTERNATIONAL_PAYMENT_PROVIDER?.trim() || "stripe";
   if (nome === "stripe") return nome;
-  if (nome === "paypal" && process.env.PAYPAL_CHECKOUT_ENABLED?.trim() === "1" &&
-      process.env.PAYPAL_WEBHOOK_ENABLED?.trim() === "1" &&
-      process.env.PAYPAL_WEBHOOK_ID?.trim()) return nome;
+  if (nome === "paypal" && paypalInternacionalConfigurado()) return nome;
   if (nome === "paypal") {
     throw new PagamentoIndisponivel(
       "PayPal internacional exige checkout e webhook habilitados, com PAYPAL_WEBHOOK_ID configurado."
@@ -69,6 +79,28 @@ export function getReveraInternationalProviderName(): ProviderInternacionalRever
 export function getReveraInternationalProvider(): PaymentProvider {
   const nome = getReveraInternationalProviderName();
   return nome === "paypal" ? new PayPalProvider() : getStripeProvider();
+}
+
+export function getReveraInternationalProviderForPreference(
+  preference: string | null | undefined
+): PaymentProvider {
+  if (preference === "stripe" || preference === "paypal") {
+    return getReveraProviderByName(preference);
+  }
+  return getReveraInternationalProvider();
+}
+
+export async function provedoresInternacionaisDisponiveis(): Promise<ProviderInternacionalRevera[]> {
+  const [stripe, paypal] = await Promise.all([
+    new StripeProvider().disponivel(),
+    paypalInternacionalConfigurado()
+      ? new PayPalProvider().disponivel()
+      : Promise.resolve(false),
+  ]);
+  return [
+    ...(stripe ? ["stripe" as const] : []),
+    ...(paypal ? ["paypal" as const] : []),
+  ];
 }
 
 export function reveraNationalPaymentAvailable(): boolean {

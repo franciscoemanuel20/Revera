@@ -17,6 +17,7 @@ import {
 import { bandeira, nomeDoPais } from "@/lib/internacional/paises";
 import type { ExportStatus } from "@/lib/internacional/exportacao";
 import { VendaCard } from "./VendaCard";
+import { carregarProcessosExportacao } from "@/lib/internacional/processo-exportacao-server";
 
 /**
  * VENDAS — a central de onde a loja é operada.
@@ -118,6 +119,7 @@ export default async function VendasPage({
       </div>
     );
   }
+  const processos = await carregarProcessosExportacao(supabase, vendas.filter(v => v.internacional).map(v => v.id));
 
   return (
     <div className="flex flex-col gap-6">
@@ -280,7 +282,7 @@ export default async function VendasPage({
               pais={v.pais}
               internacional={v.internacional}
               moeda={v.moeda}
-              exportStatus={v.exportStatus as ExportStatus}
+              exportStatus={(processos.get(v.id)?.avaliacao.status ?? "pending_data") as ExportStatus}
             />
           ))}
         </section>

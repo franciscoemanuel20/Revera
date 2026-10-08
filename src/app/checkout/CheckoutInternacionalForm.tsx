@@ -12,6 +12,7 @@ import {
 } from "./actions-internacional";
 import { medirIniciarCheckout } from "@/lib/tracking/browser";
 import type { Moeda } from "@/lib/internacional/moeda";
+import type { ProviderInternacionalRevera } from "@/lib/payments/revera";
 
 const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink";
 
@@ -45,6 +46,7 @@ export interface ResumoInternacional {
     postalExemplo: string;
   };
   moeda: string;
+  gateways: ProviderInternacionalRevera[];
   itens: Array<{ variantId: string; nome: string; quantidade: number; precoUnitarioCents: number }>;
   subtotalCents: number;
   avisoImpostosTitulo: string;
@@ -85,6 +87,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
     codigoPostal: "",
   });
   const [aceite, setAceite] = useState(false);
+  const [paymentPreference, setPaymentPreference] = useState<ProviderInternacionalRevera>(resumo.gateways[0] ?? "paypal");
   const [erros, setErros] = useState<Record<string, string>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -130,6 +133,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
       atribuicao: lerAtribuicao(),
       trackingConsent: window.localStorage.getItem("revera-cookies-opcionais-v1") === "aceito",
       confirmarCotacao: cotacao?.token ?? null,
+      paymentPreference,
     };
 
     setEnviando(true);
@@ -338,6 +342,27 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
           </dl>
         ) : null}
       </section>
+
+      <fieldset className="flex flex-col gap-3 rounded-lg border border-sand bg-paper p-4">
+        <legend className="px-1 font-display text-xl text-ink">
+          {resumo.idioma === "pt" ? "Forma de pagamento" : resumo.idioma === "es" ? "Forma de pago" : resumo.idioma === "fr" ? "Moyen de paiement" : resumo.idioma === "de" ? "Zahlungsart" : "Payment method"}
+        </legend>
+        {resumo.gateways.map((gateway) => (
+          <label key={gateway} className="flex cursor-pointer items-center gap-3 rounded-md border border-sand px-4 py-3 text-sm text-ink">
+            <input
+              type="radio"
+              name="paymentPreference"
+              value={gateway}
+              checked={paymentPreference === gateway}
+              disabled={enviando}
+              onChange={() => setPaymentPreference(gateway)}
+              className="h-4 w-4 accent-ink"
+            />
+            <span>{gateway === "stripe" ? "Cartão — Stripe" : "PayPal"}</span>
+          </label>
+        ))}
+        {erros.paymentPreference ? <p className="text-xs text-red-700">{erros.paymentPreference}</p> : null}
+      </fieldset>
 
       {cotacao ? (
         <section className="flex flex-col gap-3 rounded-lg border border-sand/70 bg-paper p-4">

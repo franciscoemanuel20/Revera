@@ -251,3 +251,61 @@ export async function cotarDhlOperacionalAction(
     };
   }
 }
+
+const expedicaoSchema = z.object({
+  legalName: z.string().trim().min(2),
+  taxId: z.string().trim().min(5),
+  country: z.string().trim().length(2).transform((v) => v.toUpperCase()),
+  postalCode: z.string().trim().min(2),
+  city: z.string().trim().min(2),
+  region: z.string().trim().nullable(),
+  addressLine1: z.string().trim().min(3),
+  contactName: z.string().trim().min(2),
+  phone: z.string().trim().min(6),
+  email: z.string().trim().email(),
+  invoiceMode: z.enum(["external", "api"]),
+  dhlAccountConfirmed: z.boolean(),
+});
+
+export async function salvarExportadorInternacionalAction(input: unknown): Promise<ResultadoAdminIntl> {
+  const bloqueio = await exigirAdminInternacional();
+  if (bloqueio) return bloqueio;
+  const parsed = expedicaoSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados do exportador incompletos." };
+  const s = await createClient();
+  const d = parsed.data;
+  const { error } = await s.from("international_export_settings").upsert({
+    singleton: true, legal_name: d.legalName, tax_id: d.taxId, country: d.country,
+    postal_code: d.postalCode, city: d.city, region: d.region, address_line1: d.addressLine1,
+    contact_name: d.contactName, phone: d.phone, email: d.email, invoice_mode: d.invoiceMode,
+    dhl_account_confirmed: d.dhlAccountConfirmed, updated_at: new Date().toISOString(),
+  });
+  if (error) return { error: `Falha ao salvar exportador: ${error.message}` };
+  revalidatePath("/admin/internacional");
+  return { ok: true };
+}
+
+const produtoExpedicaoSchema = z.object({
+  variantId: z.string().uuid(),
+  weightG: z.number().int().positive(),
+  lengthCm: z.number().positive(), widthCm: z.number().positive(), heightCm: z.number().positive(),
+  hsCode: z.string().trim().min(4).max(20),
+  originCountry: z.string().trim().length(2).transform((v) => v.toUpperCase()),
+});
+
+export async function salvarDadosExpedicaoProdutoAction(input: unknown): Promise<ResultadoAdminIntl> {
+  const bloqueio = await exigirAdminInternacional();
+  if (bloqueio) return bloqueio;
+  const parsed = produtoExpedicaoSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados físicos/fiscais incompletos." };
+  const d = parsed.data;
+  const s = await createClient();
+  const { error } = await s.from("product_variants").update({
+    shipping_weight_g: d.weightG, shipping_length_cm: d.lengthCm, shipping_width_cm: d.widthCm,
+    shipping_height_cm: d.heightCm, customs_hs_code: d.hsCode, origin_country: d.originCountry,
+    updated_at: new Date().toISOString(),
+  }).eq("id", d.variantId);
+  if (error) return { error: `Falha ao salvar produto: ${error.message}` };
+  revalidatePath("/admin/internacional");
+  return { ok: true };
+}

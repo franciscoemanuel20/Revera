@@ -42,6 +42,7 @@ import {
   prontidaoDoMercado,
 } from "@/lib/internacional/mercado";
 import { ACEITE_INTERNACIONAL_VERSAO } from "@/lib/internacional/aceite";
+import { cotacaoDhlPermitida, origemCotacaoDhl } from "@/lib/internacional/ambiente-cotacao";
 import { idiomaDoPais } from "@/lib/internacional/paises";
 import { textos, type Idioma } from "@/lib/internacional/idioma";
 
@@ -57,6 +58,7 @@ import { cotarDhlOperacional } from "@/lib/shipping/dhl/admin-quote";
 import type { DhlQuote } from "@/lib/shipping/dhl/types";
 import { avisarPedidoPendentePorEmail } from "@/lib/notificacoes/email-operacional";
 import type { CheckoutResult } from "./actions";
+import { provedoresInternacionaisDisponiveis } from "@/lib/payments/revera";
 
 const textoCurto = z.string().max(500).nullable().optional().catch(null);
 
@@ -104,6 +106,7 @@ function construirSchema(idioma: Idioma) {
     .optional()
     .catch(null),
   confirmarCotacao: z.string().min(20).max(4096).optional().nullable(),
+  paymentPreference: z.enum(["stripe", "paypal"]),
   });
 }
 
@@ -157,6 +160,10 @@ export async function criarPedidoInternacionalAction(
   const dados = parsed.data;
   if (dados.confirmarCotacao && !dados.aceite) {
     return { erro: t.aceiteObrigatorio };
+  }
+  const gatewaysDisponiveis = await provedoresInternacionaisDisponiveis();
+  if (!gatewaysDisponiveis.includes(dados.paymentPreference)) {
+    return { erro: t.erroConfiraCampos, camposComErro: { paymentPreference: "Este meio de pagamento não está disponível agora." } };
   }
 
   // A única porta de validação de endereço internacional — inclui a regra
@@ -269,8 +276,8 @@ export async function criarPedidoInternacionalAction(
   if (!frete || frete.priceCents <= 0) {
     return { erro: "A DHL não retornou um serviço de envio compatível para este endereço." };
   }
-  if (cotacaoDhl.ambiente !== "producao") {
-    console.error("[checkout-intl] cotação recusada fora da produção DHL");
+  if (!cotacaoDhlPermitida(cotacaoDhl.ambiente)) {
+    console.error("[checkout-intl] ambiente da cotação DHL incompatível com o checkout");
     return { erro: "O frete internacional está temporariamente indisponível para pagamento." };
   }
 
@@ -390,7 +397,7 @@ export async function criarPedidoInternacionalAction(
   }
 
   const reciboDhl = {
-    source: "mydhl-production",
+    source: origemCotacaoDhl(cotacaoDhl.ambiente),
     environment: cotacaoDhl.ambiente,
     country: endereco.endereco.pais,
     currency: mercado.moeda,
@@ -515,6 +522,7 @@ export async function criarPedidoInternacionalAction(
       shipping_cents: shippingCents,
       tax_cents: taxCents,
       total_cents: totalCents,
+      payment_preference: dados.paymentPreference,
       tracking_consent: dados.trackingConsent,
       export_status: "pending_data",
       // O aceite: versão + instante do SERVIDOR. O navegador só disse
@@ -560,6 +568,10 @@ export async function criarPedidoInternacionalAction(
 
   const { error: erroItens } = await admin.from("order_items").insert(itensPayload);
   if (erroItens) {
+    console.error("[checkout-intl] falha ao registrar itens", {
+      code: erroItens.code,
+      message: erroItens.message,
+    });
     return desfazerPedidoParcial("Não foi possível registrar os itens do pedido. Tente novamente.");
   }
 

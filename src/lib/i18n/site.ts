@@ -100,6 +100,8 @@ export function isFullyLocalizedPath(pathname: string): boolean {
     "/privacidade",
     "/termos",
     "/cookies",
+    "/devolucao",
+    "/aviso-legal",
     "/checkout",
   ].includes(cleanPath);
 }
@@ -175,6 +177,8 @@ export const SITE_COPY: Record<SiteLocale, SiteCopy> = {
       "/privacidade": "Privacidade",
       "/termos": "Termos de uso",
       "/cookies": "Cookies",
+      "/devolucao": "Devolução",
+      "/aviso-legal": "Aviso legal",
     },
     footerGroups: { loja: "Loja", saibaMais: "Saiba mais" },
     cookies: {
@@ -208,6 +212,8 @@ export const SITE_COPY: Record<SiteLocale, SiteCopy> = {
       "/privacidade": "Privacy",
       "/termos": "Terms of use",
       "/cookies": "Cookies",
+      "/devolucao": "Returns",
+      "/aviso-legal": "Legal notice",
     },
     footerGroups: { loja: "Shop", saibaMais: "Learn more" },
     cookies: {
@@ -241,6 +247,8 @@ export const SITE_COPY: Record<SiteLocale, SiteCopy> = {
       "/privacidade": "Privacidad",
       "/termos": "Terminos de uso",
       "/cookies": "Cookies",
+      "/devolucao": "Devoluciones",
+      "/aviso-legal": "Aviso legal",
     },
     footerGroups: { loja: "Tienda", saibaMais: "Saber mas" },
     cookies: {
@@ -274,6 +282,8 @@ export const SITE_COPY: Record<SiteLocale, SiteCopy> = {
       "/privacidade": "Confidentialite",
       "/termos": "Conditions d'utilisation",
       "/cookies": "Cookies",
+      "/devolucao": "Retours",
+      "/aviso-legal": "Mentions légales",
     },
     footerGroups: { loja: "Boutique", saibaMais: "En savoir plus" },
     cookies: {
@@ -307,6 +317,8 @@ export const SITE_COPY: Record<SiteLocale, SiteCopy> = {
       "/privacidade": "Datenschutz",
       "/termos": "Nutzungsbedingungen",
       "/cookies": "Cookies",
+      "/devolucao": "Widerruf",
+      "/aviso-legal": "Impressum",
     },
     footerGroups: { loja: "Shop", saibaMais: "Mehr erfahren" },
     cookies: {

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
 import { confirmarPagamento } from "@/lib/payments/confirmar";
+import { PayPalProvider } from "@/lib/payments/paypal-provider";
 import { consumirPurchaseParaNavegador } from "@/lib/tracking/purchase";
 import { formatarDinheiroParaComprador } from "@/lib/internacional/moeda";
 import { idiomaDoPais, localeDoPais } from "@/lib/internacional/paises";
@@ -11,6 +12,7 @@ import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacion
 import { PurchaseTracker } from "./PurchaseTracker";
 import { SuportePosCompra } from "./SuportePosCompra";
 import { RedirecionarWhatsAppPagamento } from "./RedirecionarWhatsAppPagamento";
+import { registrarEventoPagamento } from "@/lib/payments/journey";
 
 export const metadata: Metadata = {
   title: "Seu pedido",
@@ -62,10 +64,16 @@ export default async function PedidoPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ retorno?: string }>;
+  searchParams: Promise<{
+    retorno?: string;
+    order_nsu?: string | string[];
+    transaction_nsu?: string | string[];
+    slug?: string | string[];
+  }>;
 }) {
   const { token } = await params;
-  const { retorno } = await searchParams;
+  const consulta = await searchParams;
+  const { retorno } = consulta;
   const supabase = createAdminClient();
 
   const { data: pedido } = await supabase
@@ -78,12 +86,41 @@ export default async function PedidoPage({
 
   if (!pedido) notFound();
 
+  if (retorno === "cancelamento" && pedido.payment_status === "pending") {
+    const { data: pagamento } = await supabase.from("payments")
+      .select("id, provider").eq("order_id", pedido.id).eq("status", "pending")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    await registrarEventoPagamento(supabase, {
+      orderId: pedido.id,
+      paymentId: pagamento?.id ?? null,
+      provider: pagamento?.provider ?? null,
+      eventType: "checkout_canceled",
+      source: "browser",
+      eventKey: `checkout-canceled:${pagamento?.id ?? pedido.id}`,
+    });
+  }
+
   // PORTA 2. Só age se ainda estiver aguardando pagamento. O eixo legado
   // `status` volta a 'new' num pedido ESTORNADO (o CASE gerado não tem
   // 'refunded'), então a condição olha o eixo real do dinheiro — sem isso,
   // cada visita a um pedido estornado dispararia uma consulta ao gateway.
   if (pedido.status === "new" && pedido.payment_status === "pending") {
-    await confirmarPagamento(pedido.id);
+    // A InfinitePay devolve estas pistas no redirect_url. Sem elas a API
+    // pode responder apenas success=false até para uma venda já paga.
+    // O token autoriza ESTE pedido; parâmetros do navegador só orientam a
+    // reconfirmação no gateway e nunca aprovam o pagamento por conta própria.
+    const pistasInfinitePay = pedido.currency === "BRL" && retorno === "pagamento" &&
+      consulta.order_nsu === pedido.id &&
+      typeof consulta.transaction_nsu === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(consulta.transaction_nsu) &&
+      typeof consulta.slug === "string" && /^[a-z0-9_-]{1,128}$/i.test(consulta.slug)
+        ? { transactionId: consulta.transaction_nsu, invoiceSlug: consulta.slug }
+        : null;
+    if (pistasInfinitePay) {
+      await confirmarPagamento(pedido.id, pistasInfinitePay);
+    } else {
+      await confirmarPagamento(pedido.id);
+    }
   }
 
   // Relê depois da tentativa de confirmação, para mostrar o estado atual.
@@ -99,6 +136,13 @@ export default async function PedidoPage({
   // O estado da tela "Aguardando pagamento": o pedido existe, o dinheiro
   // ainda não entrou, e nada deu errado a ponto de cancelar ou estornar.
   const aguardando = !pago && !estornado && status !== "canceled";
+  // O PayPal recebeu e segurou a cobrança (aceite manual de moeda, análise).
+  // Sem isto o cliente lia "Aguardando pagamento" depois de ter pago — e
+  // pagava de novo ou abria disputa (06/10/2026).
+  const emConfirmacao =
+    aguardando && (pedido.currency ?? "BRL") !== "BRL"
+      ? await capturaPayPalRetida(supabase, pedido.id as string)
+      : false;
 
   const [{ data: itens }, { data: endereco }, { data: envio }] = await Promise.all([
     supabase
@@ -170,14 +214,22 @@ export default async function PedidoPage({
       <header className="flex flex-col gap-2 text-center">
         <span className="eyebrow-ink">{t.pedidoNumero(pedido.order_number as string)}</span>
         <h1 className="font-display text-3xl text-ink">
-          {estornado ? t.pedidoEstornado : pago ? t.pedidoPago : t.pedidoAguardando}
+          {estornado
+            ? t.pedidoEstornado
+            : pago
+              ? t.pedidoPago
+              : emConfirmacao
+                ? t.pedidoEmConfirmacao
+                : t.pedidoAguardando}
         </h1>
         <p className="text-ink/70">
           {estornado
             ? t.pedidoTextoEstornado
             : pago
               ? t.pedidoTextoPago
-              : t.pedidoTextoAguardando}
+              : emConfirmacao
+                ? t.pedidoTextoEmConfirmacao
+                : t.pedidoTextoAguardando}
         </p>
       </header>
 
@@ -267,7 +319,7 @@ export default async function PedidoPage({
             {(() => {
               const dominio = daLinha(endereco as unknown as LinhaEndereco, "");
               const linhas = dominio
-                ? formatarEndereco(dominio)
+                ? formatarEndereco(dominio, idioma)
                 : [endereco.recipient_name as string];
               return linhas.map((linha, i) => (
                 <span key={i}>
@@ -307,4 +359,36 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
       <dd className="tabular-nums">{valor}</dd>
     </div>
   );
+}
+
+/**
+ * A captura PayPal deste pedido está retida? Pergunta ao PayPal (nada é
+ * gravado: o campo de verificação de payments é lido pela trava de pedido
+ * pago e não pode receber marcador). Qualquer falha responde false, e a
+ * página mostra o "Aguardando pagamento" de sempre.
+ */
+async function capturaPayPalRetida(
+  supabase: ReturnType<typeof createAdminClient>,
+  orderId: string
+): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("payments")
+      .select("provider_payment_id")
+      .eq("order_id", orderId)
+      .eq("provider", "paypal")
+      .not("provider_payment_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data?.provider_payment_id) return false;
+    // Timeout curto: é só o texto da tela, e confirmarPagamento() já
+    // consultou o PayPal logo acima.
+    const estado = await new PayPalProvider().estadoCaptura(data.provider_payment_id as string, orderId, {
+      timeoutMs: 5_000,
+    });
+    return estado.estado === "pendente";
+  } catch {
+    return false;
+  }
 }

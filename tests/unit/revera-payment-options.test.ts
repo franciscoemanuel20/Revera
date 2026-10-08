@@ -11,6 +11,28 @@ beforeEach(() => {
 });
 
 describe("opções de pagamento da Reverá", () => {
+  it("mantém PayPal configurado para webhook mesmo quando Stripe é o principal", async () => {
+    vi.stubEnv("REVERA_INTERNATIONAL_PAYMENT_PROVIDER", "stripe");
+    vi.stubEnv("PAYPAL_CHECKOUT_ENABLED", "1");
+    vi.stubEnv("PAYPAL_WEBHOOK_ENABLED", "1");
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "hook_fixture");
+    vi.stubEnv("PAYPAL_CLIENT_ID", "client_fixture");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "secret_fixture");
+    const { paypalInternacionalConfigurado } = await import("@/lib/payments/revera");
+    expect(paypalInternacionalConfigurado()).toBe(true);
+  });
+
+  it("continua aceitando webhook PayPal quando novos checkouts são desligados", async () => {
+    vi.stubEnv("PAYPAL_CHECKOUT_ENABLED", "0");
+    vi.stubEnv("PAYPAL_WEBHOOK_ENABLED", "1");
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "hook_fixture");
+    vi.stubEnv("PAYPAL_CLIENT_ID", "client_fixture");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "secret_fixture");
+    const { paypalInternacionalConfigurado, paypalWebhookConfigurado } = await import("@/lib/payments/revera");
+    expect(paypalInternacionalConfigurado()).toBe(false);
+    expect(paypalWebhookConfigurado()).toBe(true);
+  });
+
   it("mantém Apple Pay/Google Pay escondido sem flag explícita", async () => {
     vi.stubEnv("REVERA_APPLE_PAY_ENABLED", "");
     const { reveraApplePayDisponivel } = await import("@/lib/payments/revera");
@@ -25,7 +47,7 @@ describe("opções de pagamento da Reverá", () => {
       "fetch",
       vi.fn(async () =>
         new Response(
-          JSON.stringify({ charges_enabled: true, capabilities: { card_payments: "active" } }),
+          JSON.stringify({ charges_enabled: true, payouts_enabled: true, capabilities: { card_payments: "active" } }),
           { status: 200 }
         )
       )

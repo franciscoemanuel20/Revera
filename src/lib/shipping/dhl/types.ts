@@ -6,6 +6,7 @@ export interface DhlParty {
   cityName: string;
   provinceCode?: string | null;
   addressLine1?: string | null;
+  addressLine2?: string | null;
 }
 
 export interface DhlPackageInfo {
@@ -32,5 +33,37 @@ export interface DhlQuote {
   priceCents: number;
   etaDays: number | null;
   deliveryDate: string | null;
+  raw: unknown;
+}
+
+export interface DhlShipmentLineItem {
+  description: string;
+  quantity: number;
+  valueCents: number;
+  weightGrams: number;
+  hsCode: string;
+  originCountry: string;
+}
+
+export interface DhlShipmentRequest {
+  orderId: string;
+  productCode: string;
+  plannedShippingDate: string;
+  currency: string;
+  declaredValueCents: number;
+  incoterm: "DAP" | "DDP";
+  packageInfo: DhlPackageInfo;
+  shipper: DhlParty & { legalName: string; contactName: string; taxId: string; phone: string; email: string };
+  receiver: DhlParty & { name: string; phone: string; email: string };
+  lineItems: DhlShipmentLineItem[];
+  requestPickup: boolean;
+  requestInvoice?: boolean;
+}
+
+export interface DhlShipmentResult {
+  shipmentId: string;
+  trackingNumber: string;
+  labelBase64: string | null;
+  documents: Array<{ typeCode: string | null; contentBase64: string }>;
   raw: unknown;
 }

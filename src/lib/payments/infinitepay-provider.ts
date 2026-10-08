@@ -229,6 +229,7 @@ export class InfinitePayProvider implements PaymentProvider {
         slug: hint.invoiceSlug,
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {
@@ -248,6 +249,14 @@ export class InfinitePayProvider implements PaymentProvider {
       capture_method?: string;
       installments?: number;
     };
+
+    // Em 08/10/2026, a API respondeu {success:false} a uma venda paga
+    // consultada sem as pistas completas. É consulta inconclusiva, não
+    // ausência de pagamento; confirmarPagamento preserva o estado e permite
+    // nova confirmação por retorno/webhook quando este adapter lança.
+    if (data.success !== true || typeof data.paid !== "boolean") {
+      throw new Error("Não foi possível verificar o pagamento no gateway.");
+    }
 
     return {
       paid: data.success === true && data.paid === true,

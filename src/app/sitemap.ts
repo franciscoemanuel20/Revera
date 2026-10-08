@@ -34,6 +34,8 @@ const INSTITUCIONAIS: Array<{ caminho: string; prioridade: number }> = [
   { caminho: "/cuidados", prioridade: 0.6 },
   { caminho: "/faq", prioridade: 0.6 },
   { caminho: "/para-profissionais", prioridade: 0.5 },
+  { caminho: "/devolucao", prioridade: 0.3 },
+  { caminho: "/aviso-legal", prioridade: 0.2 },
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

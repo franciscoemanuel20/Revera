@@ -9,6 +9,14 @@
     {
       "path": "/api/cron/conversoes",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/paypal-conciliacao",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/confirmacao-cliente",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

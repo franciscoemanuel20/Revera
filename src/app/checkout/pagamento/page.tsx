@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { HEADER_HEIGHT_PX } from "@/lib/layout/header";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getStripeProvider } from "@/lib/payments";
-import { getReveraProviderForCurrency } from "@/lib/payments/revera";
+import { getReveraInternationalProviderForPreference, getReveraProviderForCurrency } from "@/lib/payments/revera";
 import { AmbiguousChargeError } from "@/lib/payments/provider";
 import { confirmarPagamento } from "@/lib/payments/confirmar";
 import { urlDoWebhook } from "@/lib/payments/webhook-url";
@@ -13,6 +13,7 @@ import { cotacaoPermiteNovoPayPal, pedidoInternacionalPagavel } from "@/lib/inte
 import { urlCheckoutStripeSegura } from "@/lib/payments/stripe-provider";
 import { urlCheckoutPayPalSegura } from "@/lib/payments/paypal-provider";
 import { montarItensDoPagamento } from "@/lib/payments/itens";
+import { registrarEventoPagamento } from "@/lib/payments/journey";
 import { AutoRetryPagamento } from "./AutoRetryPagamento";
 import { CopiarNumeroPedido } from "./CopiarNumeroPedido";
 
@@ -148,7 +149,9 @@ export default async function PagamentoPage({
     pedido.address_id
       ? supabase
           .from("addresses")
-          .select("street, number, complement, neighborhood, city, state, cep")
+          .select(
+            "street, number, complement, neighborhood, city, state, cep, recipient_name, line1, line2, region, postal_code, country"
+          )
           .eq("id", pedido.address_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -304,7 +307,9 @@ export default async function PagamentoPage({
     provider =
       pedido.currency === "BRL" && pedido.payment_preference === "apple_pay"
         ? getStripeProvider()
-        : getReveraProviderForCurrency(pedido.currency as string);
+        : pedido.currency === "BRL"
+          ? getReveraProviderForCurrency(pedido.currency as string)
+          : getReveraInternationalProviderForPreference(pedido.payment_preference);
   } catch (erro) {
     console.error("[pagamento] pagamento não configurado", erro);
     return telaDePagamentoIndisponivel(pedido.order_number, accessToken, {
@@ -464,6 +469,20 @@ export default async function PagamentoPage({
             postalCode: endereco.cep,
           }
         : undefined,
+      // Só no internacional: o PayPal grava a entrega na transação, e sem
+      // ela a venda fica fora da Proteção ao Vendedor (ver provider.ts).
+      shippingAddress:
+        endereco && pedido.currency !== "BRL"
+          ? {
+              recipientName: endereco.recipient_name ?? cliente?.full_name ?? null,
+              line1: endereco.line1,
+              line2: endereco.line2,
+              city: endereco.city,
+              region: endereco.region,
+              postalCode: endereco.postal_code,
+              countryCode: endereco.country,
+            }
+          : undefined,
       // PORTA 2 da confirmação: o cliente volta para cá depois de pagar, e
       // essa página confirma com o gateway. Ver src/lib/payments/confirmar.ts.
       // O retorno é apenas um sinal de navegação para abrir o WhatsApp. A
@@ -677,6 +696,22 @@ export default async function PagamentoPage({
       checkout: provider.name === "infinitepay" ? "infinitepay" : "generico",
     });
   }
+  await registrarEventoPagamento(supabase, {
+    orderId: pedido.id,
+    paymentId: reserva?.id ?? null,
+    provider: provider.name,
+    eventType: "checkout_created",
+    source: "server",
+    eventKey: `checkout-created:${reserva?.id ?? pedido.id}`,
+  });
+  await registrarEventoPagamento(supabase, {
+    orderId: pedido.id,
+    paymentId: reserva?.id ?? null,
+    provider: provider.name,
+    eventType: "checkout_redirected",
+    source: "server",
+    eventKey: `checkout-redirected:${reserva?.id ?? pedido.id}`,
+  });
   redirect(checkoutUrl);
 }
 

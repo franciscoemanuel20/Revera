@@ -5,6 +5,8 @@ import type { WebhookHint } from "@/lib/payments/provider";
 import { registrarPurchasePendente } from "@/lib/tracking/purchase";
 import { despacharPurchase } from "@/lib/tracking/despachar";
 import { avisarVendaPaga } from "@/lib/notificacoes/venda-paga";
+import { registrarEventoPagamento } from "@/lib/payments/journey";
+import { enviarConfirmacaoAoCliente } from "@/lib/notificacoes/confirmacao-cliente";
 
 /**
  * Confirmação de pagamento — a ÚNICA função do sistema que marca um pedido
@@ -43,8 +45,9 @@ export type ResultadoConfirmacao =
 /**
  * @param orderId  orders.id (é o `order_nsu` mandado ao gateway)
  * @param pistas   dados extras vindos do webhook, quando houver. No retorno
- *                 do cliente não temos transaction_nsu — e tudo bem: o
- *                 gateway aceita consultar só pelo order_nsu.
+ *                 A InfinitePay também devolve transaction_nsu e slug no
+ *                 retorno do cliente. Sem essas pistas, uma resposta
+ *                 inconclusiva do gateway mantém a confirmação pendente.
  */
 export async function confirmarPagamento(
   orderId: string,
@@ -174,7 +177,18 @@ export async function confirmarPagamento(
   }
 
   if (!confirmacao.paid) {
-    await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
+    // "Ainda não pago" não é sinônimo de "recusado". O retorno do cliente,
+    // uma conciliação precoce ou uma busca eventualmente consistente podem
+    // chegar antes da aprovação. Guardamos o fato na jornada sem poluir o
+    // livro financeiro com uma falsa falha.
+    await registrarEventoPagamento(supabase, {
+      orderId: pedido.id,
+      provider: provider.name,
+      eventType: "checkout_returned_unpaid",
+      source: pistas?.eventId ? "webhook" : "reconciliation",
+      eventKey: `unpaid:${provider.name}:${pedido.id}:${pistasEfetivas?.eventId ?? pistasEfetivas?.transactionId ?? "sem-pista"}`,
+      metadata: { gatewayPaid: false },
+    });
     return { estado: "nao_pago", motivo: "gateway diz que não foi pago" };
   }
 
@@ -191,6 +205,14 @@ export async function confirmarPagamento(
       moedaPaga: confirmacao.currency,
     });
     await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
+    await registrarEventoPagamento(supabase, {
+      orderId: pedido.id,
+      provider: provider.name,
+      eventType: "payment_declined",
+      source: "server",
+      eventKey: `rejected-currency:${provider.name}:${pedido.id}:${pistasEfetivas?.transactionId ?? "sem-pista"}`,
+      metadata: { reason: "currency_mismatch" },
+    });
     return { estado: "nao_pago", motivo: "moeda divergente" };
   }
 
@@ -206,6 +228,14 @@ export async function confirmarPagamento(
       total: pedido.total_cents,
     });
     await registrarTentativa(supabase, provider.name, pedido, pistasEfetivas, confirmacao, "failed");
+    await registrarEventoPagamento(supabase, {
+      orderId: pedido.id,
+      provider: provider.name,
+      eventType: "payment_declined",
+      source: "server",
+      eventKey: `rejected-amount:${provider.name}:${pedido.id}:${pistasEfetivas?.transactionId ?? "sem-pista"}`,
+      metadata: { reason: "amount_mismatch" },
+    });
     return { estado: "nao_pago", motivo: "valor divergente" };
   }
 
@@ -246,6 +276,14 @@ export async function confirmarPagamento(
     return { estado: "pago", jaEstavaPago: true };
   }
 
+  await registrarEventoPagamento(supabase, {
+    orderId: pedido.id,
+    provider: provider.name,
+    eventType: "payment_approved",
+    source: pistas?.eventId ? "webhook" : "reconciliation",
+    eventKey: `approved:${provider.name}:${pedido.id}`,
+  });
+
   // Só quem efetivamente transicionou registra o direito ao Purchase.
   await registrarPurchasePendente(supabase, pedido.id);
 
@@ -284,6 +322,10 @@ export async function confirmarPagamento(
   });
 
   await avisarVendaPaga(supabase, pedido.id);
+
+  // Confirmação ao CLIENTE, com a informação de desistência (07/10/2026).
+  // Mesmo contrato do aviso acima: nunca lança, uma vez por pedido.
+  await enviarConfirmacaoAoCliente(supabase, pedido.id);
 
   return { estado: "pago", jaEstavaPago: false };
 }

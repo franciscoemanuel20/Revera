@@ -99,12 +99,28 @@ export async function imprimirEtiquetaAction(input: unknown): Promise<ImprimirEt
   }
   const { data: envio, error } = await supabase
     .from("shipments")
-    .select("provider, provider_shipment_id")
+    .select("provider, provider_shipment_id, label_url")
     .eq("order_id", parsed.data.orderId)
     .maybeSingle();
 
   if (error || !envio?.provider_shipment_id) {
     return { error: "Não encontramos uma etiqueta emitida para este pedido." };
+  }
+  if (envio.provider === "dhl") {
+    if (typeof envio.label_url === "string" && envio.label_url.startsWith("export-documents:")) {
+      const path = envio.label_url.slice("export-documents:".length);
+      if (!path.startsWith(`${parsed.data.orderId}/dhl/`)) {
+        return { error: "O caminho da etiqueta DHL não pertence a este pedido." };
+      }
+      const { data, error: urlError } = await supabase.storage.from("export-documents")
+        .createSignedUrl(path, 60);
+      if (!urlError && data?.signedUrl) return { ok: true, etiquetaUrl: data.signedUrl };
+      return { error: "O PDF privado da DHL não está disponível agora. Confira no MyDHL." };
+    }
+    if (typeof envio.label_url === "string" && envio.label_url.startsWith("data:application/pdf;base64,")) {
+      return { ok: true, etiquetaUrl: envio.label_url };
+    }
+    return { error: "A etiqueta DHL foi emitida, mas o PDF não está disponível no pedido. Confira no MyDHL." };
   }
   if (envio.provider !== "superfrete") {
     return { error: "A impressão deste envio ainda não é suportada pelo painel." };

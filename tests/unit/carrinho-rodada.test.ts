@@ -30,6 +30,7 @@ let notificacoes: Array<{
   sent_at: string | null;
 }> = [];
 let reservas = 0;
+let reservasLiberadas = 0;
 let pedidosReservados: string[] = [];
 let contagemDoDia = 0;
 /** Simula "esta pessoa já pagou por outro checkout". */
@@ -70,6 +71,10 @@ vi.mock("@/lib/supabase/server", () => {
                 if (estado.insertPayload?.order_id) pedidosReservados.push(estado.insertPayload.order_id);
                 return resolver({ error: null });
               }
+              if (estado.op === "delete") {
+                reservasLiberadas += 1;
+                return resolver({ error: null });
+              }
               if (estado.op === "update") return resolver({ error: null });
               if (estado.contando) return resolver({ count: contagemDoDia, error: null });
               if (historicoQuebrado) return resolver({ data: null, error: { message: "banco fora" } });
@@ -94,6 +99,7 @@ vi.mock("@/lib/supabase/server", () => {
             estado.op = "insert";
             estado.insertPayload = args[0] as { order_id?: string };
           }
+          if (prop === "delete") estado.op = "delete";
           if (prop === "update") estado.op = "update";
           if (prop === "maybeSingle") estado.single = true;
           if (prop === "eq" && args[0] === "payment_status" && args[1] === "paid") {
@@ -125,6 +131,7 @@ const AGORA = new Date("2026-09-05T18:00:00Z"); // 15h em São Paulo
 
 beforeEach(() => {
   reservas = 0;
+  reservasLiberadas = 0;
   pedidosReservados = [];
   notificacoes = [];
   contagemDoDia = 0;
@@ -630,6 +637,35 @@ describe("rodada com a Clint recusando tudo", () => {
     expect(resultado.pulados.envio_recusado).toBeUndefined();
     expect(reservas).toBe(0);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("libera a reserva recém-criada se o WhatsApp desligar antes do envio", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    process.env.WHATSAPP_PROVIDER = "clint";
+
+    pedidos = [
+      {
+        id: "pedido-unico",
+        access_token: "token-unico",
+        created_at: new Date(AGORA.getTime() - 2 * 3600_000).toISOString(),
+        total_cents: 67000,
+        currency: "BRL",
+        customers: { phone: "48999887766", email: "maria@exemplo.com", full_name: "Maria Souza" },
+      },
+    ];
+
+    const originalPush = pedidosReservados.push.bind(pedidosReservados);
+    vi.spyOn(pedidosReservados, "push").mockImplementation((...itens) => {
+      process.env.WHATSAPP_PROVIDER = "";
+      return originalPush(...itens);
+    });
+
+    const r = await rodadaDeCarrinhoAbandonado(AGORA);
+
+    expect(r.enviados).toBe(0);
+    expect(r.pulados.whatsapp_desligado).toBe(1);
+    expect(reservas).toBe(1);
+    expect(reservasLiberadas).toBe(1);
   });
 
   /**

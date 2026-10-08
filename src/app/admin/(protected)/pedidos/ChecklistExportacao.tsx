@@ -6,33 +6,18 @@ import {
 } from "@/lib/internacional/exportacao";
 import { bandeira, nomeDoPais } from "@/lib/internacional/paises";
 
-/**
- * O bloco de exportação — e a diferença entre "falta fazer" e "não existe".
- *
- * Três marcadores, não dois:
- *
- *   ✓  pronto            — feito
- *   •  pendente          — falta fazer, e dá para fazer agora
- *   —  não configurado   — a peça não existe no sistema ainda
- *
- * O terceiro é o que impede a tela de mentir. Hoje NF-e, Commercial Invoice
- * e DHL estão todos nele, e mostrá-los como "pendente" faria parecer que a
- * responsável está devendo alguma coisa — quando na verdade ninguém pode
- * fazer, porque não foi contratado.
- *
- * Por isso também não existe botão nenhum aqui. Botão que abre uma tela
- * dizendo "ainda não disponível" é pior que a ausência do botão.
- */
+/** Estado calculado das evidências do pedido, compartilhado com as ações. */
 export function ChecklistExportacao({
   pais,
   etapas,
   status,
+  bloqueios,
 }: {
   pais: string;
   etapas: EtapaExportacao[];
   status: ExportStatus;
+  bloqueios: string[];
 }) {
-  const naoConfigurados = etapas.filter((e) => e.estado === "nao_configurado");
 
   return (
     <section className="flex flex-col gap-4 rounded-lg border border-sand p-5">
@@ -79,11 +64,10 @@ export function ChecklistExportacao({
         ))}
       </ul>
 
-      {naoConfigurados.length > 0 ? (
+      {bloqueios.length > 0 ? (
         <p className="rounded-md border border-sand bg-sand/40 p-3 text-sm text-ink/70">
-          Este pedido <strong>ainda não pode ser despachado</strong>. Faltam{" "}
-          {naoConfigurados.length === 1 ? "peças" : `${naoConfigurados.length} peças`} que
-          dependem de contratação: {naoConfigurados.map((e) => e.titulo).join(", ")}.
+          Este pedido <strong>ainda não pode ser despachado</strong>. {bloqueios.length} pendência(s)
+          precisam ser resolvidas e conferidas.
         </p>
       ) : null}
     </section>

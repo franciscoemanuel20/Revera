@@ -6,6 +6,7 @@ import {
 import { paisesDoCheckout, nomeDoPais, bandeira, PAISES } from "@/lib/internacional/paises";
 import { PrecosInternacionais } from "./PrecosInternacionais";
 import { CotacoesFrete } from "./CotacoesFrete";
+import { ExpedicaoDhl } from "./ExpedicaoDhl";
 
 /**
  * Painel Internacional — as três alavancas que abrem (ou mantêm fechado)
@@ -23,10 +24,10 @@ import { CotacoesFrete } from "./CotacoesFrete";
 export default async function InternacionalPage() {
   const supabase = await createClient();
 
-  const [{ data: variantes }, { data: cotacoes }] = await Promise.all([
+  const [{ data: variantes }, { data: cotacoes }, { data: exportador }] = await Promise.all([
     supabase
       .from("product_variants")
-      .select("id, sku, price_cents, products(name, status), variant_prices(currency, price_cents, is_active)")
+      .select("id, sku, price_cents, shipping_weight_g, shipping_length_cm, shipping_width_cm, shipping_height_cm, customs_hs_code, origin_country, products(name, status), variant_prices(currency, price_cents, is_active)")
       .order("sku"),
     supabase
       .from("intl_shipping_quotes")
@@ -34,6 +35,7 @@ export default async function InternacionalPage() {
         "id, country, carrier, service_name, currency, price_cents, max_weight_g, eta_days_min, eta_days_max, quoted_at, valid_until, is_active, notes"
       )
       .order("created_at", { ascending: false }),
+    supabase.from("international_export_settings").select("*").eq("singleton", true).maybeSingle(),
   ]);
 
   const gatewayInternacionalOk = reveraInternationalPaymentAvailable();
@@ -100,6 +102,20 @@ export default async function InternacionalPage() {
             priceCents: p.price_cents,
             ativo: p.is_active,
           })),
+        }))}
+      />
+
+      <ExpedicaoDhl
+        exportador={(exportador as Parameters<typeof ExpedicaoDhl>[0]["exportador"]) ?? null}
+        variantes={((variantes ?? []) as Array<Record<string, unknown>>).map((v) => ({
+          id: v.id as string, sku: v.sku as string,
+          nome: ((v.products as { name?: string } | null)?.name) ?? "—",
+          shipping_weight_g: v.shipping_weight_g as number | null,
+          shipping_length_cm: v.shipping_length_cm as number | null,
+          shipping_width_cm: v.shipping_width_cm as number | null,
+          shipping_height_cm: v.shipping_height_cm as number | null,
+          customs_hs_code: v.customs_hs_code as string | null,
+          origin_country: v.origin_country as string | null,
         }))}
       />
 

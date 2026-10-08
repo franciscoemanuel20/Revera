@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ehPaisSuportado, idiomaDoPais, regraDoPais } from "./paises";
+import { ehPaisSuportado, idiomaDoPais, nomeDoPais, regraDoPais } from "./paises";
 import { textos, type Idioma } from "./idioma";
 
 /**
@@ -334,8 +334,47 @@ export function daLinha(l: LinhaEndereco, telefone: string): Endereco | null {
   };
 }
 
-/** Uma linha por vez, para etiqueta, invoice e tela do admin. */
-export function formatarEndereco(e: Endereco): string[] {
+/**
+ * Linha(s) de cidade/região/código postal na ordem do país (07/10/2026).
+ * Antes era sempre "cidade, região, CEP" — para a Alemanha saía
+ * "Ottobrunn, 85521", quando o certo é "85521 Ottobrunn".
+ */
+function linhasDeCidade(pais: string, cidade: string, regiao: string | null, postal: string): string[] {
+  const c = cidade.trim();
+  const r = (regiao ?? "").trim();
+  const p = postal.trim();
+  switch (pais) {
+    case "US":
+      return [[`${c}${r ? `, ${r}` : ""}`, p].filter(Boolean).join(" ")];
+    case "CA":
+    case "AU":
+      return [[c, r, p].filter(Boolean).join(" ")];
+    case "GB":
+    case "IE":
+      return [c, ...(r ? [r] : []), ...(p ? [p] : [])].filter(Boolean);
+    default:
+      // Código postal antes da cidade só onde é a convenção do país; nos
+      // demais (IN, NZ, ZA, CN…), o formato antigo, que já estava certo.
+      if (CEP_ANTES_DA_CIDADE.has(pais)) {
+        return [[p, c].filter(Boolean).join(" "), ...(r ? [r] : [])].filter(Boolean);
+      }
+      return [[c, r, p].filter(Boolean).join(", ")];
+  }
+}
+
+const CEP_ANTES_DA_CIDADE = new Set([
+  "DE", "AT", "CH", "FR", "BE", "LU", "NL", "ES", "PT", "IT", "DK", "SE", "NO", "FI", "PL", "CZ",
+  "MX", "CL", "AR", "EC", "GT", "PA", "UY", "PY", "PE", "BO",
+]);
+
+/**
+ * Uma linha por vez, para etiqueta, invoice e tela do admin.
+ *
+ * `idiomaDoPais` (tela e e-mail do CLIENTE): o país sai no idioma dele
+ * ("Deutschland"). Sem ele (admin/etiqueta), sai em inglês maiúsculo
+ * ("GERMANY"), o padrão postal internacional para o despacho.
+ */
+export function formatarEndereco(e: Endereco, idiomaDoCliente?: Idioma): string[] {
   if (ehEnderecoBR(e)) {
     return [
       e.destinatario,
@@ -353,7 +392,7 @@ export function formatarEndereco(e: Endereco): string[] {
     ...(e.empresa ? [e.empresa] : []),
     e.linha1,
     ...(e.linha2 ? [e.linha2] : []),
-    [e.cidade, e.regiao, e.codigoPostal].filter(Boolean).join(", "),
-    (regra?.nomeEn ?? e.pais).toUpperCase(),
+    ...linhasDeCidade(e.pais, e.cidade, e.regiao, e.codigoPostal),
+    idiomaDoCliente ? nomeDoPais(e.pais, idiomaDoCliente) : (regra?.nomeEn ?? e.pais).toUpperCase(),
   ];
 }

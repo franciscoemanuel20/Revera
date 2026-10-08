@@ -12,6 +12,26 @@ import { AmbiguousChargeError, TIMEOUT_CRIACAO_MS } from "./provider";
 
 const MOEDAS_PAYPAL = new Set(["USD", "EUR", "GBP", "AUD", "CAD"]);
 
+const EVENTOS_DE_CAPTURA = new Set([
+  "PAYMENT.CAPTURE.PENDING",
+  "PAYMENT.CAPTURE.DENIED",
+  "PAYMENT.CAPTURE.DECLINED",
+  "PAYMENT.CAPTURE.REFUNDED",
+  "PAYMENT.CAPTURE.REVERSED",
+]);
+
+export type EstadoCapturaPayPal =
+  | { estado: "concluida" }
+  | { estado: "aprovada_sem_captura" }
+  | { estado: "pendente"; motivo: string | null }
+  | { estado: "recusada"; motivo: string | null }
+  | { estado: "reembolsada" }
+  | { estado: "parcialmente_reembolsada" }
+  | { estado: "estornada"; motivo: string | null }
+  | { estado: "desconhecida"; status: string }
+  | { estado: "sem_captura"; statusOrdem: string | null }
+  | { estado: "outro_pedido" };
+
 function paypalEnv(): "live" | "sandbox" {
   const env = process.env.PAYPAL_ENV?.trim().toLowerCase();
   if (env === "sandbox" || env === "live") return env;
@@ -49,6 +69,67 @@ function valorPayPal(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+// Países em que o PayPal exige estado/província (admin_area_1) no endereço.
+const PAISES_COM_REGIAO_OBRIGATORIA = new Set(["US", "CA", "AU"]);
+
+function campo(valor: string | null | undefined, max: number): string | undefined {
+  const limpo = valor?.replace(/\s+/g, " ").trim();
+  return limpo ? limpo.slice(0, max) : undefined;
+}
+
+/**
+ * A ordem já tem o rastreio desta guia? O PayPal identifica o tracker como
+ * "<captura>-<número>"; um tracker cancelado não conta.
+ */
+function jaTemRastreio(ordem: OrdemPayPal, capturaId: string, numero: string): boolean {
+  const esperado = `${capturaId}-${numero}`;
+  return (ordem.purchase_units?.[0]?.shipping?.trackers ?? []).some(
+    (t) => t.id === esperado && t.status !== "CANCELLED"
+  );
+}
+
+/**
+ * Endereço de entrega no formato do Orders v2, ou null quando falta algo.
+ *
+ * Por que existe (06/10/2026): a ordem era criada com NO_SHIPPING e sem
+ * endereço, e o PayPal mostrava na transação "Pagamentos sem endereço de
+ * entrega não são cobertos pela Proteção ao Vendedor". Produto físico enviado
+ * por DHL ao exterior sem essa proteção perde qualquer disputa de "não
+ * recebi".
+ *
+ * Endereço incompleto devolve null e a ordem segue como antes (NO_SHIPPING):
+ * mandar endereço pela metade faz o PayPal recusar a ordem (422), e aí o
+ * cliente não pagaria nada. Perder a proteção num caso raro é melhor que
+ * perder a venda.
+ */
+export function enderecoEntregaPayPal(
+  endereco: PaymentCharge["shippingAddress"]
+): Record<string, unknown> | null {
+  if (!endereco) return null;
+  const pais = campo(endereco.countryCode, 2)?.toUpperCase();
+  const linha1 = campo(endereco.line1, 300);
+  const cidade = campo(endereco.city, 120);
+  const cep = campo(endereco.postalCode, 60);
+  const regiao = campo(endereco.region, 300);
+  const nome = campo(endereco.recipientName, 300);
+  if (!pais || !/^[A-Z]{2}$/.test(pais) || pais === "BR") return null;
+  if (!linha1 || !cidade || !cep) return null;
+  if (PAISES_COM_REGIAO_OBRIGATORIA.has(pais) && !regiao) return null;
+  const linha2 = campo(endereco.line2, 300);
+  return {
+    type: "SHIPPING",
+    ...(nome ? { name: { full_name: nome } } : {}),
+    address: {
+      address_line_1: linha1,
+      ...(linha2 ? { address_line_2: linha2 } : {}),
+      admin_area_2: cidade,
+      ...(regiao ? { admin_area_1: regiao } : {}),
+      postal_code: cep,
+      country_code: pais,
+    },
+  };
+}
+
 function urlCheckoutPayPalSegura(url: string): boolean {
   try {
     const u = new URL(url);
@@ -66,10 +147,12 @@ interface OrdemPayPal {
   links?: Array<{ href?: string; rel?: string }>;
   purchase_units?: Array<{
     custom_id?: string;
+    shipping?: { trackers?: Array<{ id?: string; status?: string }> };
     payments?: {
       captures?: Array<{
         id?: string;
         status?: string;
+        status_details?: { reason?: string } | null;
         amount?: { currency_code?: string; value?: string };
         seller_receivable_breakdown?: {
           gross_amount?: { currency_code?: string; value?: string };
@@ -90,7 +173,20 @@ interface EventoPayPal {
     supplementary_data?: { related_ids?: { order_id?: string } };
     purchase_units?: OrdemPayPal["purchase_units"];
     amount?: { currency_code?: string; value?: string };
+    links?: Array<{ href?: string; rel?: string }>;
   };
+}
+
+/**
+ * Id da captura a que o evento se refere. No REFUNDED o resource é o
+ * REEMBOLSO: a captura só aparece no link rel="up". Nos demais, o resource
+ * é a própria captura.
+ */
+function capturaDoEvento(evento: EventoPayPal): string | null {
+  const up = evento.resource?.links?.find((l) => l.rel === "up")?.href ?? "";
+  const doLink = /\/captures\/([^/?#]+)/.exec(up)?.[1];
+  if (doLink) return decodeURIComponent(doLink);
+  return evento.event_type === "PAYMENT.CAPTURE.REFUNDED" ? null : evento.resource?.id ?? null;
 }
 
 export class PayPalProvider implements PaymentProvider {
@@ -107,7 +203,12 @@ export class PayPalProvider implements PaymentProvider {
     }
   }
 
-  private async accessToken(): Promise<string> {
+  /**
+   * `signal` é o MESMO prazo da chamada que pediu o token: um timeout curto
+   * (tela do cliente, conferência periódica) vale para o token também, e não
+   * só para a consulta — antes o token sozinho podia levar 20 s.
+   */
+  private async accessToken(signal?: AbortSignal): Promise<string> {
     assertAmbientePermitido();
     requireClientId();
     requireClientSecret();
@@ -125,7 +226,7 @@ export class PayPalProvider implements PaymentProvider {
       },
       body: "grant_type=client_credentials",
       cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
+      signal: signal ?? AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
     });
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
@@ -141,8 +242,18 @@ export class PayPalProvider implements PaymentProvider {
     return json.access_token;
   }
 
-  private async chamar(caminho: string, init?: { method?: string; body?: unknown; signal?: AbortSignal; requestId?: string }) {
-    const token = await this.accessToken();
+  private async chamar(
+    caminho: string,
+    init?: {
+      method?: string;
+      body?: unknown;
+      signal?: AbortSignal;
+      requestId?: string;
+      /** Só consultas: o token entra no mesmo prazo. A criação da cobrança não usa. */
+      tokenNoMesmoPrazo?: boolean;
+    }
+  ) {
+    const token = await this.accessToken(init?.tokenNoMesmoPrazo ? init.signal : undefined);
     return fetch(`${apiBase()}${caminho}`, {
       method: init?.method ?? "GET",
       headers: {
@@ -184,44 +295,68 @@ export class PayPalProvider implements PaymentProvider {
     requireClientId();
     requireClientSecret();
 
-    let res: Response;
-    try {
-      res = await this.chamar("/v2/checkout/orders", {
-        method: "POST",
-        requestId: charge.orderId,
-        signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
-        body: {
-          intent: "CAPTURE",
-          purchase_units: [
-            {
-              reference_id: charge.orderId,
-              custom_id: charge.orderId,
-              invoice_id: charge.orderNumber,
-              description: `Pedido ${charge.orderNumber} - Revera`,
-              amount: {
-                currency_code: charge.currency,
-                value: valorPayPal(charge.amountCents),
-              },
-            },
-          ],
-          payment_source: {
-            paypal: {
-              experience_context: {
-                brand_name: "Revera",
-                locale: localePayPal(charge.locale),
-                landing_page: "LOGIN",
-                shipping_preference: "NO_SHIPPING",
-                user_action: "PAY_NOW",
-                return_url: charge.redirectUrl,
-                cancel_url: charge.redirectUrl,
-              },
-            },
+    // Com endereço completo, o PayPal grava a entrega na transação e trava a
+    // troca (SET_PROVIDED_ADDRESS): o endereço cotado na DHL é o que vale.
+    const entrega = enderecoEntregaPayPal(charge.shippingAddress);
+
+    const corpo = (comEntrega: boolean) => ({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          reference_id: charge.orderId,
+          custom_id: charge.orderId,
+          invoice_id: charge.orderNumber,
+          description: `Pedido ${charge.orderNumber} - Revera`,
+          amount: {
+            currency_code: charge.currency,
+            value: valorPayPal(charge.amountCents),
+          },
+          ...(comEntrega && entrega ? { shipping: entrega } : {}),
+        },
+      ],
+      payment_source: {
+        paypal: {
+          experience_context: {
+            brand_name: "Revera",
+            locale: localePayPal(charge.locale),
+            landing_page: "LOGIN",
+            shipping_preference: comEntrega && entrega ? "SET_PROVIDED_ADDRESS" : "NO_SHIPPING",
+            user_action: "PAY_NOW",
+            return_url: charge.redirectUrl,
+            cancel_url: (() => { const url = new URL(charge.redirectUrl); url.searchParams.set("retorno", "cancelamento"); return url.toString(); })(),
           },
         },
-      });
-    } catch (erro) {
-      console.error("[paypal] falha de rede ao criar order", erro);
-      throw new AmbiguousChargeError("Falha de rede ao criar a ordem PayPal.", { cause: erro });
+      },
+    });
+
+    const criar = async (comEntrega: boolean, recuperacao = false): Promise<Response> => {
+      try {
+        return await this.chamar("/v2/checkout/orders", {
+          method: "POST",
+          // Id próprio para a tentativa sem endereço: o PayPal guarda a
+          // resposta por Request-Id, e repetir o id da tentativa recusada
+          // devolveria a mesma recusa.
+          requestId: recuperacao ? `${charge.orderId}:sem-entrega` : charge.orderId,
+          signal: AbortSignal.timeout(TIMEOUT_CRIACAO_MS),
+          body: corpo(comEntrega),
+        });
+      } catch (erro) {
+        console.error("[paypal] falha de rede ao criar order", erro);
+        throw new AmbiguousChargeError("Falha de rede ao criar a ordem PayPal.", { cause: erro });
+      }
+    };
+
+    let res = await criar(Boolean(entrega));
+
+    // Endereço recusado (4xx) NÃO pode travar a venda. O estado é texto livre
+    // no checkout ("New York" em vez de "NY") e o PayPal só aceita código.
+    // 4xx garante que nenhuma ordem foi criada, então tentar de novo sem
+    // endereço não cobra duas vezes; perde-se só a Proteção ao Vendedor
+    // nesta venda — o comportamento de antes de 06/10/2026.
+    if (!res.ok && entrega && res.status >= 400 && res.status < 500) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[paypal] endereço recusado; criando sem entrega", res.status, detalhe.slice(0, 500));
+      res = await criar(false, true);
     }
 
     if (!res.ok) {
@@ -287,12 +422,93 @@ export class PayPalProvider implements PaymentProvider {
       };
     }
 
+    // Retida, recusada, reembolsada, estornada (06/10/2026). O aviso só diz
+    // QUAL pedido olhar: o que fazer sai de reavaliarCapturaPayPal(), que
+    // pergunta ao PayPal o estado real da captura. Até essa data esses
+    // eventos caíam em "ignorar" e um estorno no PayPal deixava o pedido
+    // "pago" no painel — pronto para despachar uma peça sem dinheiro.
+    if (EVENTOS_DE_CAPTURA.has(evento.event_type)) {
+      // Nunca null: um evento assinado que não sabemos ler vira 200 "ignorar",
+      // não 400 — 400 faz o PayPal reenviar por dias.
+      const orderId = evento.resource?.custom_id ?? "";
+      const paypalOrderId = evento.resource?.supplementary_data?.related_ids?.order_id ?? null;
+      const captura = capturaDoEvento(evento);
+      if (!orderId && !paypalOrderId && !captura) {
+        return { orderId: "", transactionId: null, invoiceSlug: null, eventId: evento.id, kind: "ignorar" };
+      }
+      return {
+        orderId,
+        transactionId: paypalOrderId,
+        // Para o REFUNDED sem custom_id: a rota resolve o pedido pela captura.
+        invoiceSlug: captura,
+        eventId: evento.id,
+        kind: "captura_paypal",
+        eventoGateway: evento.event_type,
+      };
+    }
+
     return {
       orderId: evento.resource?.custom_id ?? "",
       transactionId: evento.resource?.id ?? null,
       invoiceSlug: null,
       eventId: evento.id,
       kind: "ignorar",
+    };
+  }
+
+  /**
+   * Estado REAL da captura de uma ordem, lido do PayPal (nunca do aviso).
+   * Confere que a ordem é deste pedido antes de responder.
+   */
+  async estadoCaptura(
+    paypalOrderId: string,
+    pedidoId: string,
+    opcoes?: { timeoutMs?: number }
+  ): Promise<EstadoCapturaPayPal> {
+    const ordem = await this.buscarOrdem(
+      paypalOrderId,
+      opcoes?.timeoutMs ? AbortSignal.timeout(opcoes.timeoutMs) : undefined
+    );
+    if (ordem.purchase_units?.[0]?.custom_id !== pedidoId) return { estado: "outro_pedido" };
+    if (ordem.status === "APPROVED") return { estado: "aprovada_sem_captura" };
+    const captura = ordem.purchase_units?.[0]?.payments?.captures?.[0];
+    if (!captura?.status) return { estado: "sem_captura", statusOrdem: ordem.status ?? null };
+    const motivo = captura.status_details?.reason ?? null;
+    switch (captura.status) {
+      case "COMPLETED":
+        return { estado: "concluida" };
+      case "PENDING":
+        return { estado: "pendente", motivo };
+      case "DECLINED":
+      case "FAILED":
+        return { estado: "recusada", motivo };
+      case "REFUNDED":
+        return { estado: "reembolsada" };
+      case "PARTIALLY_REFUNDED":
+        return { estado: "parcialmente_reembolsada" };
+      case "REVERSED":
+        return { estado: "estornada", motivo: captura.status };
+      default:
+        // Status que o PayPal venha a criar: não mexe no pedido, só avisa.
+        return { estado: "desconhecida", status: captura.status };
+    }
+  }
+
+  /** Pedido e ordem de uma captura (GET /v2/payments/captures/{id}). */
+  async pedidoDaCaptura(captureId: string): Promise<{ orderId: string | null; paypalOrderId: string | null }> {
+    const res = await this.chamar(`/v2/payments/captures/${encodeURIComponent(captureId)}`);
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      console.error("[paypal] retrieve da captura falhou", res.status, detalhe.slice(0, 300));
+      throw new Error("Não foi possível ler a captura no PayPal.");
+    }
+    const c = (await res.json()) as {
+      custom_id?: string;
+      supplementary_data?: { related_ids?: { order_id?: string } };
+    };
+    return {
+      orderId: c.custom_id ?? null,
+      paypalOrderId: c.supplementary_data?.related_ids?.order_id ?? null,
     };
   }
 
@@ -363,8 +579,68 @@ export class PayPalProvider implements PaymentProvider {
     };
   }
 
-  private async buscarOrdem(orderId: string): Promise<OrdemPayPal> {
-    const res = await this.chamar(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
+  /**
+   * Informa ao PayPal o rastreio DHL de uma ordem já paga.
+   *
+   * Por que existe (06/10/2026): a primeira venda internacional ficou com o
+   * saldo "ainda não disponível" (retenção de vendedor novo). O PayPal libera
+   * mais cedo quando a transação tem rastreio, e numa disputa de "não
+   * recebi" o rastreio é a prova da entrega.
+   *
+   * Confere que a ordem pertence ao pedido (custom_id) antes de escrever:
+   * um ID trocado não pode carimbar rastreio na venda de outro cliente.
+   * `notify_payer: false` — quem avisa o cliente é a Reverá, uma vez só.
+   */
+  async adicionarRastreio(
+    paypalOrderId: string,
+    pedidoId: string,
+    numeroRastreio: string
+  ): Promise<{ ok: true } | { ok: false; motivo: string }> {
+    const ordem = await this.buscarOrdem(paypalOrderId);
+    if (ordem.purchase_units?.[0]?.custom_id !== pedidoId) {
+      return { ok: false, motivo: "A ordem PayPal não pertence a este pedido." };
+    }
+    const captura = ordem.purchase_units?.[0]?.payments?.captures?.find(
+      (c) => c.status === "COMPLETED"
+    );
+    if (ordem.status !== "COMPLETED" || !captura?.id) {
+      return { ok: false, motivo: "O pagamento ainda não está concluído no PayPal." };
+    }
+    // Reenvio da mesma guia: se o PayPal já tem o rastreio, é sucesso. Sem
+    // isto, depois que o cache do PayPal-Request-Id expira, o PayPal recusa
+    // a duplicata (422) e a tela dizia "não chegou ao PayPal" — tendo chegado.
+    if (jaTemRastreio(ordem, captura.id, numeroRastreio)) return { ok: true };
+    const res = await this.chamar(
+      `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/track`,
+      {
+        method: "POST",
+        requestId: `track-${paypalOrderId}-${numeroRastreio}`,
+        body: {
+          capture_id: captura.id,
+          tracking_number: numeroRastreio,
+          carrier: "DHL",
+          notify_payer: false,
+        },
+      }
+    );
+    if (!res.ok) {
+      const detalhe = await res.text().catch(() => "");
+      // Duas abas, ou um reenvio que cruzou com o primeiro: confere de novo.
+      if (res.status === 422) {
+        const depois = await this.buscarOrdem(paypalOrderId).catch(() => null);
+        if (depois && jaTemRastreio(depois, captura.id, numeroRastreio)) return { ok: true };
+      }
+      console.error("[paypal] rastreio recusado", res.status, detalhe.slice(0, 300));
+      return { ok: false, motivo: `O PayPal recusou o rastreio (HTTP ${res.status}).` };
+    }
+    return { ok: true };
+  }
+
+  private async buscarOrdem(orderId: string, signal?: AbortSignal): Promise<OrdemPayPal> {
+    const res = await this.chamar(
+      `/v2/checkout/orders/${encodeURIComponent(orderId)}`,
+      signal ? { signal, tokenNoMesmoPrazo: true } : undefined
+    );
     if (!res.ok) {
       const detalhe = await res.text().catch(() => "");
       console.error("[paypal] retrieve da order falhou", res.status, detalhe.slice(0, 300));

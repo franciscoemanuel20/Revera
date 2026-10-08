@@ -62,6 +62,25 @@ export interface PaymentCharge {
     state?: string | null;
     postalCode?: string | null;
   };
+  /**
+   * Endereço de ENTREGA internacional, no formato gravado pelo checkout
+   * internacional (addresses.line1/line2/region/postal_code/country).
+   *
+   * Existe por causa do PayPal (06/10/2026): a primeira venda internacional
+   * (REV-7DA5CEBF) entrou sem endereço na transação, e o PayPal avisa que
+   * pagamento sem endereço de entrega NÃO tem Proteção ao Vendedor — numa
+   * disputa de "não recebi", a Reverá perderia mesmo com o rastreio DHL.
+   */
+  shippingAddress?: {
+    recipientName?: string | null;
+    line1?: string | null;
+    line2?: string | null;
+    city?: string | null;
+    region?: string | null;
+    postalCode?: string | null;
+    /** ISO 3166-1 alfa-2 (DE, US, PT…) */
+    countryCode?: string | null;
+  };
   /** para onde o gateway devolve o cliente depois de pagar */
   redirectUrl: string;
   /** para onde o gateway avisa que algo aconteceu */
@@ -110,7 +129,14 @@ export interface PaymentResult {
  * "ignorar" registra o evento (auditoria + idempotência) e para — para os
  * muitos eventos que um gateway manda e não mudam pedido nenhum.
  */
-export type TipoDeAviso = "pagamento" | "reembolso" | "ignorar" | "checkout_expirado" | "checkout_falhou";
+export type TipoDeAviso =
+  | "pagamento"
+  | "reembolso"
+  | "ignorar"
+  | "checkout_expirado"
+  | "checkout_falhou"
+  /** PayPal: captura retida/recusada/reembolsada/estornada — reavaliar no gateway. */
+  | "captura_paypal";
 
 /** Superfície mínima dos cabeçalhos HTTP que um adapter pode precisar ler. */
 export interface CabecalhosWebhook {
@@ -139,6 +165,8 @@ export interface WebhookHint {
    * histórico — os adapters antigos não precisam mudar.
    */
   kind?: TipoDeAviso;
+  /** Tipo do evento no gateway (ex.: PAYMENT.CAPTURE.REVERSED), quando importa. */
+  eventoGateway?: string | null;
 }
 
 /** Resultado de uma verificação ATIVA junto ao gateway. É isto que vale. */

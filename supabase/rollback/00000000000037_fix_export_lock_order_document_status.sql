@@ -1,0 +1,3 @@
+-- Não restaurar a função anterior: ela impede a inserção de order_items.
+-- Rollback operacional: reverter o aplicativo conforme necessário e manter
+-- esta correção de integridade do gatilho no banco.
