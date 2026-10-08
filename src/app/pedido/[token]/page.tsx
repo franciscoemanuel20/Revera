@@ -64,10 +64,16 @@ export default async function PedidoPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ retorno?: string }>;
+  searchParams: Promise<{
+    retorno?: string;
+    order_nsu?: string | string[];
+    transaction_nsu?: string | string[];
+    slug?: string | string[];
+  }>;
 }) {
   const { token } = await params;
-  const { retorno } = await searchParams;
+  const consulta = await searchParams;
+  const { retorno } = consulta;
   const supabase = createAdminClient();
 
   const { data: pedido } = await supabase
@@ -99,7 +105,22 @@ export default async function PedidoPage({
   // 'refunded'), então a condição olha o eixo real do dinheiro — sem isso,
   // cada visita a um pedido estornado dispararia uma consulta ao gateway.
   if (pedido.status === "new" && pedido.payment_status === "pending") {
-    await confirmarPagamento(pedido.id);
+    // A InfinitePay devolve estas pistas no redirect_url. Sem elas a API
+    // pode responder apenas success=false até para uma venda já paga.
+    // O token autoriza ESTE pedido; parâmetros do navegador só orientam a
+    // reconfirmação no gateway e nunca aprovam o pagamento por conta própria.
+    const pistasInfinitePay = pedido.currency === "BRL" && retorno === "pagamento" &&
+      consulta.order_nsu === pedido.id &&
+      typeof consulta.transaction_nsu === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(consulta.transaction_nsu) &&
+      typeof consulta.slug === "string" && /^[a-z0-9_-]{1,128}$/i.test(consulta.slug)
+        ? { transactionId: consulta.transaction_nsu, invoiceSlug: consulta.slug }
+        : null;
+    if (pistasInfinitePay) {
+      await confirmarPagamento(pedido.id, pistasInfinitePay);
+    } else {
+      await confirmarPagamento(pedido.id);
+    }
   }
 
   // Relê depois da tentativa de confirmação, para mostrar o estado atual.
