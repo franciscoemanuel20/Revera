@@ -92,63 +92,34 @@ export async function confirmarPagamento(
     return { estado: "nao_pago", motivo: "pedido estornado" };
   }
 
-  /**
-   * O provider sai primeiro da tentativa de pagamento real. Isso permite
-   * Apple Pay nacional: pedido BRL, mas linha `payments.provider = stripe`.
-   * Sem linha pendente ainda, cai na regra histórica por moeda.
-   */
+  // Provider e sessão vêm da mesma tentativa persistida. Ela pode ter sido
+  // aprovada pelo webhook enquanto o retorno ainda vê o pedido pendente.
   let provider;
+  let pistasEfetivas = pistas;
   try {
-    const { data: pagamentoDoEvento } = pistas?.transactionId
-      ? await supabase
-          .from("payments")
-          .select("provider")
-          .eq("order_id", pedido.id)
-          .eq("provider_payment_id", pistas.transactionId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      : { data: null };
-    const { data: pagamentoPendente } = pagamentoDoEvento
-      ? { data: null }
-      : await supabase
-          .from("payments")
-          .select("provider")
-          .eq("order_id", pedido.id)
-          .eq("status", "pending")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-    const providerRegistrado = (pagamentoDoEvento?.provider ?? pagamentoPendente?.provider) as string | undefined;
+    const consulta = () => supabase.from("payments")
+      .select("provider, provider_payment_id")
+      .eq("order_id", pedido.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    let tentativa = pistas?.transactionId
+      ? await consulta().eq("provider_payment_id", pistas.transactionId).maybeSingle()
+      : await consulta().eq("status", "pending").maybeSingle();
+    if (tentativa.error) throw tentativa.error;
+    if (!tentativa.data) {
+      tentativa = await consulta().eq("status", pistas?.transactionId ? "pending" : "approved").maybeSingle();
+      if (tentativa.error) throw tentativa.error;
+    }
+    const providerRegistrado = tentativa.data?.provider as string | undefined;
     provider = providerRegistrado
       ? getReveraProviderByName(providerRegistrado)
       : getReveraProviderForCurrency(pedido.currency as string);
-  } catch (erro) {
-    console.error("[confirmar] pagamento não configurado", erro);
-    return { estado: "indisponivel", motivo: "pagamento não configurado" };
-  }
-
-  /**
-   * PORTA 2 sem pista: o cliente voltou à página do pedido e ninguém trouxe
-   * o id da transação. Para a Stripe isso importa — o retrieve por id de
-   * sessão é imediato, enquanto a busca por metadata tem consistência
-   * eventual. A linha `pending` de payments, gravada na criação da
-   * cobrança, guarda exatamente esse id. Usa quando existir.
-   */
-  let pistasEfetivas = pistas;
-  if (!pistas?.transactionId) {
-    const { data: pendente } = await supabase
-      .from("payments")
-      .select("provider_payment_id")
-      .eq("order_id", pedido.id)
-      .eq("provider", provider.name)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (pendente?.provider_payment_id) {
-      pistasEfetivas = { ...pistas, transactionId: pendente.provider_payment_id as string };
+    if (!pistas?.transactionId && tentativa.data?.provider_payment_id) {
+      pistasEfetivas = { ...pistas, transactionId: tentativa.data.provider_payment_id as string };
     }
+  } catch (erro) {
+    console.error("[confirmar] tentativa de pagamento indisponível", erro);
+    return { estado: "indisponivel", motivo: "pagamento não configurado" };
   }
 
   // Já pago (por qualquer uma das portas). Não reprocessa, não redispara.
@@ -358,9 +329,23 @@ async function registrarTentativa(
 
     if (erroAtualizar) {
       console.error("[confirmar] falha ao atualizar payment pendente", erroAtualizar);
-    } else if (atualizada) {
-      return true;
+      return false;
     }
+    if (atualizada) return true;
+
+    // A outra porta pode ter consumido a linha pending. Reaproveita somente
+    // a aprovação da MESMA sessão, provider e pedido; nunca valor ou e-mail.
+    const { data: aprovada, error: erroLer } = await supabase
+      .from("payments")
+      .select("id")
+      .eq("order_id", pedido.id)
+      .eq("provider", providerName)
+      .eq("provider_payment_id", pistas.transactionId)
+      .eq("status", "approved")
+      .limit(1)
+      .maybeSingle();
+    if (erroLer) return false;
+    if (aprovada) return true;
   }
 
   const { error } = await supabase.from("payments").insert({
