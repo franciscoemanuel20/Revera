@@ -92,7 +92,9 @@ describe("travas persistidas da reserva Focus", () => {
     expect(dispatch).toContain("n.xml_storage_path is not null and n.danfe_storage_path = d.storage_path");
     expect(dispatch).toContain("Despacho exige NF-e autorizada na Focus com XML e DANFE privados");
     expect(dispatch).toContain("Remessa DHL exige NF-e Focus autorizada e conferida");
-    expect(dispatch).toContain("n.consulted_at >= statement_timestamp() - interval '60 seconds'");
+    expect(dispatch.match(/n\.consulted_at >= clock_timestamp\(\) - interval '60 seconds'/g)).toHaveLength(2);
+    expect(dispatch).toContain("perform 1 from order_focus_nfe where order_id = new.id for update;");
+    expect(dispatch).toContain("perform 1 from order_focus_nfe where order_id = new.order_id for update;");
     expect(dispatch).toContain("insert into legacy_dhl_shipments(shipment_id, order_id)");
     expect(dispatch).toContain("where s.provider = 'dhl' and s.status in ('label_created','registrado_manual')");
     expect(dispatch).toContain("and d.source = 'external' and d.status = 'verified'");
@@ -141,6 +143,8 @@ describe("trava fiscal", () => {
     const approved = { ...amounts, shipping_order_cents: 500, discount_order_cents: 100,
       shipping_treatment: "included" as const, freight_brl_cents: 3000 };
     expect(amountBlockers(order, approved)).toEqual([]);
+    const separate = { ...approved, discount_treatment: "separate" as const, discount_brl_cents: 600 };
+    expect(amountBlockers(order, separate).join(" ")).toContain("não pode ser abatido outra vez");
   });
   it("recusa NF-e com NCM ou valor diferente do snapshot", () => {
     const payload = { natureza_operacao: "validada", serie: "1", tipo_documento: 1, local_destino: 3,

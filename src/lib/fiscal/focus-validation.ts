@@ -25,6 +25,8 @@ export function amountBlockers(input: EntradaProcesso, amounts: FiscalAmounts | 
     amounts.shipping_order_cents !== input.valorFretePedidoCents ||
     amounts.discount_order_cents !== input.valorDescontoPedidoCents)
     result.push("Valores de frete ou desconto do pedido mudaram após a validação fiscal.");
+  if (amounts.discount_treatment === "separate" && amounts.discount_order_cents > 0)
+    result.push("Desconto do pedido já está refletido no snapshot líquido dos itens; não pode ser abatido outra vez na NF-e.");
   if (!Number.isFinite(rate) || rate <= 0 || !amounts.fx_source || !amounts.fx_date ||
     amounts.freight_brl_cents !== (amounts.shipping_treatment === "included"
       ? Math.round(amounts.shipping_order_cents * rate) : 0) ||

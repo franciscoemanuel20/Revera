@@ -60,6 +60,7 @@ create table if not exists order_focus_amounts (
   discount_order_cents integer not null check(discount_order_cents >= 0),
   shipping_treatment text not null check(shipping_treatment in ('included','excluded')),
   discount_treatment text not null check(discount_treatment in ('included_in_items','separate')),
+  constraint no_double_discount_focus check(discount_treatment = 'included_in_items' or discount_order_cents = 0),
   fx_rate_brl_per_order_unit numeric(18,8) not null check(fx_rate_brl_per_order_unit > 0),
   fx_source text not null check(length(trim(fx_source)) >= 3),
   fx_date date not null,
