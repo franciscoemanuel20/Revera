@@ -388,6 +388,31 @@ export async function rodadaDeCarrinhoAbandonado(
         continue;
       }
 
+      // Se o recurso desligou ENTRE a checagem inicial e a chamada de envio,
+      // a reserva recém-criada não pode ficar: não houve tentativa externa nem
+      // custo possível, então ela só bloquearia o próximo cron depois de a
+      // configuração voltar. Erros reais do provedor continuam com reserva,
+      // porque aí houve tentativa e retentar em laço é o caminho caro.
+      if (envio.estado === "desligado") {
+        const { error: erroLiberacao } = await supabase
+          .from("order_notifications")
+          .delete()
+          .eq("order_id", pedido.id)
+          .eq("kind", kindDaEtapa(etapa))
+          .is("sent_at", null)
+          .is("provider_message_id", null);
+
+        if (erroLiberacao) {
+          await supabase
+            .from("order_notifications")
+            .update({ last_error: "whatsapp desligado" })
+            .eq("order_id", pedido.id)
+            .eq("kind", kindDaEtapa(etapa));
+        }
+        conta("whatsapp_desligado");
+        continue;
+      }
+
       // A reserva FICA, com sent_at nulo e o motivo gravado. Não se tenta de
       // novo: um template recusado hoje é recusado daqui a uma hora, e
       // retentar em laço é como se paga duas vezes pelo mesmo erro.
@@ -399,14 +424,12 @@ export async function rodadaDeCarrinhoAbandonado(
       // não a Meta ou a Clint rejeitando a mensagem. Separar os dois é a
       // mesma distinção que o topo deste arquivo já promete ("não avisamos"
       // x "tentaram e recusaram").
-      const desligado = envio.estado === "desligado";
-      const motivo = desligado ? "whatsapp desligado" : envio.motivo;
       await supabase
         .from("order_notifications")
-        .update({ last_error: motivo })
+        .update({ last_error: envio.motivo })
         .eq("order_id", pedido.id)
         .eq("kind", kindDaEtapa(etapa));
-      conta(desligado ? "whatsapp_desligado" : "envio_recusado");
+      conta("envio_recusado");
     }
 
     return resultado;
