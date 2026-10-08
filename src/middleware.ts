@@ -58,6 +58,19 @@ function ehPreCarga(request: NextRequest): boolean {
   return request.headers.has("next-router-prefetch") || /prefetch/i.test(purpose);
 }
 
+/**
+ * PAÍS EXPLÍCITO NO CHECKOUT VENCE O IDIOMA (Codex, 08/10/2026). As abas de
+ * país e o "comprar para o Brasil" levam a /checkout?pais=XX. Com
+ * geolocalização US ou cookie manual "en", a entrada sem prefixo era
+ * redirecionada para /en/checkout?pais=XX — e a rota localizada ignora o
+ * parâmetro e impõe o mercado americano. Quem escolheu o destino escolheu o
+ * mercado: a página decide (US continua indo para /en/checkout por lá).
+ */
+function paisExplicitoNoCheckout(request: NextRequest): boolean {
+  const { pathname, searchParams } = request.nextUrl;
+  return pathname === "/checkout" && /^[A-Za-z]{2}$/.test(searchParams.get("pais") ?? "");
+}
+
 function ehLeitura(request: NextRequest): boolean {
   return request.method === "GET" || request.method === "HEAD";
 }
@@ -81,7 +94,7 @@ export function middleware(request: NextRequest) {
     const locale = localeManual ?? localeFromCountry(request.headers.get("x-vercel-ip-country"));
     // Pré-carga não redireciona nem marca geolocalização pendente: o clique
     // de verdade é que decide, e chega sem o cabeçalho de pré-carga.
-    if (gravaEscolha && locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname)) {
+    if (gravaEscolha && locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname) && !paisExplicitoNoCheckout(request)) {
       const url = request.nextUrl.clone();
       url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
       const response = NextResponse.redirect(url);
