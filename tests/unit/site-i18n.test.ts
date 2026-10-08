@@ -176,6 +176,27 @@ describe("i18n publico do site", () => {
     expect(middleware(request).headers.get("location")).toBeNull();
   });
 
+  it.each([
+    ["BR", { "x-vercel-ip-country": "US" }, null],
+    ["FR", { "x-vercel-ip-country": "US" }, null],
+    ["BR", { "x-vercel-ip-country": "BR" }, "en"],
+    ["FR", { "x-vercel-ip-country": "BR" }, "en"],
+  ])("país explícito %s no checkout não é desviado pelo idioma", (pais, headers, cookieManual) => {
+    const request = new NextRequest(`https://www.reveraprotesecapilar.com/checkout?pais=${pais}`, { headers });
+    if (cookieManual) {
+      request.cookies.set(LOCALE_COOKIE, cookieManual);
+      request.cookies.set(LOCALE_MANUAL_COOKIE, "1");
+    }
+    expect(middleware(request).headers.get("location")).toBeNull();
+  });
+
+  it("checkout sem país continua seguindo a geolocalização", () => {
+    const request = new NextRequest("https://www.reveraprotesecapilar.com/checkout", {
+      headers: { "x-vercel-ip-country": "US" },
+    });
+    expect(middleware(request).headers.get("location")).toBe("https://www.reveraprotesecapilar.com/en/checkout");
+  });
+
   it("clique de verdade em /en continua gravando a escolha", () => {
     const request = new NextRequest("https://www.reveraprotesecapilar.com/en/checkout", {
       headers: { rsc: "1", "x-vercel-ip-country": "BR" },
