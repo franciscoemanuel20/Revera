@@ -266,17 +266,18 @@ export function Header({ locale = "pt", logo, menuPrincipal = LINKS, menuConheca
         </details>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Idioma">
           {SITE_LOCALES.map((l) => (
-            <Link
+            // <a>, não <Link>: a troca de idioma precisa ser um carregamento
+            // de página inteiro — só ele grava o cookie (ver middleware.ts).
+            <a
               key={l}
               href={localeSwitchPath(pathname ?? "/", l)}
-              prefetch={false}
               className={`rounded px-2 py-1 text-xs font-semibold uppercase ${
                 l === localeAtual ? "bg-paper text-ink" : "text-paper/70 hover:text-gold"
               }`}
               hrefLang={l === "pt" ? "pt-BR" : l}
             >
               {l}
-            </Link>
+            </a>
           ))}
         </nav>
         </div>

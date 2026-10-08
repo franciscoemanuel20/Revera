@@ -49,9 +49,10 @@ function shouldIgnore(pathname: string): boolean {
  *
  * Regra: só uma navegação de verdade (GET/HEAD que não é pré-carga) grava a
  * escolha ou é redirecionada pelo idioma; pré-carga e POST passam direto.
- * Os links de idioma e de país também saem com `prefetch={false}`, para o
- * clique sempre chegar ao servidor (uma pré-carga que seguiu redirect
- * deixava o Next reaproveitar a URL errada e o clique em PT não pegava).
+ * As abas de país do checkout saem com `prefetch={false}` (o seletor de
+ * idioma virou `<a>`, ver abaixo), para o clique sempre chegar ao servidor
+ * (uma pré-carga que seguiu redirect deixava o Next reaproveitar a URL
+ * errada e o clique em PT não pegava).
  */
 function ehPreCarga(request: NextRequest): boolean {
   const purpose = `${request.headers.get("purpose") ?? ""} ${request.headers.get("sec-purpose") ?? ""}`;
@@ -75,11 +76,33 @@ function ehLeitura(request: NextRequest): boolean {
   return request.method === "GET" || request.method === "HEAD";
 }
 
+/**
+ * SÓ CARREGAMENTO DE PÁGINA GRAVA O IDIOMA (06/10/2026, depois do #4).
+ *
+ * Em produção o middleware NÃO recebe `next-router-prefetch` (curl com o
+ * cabeçalho em /fr/checkout?_rsc=x ainda volta com Set-Cookie fr), então
+ * `ehPreCarga()` sozinho não segura nada. Reproduzido: em /en, clicar em PT
+ * abria "/" em português, mas pré-cargas de /en/... ainda em voo terminavam
+ * depois e regravavam `revera_locale=en`; a próxima navegação sem prefixo
+ * voltava para /en/produtos.
+ *
+ * O que distingue de verdade é `sec-fetch-dest`, que o navegador põe sozinho
+ * e o Next não consegue mudar: `document` num carregamento de página, `empty`
+ * em pré-carga e em navegação RSC. Sem o cabeçalho (curl, testes, navegador
+ * muito antigo) conta como página. Por isso o seletor de idioma é um `<a>`
+ * comum (carrega a página inteira), não `<Link>`.
+ */
+function ehCarregamentoDePagina(request: NextRequest): boolean {
+  const destino = request.headers.get("sec-fetch-dest");
+  return destino === null || destino === "document";
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (shouldIgnore(pathname)) return NextResponse.next();
 
-  const gravaEscolha = ehLeitura(request) && !ehPreCarga(request);
+  const navegacao = ehLeitura(request) && !ehPreCarga(request);
+  const gravaEscolha = navegacao && ehCarregamentoDePagina(request);
 
   const localeInPath = localeFromPath(pathname);
 
@@ -94,15 +117,26 @@ export function middleware(request: NextRequest) {
     const locale = localeManual ?? localeFromCountry(request.headers.get("x-vercel-ip-country"));
     // Pré-carga não redireciona nem marca geolocalização pendente: o clique
     // de verdade é que decide, e chega sem o cabeçalho de pré-carga.
-    if (gravaEscolha && locale !== DEFAULT_SITE_LOCALE && isFullyLocalizedPath(pathname) && !paisExplicitoNoCheckout(request)) {
+    if (
+      navegacao &&
+      locale !== DEFAULT_SITE_LOCALE &&
+      isFullyLocalizedPath(pathname) &&
+      !paisExplicitoNoCheckout(request)
+    ) {
       const url = request.nextUrl.clone();
       url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
       const response = NextResponse.redirect(url);
-      response.cookies.set(LOCALE_GEO_PENDING_COOKIE, "1", {
-        maxAge: 60,
-        path: "/",
-        sameSite: "lax",
-      });
+      // Só marca "veio da geolocalização" num carregamento de página: o
+      // /en/... que segue um redirect de pré-carga chega como `empty`, não
+      // apagaria a marca, e um clique em idioma nos 60 s seguintes seria
+      // gravado como geolocalização em vez de escolha.
+      if (ehCarregamentoDePagina(request)) {
+        response.cookies.set(LOCALE_GEO_PENDING_COOKIE, "1", {
+          maxAge: 60,
+          path: "/",
+          sameSite: "lax",
+        });
+      }
       return registrarPais(response, request);
     }
 
