@@ -7,7 +7,7 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
 import { carregarProcessosExportacao } from "@/lib/internacional/processo-exportacao-server";
 import { FocusNfeProvider, FocusRequestError, focusReference, type FocusEnvironment, type FocusResult } from "@/lib/fiscal/focus-nfe";
-import { focusBlockers, validateFocusPayload, type FiscalSettings } from "@/lib/fiscal/focus-validation";
+import { amountBlockers, focusBlockers, validateFocusPayload, type FiscalAmounts, type FiscalSettings } from "@/lib/fiscal/focus-validation";
 import { issueWithPermanentReservation } from "@/lib/fiscal/focus-idempotency";
 
 const uuid = z.string().uuid();
@@ -75,11 +75,13 @@ export async function emitirFocusNfeAction(input: unknown): Promise<Result> {
   const processo = (await carregarProcessosExportacao(a.s, [orderId])).get(orderId);
   if (!processo) return { error: "Pedido indisponível." };
   const { data: config } = await a.s.from("focus_nfe_settings").select("*").eq("singleton", true).maybeSingle();
-  const blockers = focusBlockers(processo.entrada, config as FiscalSettings | null);
+  const { data: amounts } = await a.s.from("order_focus_amounts").select("*").eq("order_id", orderId).maybeSingle();
+  const blockers = focusBlockers(processo.entrada, config as FiscalSettings | null,
+    amounts as FiscalAmounts | null);
   if (blockers.length) return { error: blockers.join(" ") };
   let payload: Record<string, unknown>;
   try { payload = JSON.parse(payloadJson); } catch { return { error: "JSON fiscal inválido." }; }
-  const invalid = validateFocusPayload(payload, processo.entrada, config as FiscalSettings);
+  const invalid = validateFocusPayload(payload, processo.entrada, config as FiscalSettings, amounts as FiscalAmounts);
   if (invalid.length) return { error: invalid.join(" ") };
   const { data: existingDoc } = await a.s.from("order_export_documents").select("reference")
     .eq("order_id", orderId).eq("kind", "nfe").maybeSingle();
@@ -92,7 +94,8 @@ export async function emitirFocusNfeAction(input: unknown): Promise<Result> {
       request_snapshot: { payload, order: {
         id: orderId, lines: processo.entrada.linhas, items: processo.entrada.itens,
         package: processo.entrada.pacote, destination: processo.entrada.destino,
-        fiscal_settings: config } }, requested_by: a.user.id,
+        fiscal_settings: config, approved_amounts: amounts, contact: processo.entrada.contato,
+        exporter: processo.entrada.exportador } }, requested_by: a.user.id,
     }).select("id,order_id,status").maybeSingle();
     return error ? null : data;
   }, async inserted => {
@@ -109,6 +112,10 @@ export async function emitirFocusNfeAction(input: unknown): Promise<Result> {
       !fresh.entrada.pago || fresh.entrada.cancelado ||
       fresh.entrada.documentos.some(d => d.kind === "nfe"))
       throw new Error("Snapshot do pedido mudou antes da emissão; referência reservada para reconciliação manual.");
+    const { data: freshAmounts } = await a.s.from("order_focus_amounts").select("*").eq("order_id", orderId).maybeSingle();
+    if (JSON.stringify(freshAmounts) !== JSON.stringify(amounts) ||
+      amountBlockers(fresh.entrada, freshAmounts as FiscalAmounts | null).length)
+      throw new Error("Valores fiscais mudaram antes do POST Focus.");
     // Este update acontece antes do POST. Se o processo morrer depois dele,
     // a resposta é ambígua; se morrer antes, a reserva pode ser liberada.
     const { data: started, error } = await db.from("order_focus_nfe").update({
@@ -155,6 +162,53 @@ export async function liberarReservaFocusNaoEnviadaAction(input: unknown): Promi
     diff: { reference: row.reference } });
   refresh(p.data.orderId);
   return { ok: true, message: "Reserva não enviada liberada. Reconfira os dados antes de emitir." };
+}
+
+const amountInput = z.object({ orderId: uuid, accountantConfirmed: z.literal(true),
+  shippingTreatment: z.enum(["included","excluded"]),
+  discountTreatment: z.enum(["included_in_items","separate"]),
+  fxRate: z.number().positive(), fxSource: z.string().trim().min(3), fxDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  freight: z.number().int().nonnegative(), discount: z.number().int().nonnegative(),
+  insurance: z.number().int().nonnegative(), other: z.number().int().nonnegative(),
+  ii: z.number().int().nonnegative(), ipi: z.number().int().nonnegative(),
+  services: z.number().int().nonnegative(), icmsRelief: z.number().int().nonnegative(),
+  icmsSt: z.number().int().nonnegative(),
+});
+export async function salvarValoresFocusAction(input: unknown): Promise<Result> {
+  const p = amountInput.safeParse(input);
+  if (!p.success) return { error: "Todos os componentes fiscais precisam de valor e validação do contador." };
+  const a = await admin(); if (!a) return { error: "Acesso administrativo necessário." };
+  const processo = (await carregarProcessosExportacao(a.s, [p.data.orderId])).get(p.data.orderId);
+  if (!processo?.entrada.internacional || !processo.entrada.pago || processo.entrada.cancelado)
+    return { error: "Pedido internacional pago e não cancelado obrigatório." };
+  const d = p.data;
+  const amounts = {
+    order_id: d.orderId,
+    shipping_order_cents: processo.entrada.valorFretePedidoCents,
+    discount_order_cents: processo.entrada.valorDescontoPedidoCents,
+    shipping_treatment: d.shippingTreatment, discount_treatment: d.discountTreatment,
+    fx_rate_brl_per_order_unit: d.fxRate, fx_source: d.fxSource, fx_date: d.fxDate,
+    freight_brl_cents: d.freight, discount_brl_cents: d.discount,
+    insurance_brl_cents: d.insurance, other_brl_cents: d.other,
+    ii_brl_cents: d.ii, ipi_brl_cents: d.ipi, services_brl_cents: d.services,
+    icms_relief_brl_cents: d.icmsRelief, icms_st_brl_cents: d.icmsSt,
+    approved_by: a.user.id, approved_at: new Date().toISOString(),
+  };
+  if (amountBlockers(processo.entrada, amounts as FiscalAmounts).length)
+    return { error: "Frete ou desconto em BRL não correspondem ao tratamento e câmbio informados." };
+  const { data: existing } = await a.s.from("order_focus_nfe").select("id").eq("order_id", d.orderId).maybeSingle();
+  if (existing) return { error: "Valores congelados após tentativa Focus." };
+  const { error } = await a.s.from("order_focus_amounts").upsert(amounts);
+  if (error) return { error: "Não foi possível salvar os valores fiscais." };
+  await registrarAuditoria(a.s, { action: "focus.valores_fiscais_aprovados", entityType: "orders", entityId: d.orderId,
+    diff: { shipping_treatment: d.shippingTreatment, discount_treatment: d.discountTreatment,
+      fx_rate: d.fxRate, fx_source: d.fxSource, fx_date: d.fxDate,
+      freight_brl_cents: d.freight, discount_brl_cents: d.discount,
+      insurance_brl_cents: d.insurance, other_brl_cents: d.other, ii_brl_cents: d.ii,
+      ipi_brl_cents: d.ipi, services_brl_cents: d.services,
+      icms_relief_brl_cents: d.icmsRelief, icms_st_brl_cents: d.icmsSt } });
+  refresh(d.orderId);
+  return { ok: true, message: "Componentes fiscais aprovados para este pedido." };
 }
 
 export async function consultarFocusNfeAction(input: unknown): Promise<Result> {

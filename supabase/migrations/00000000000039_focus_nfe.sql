@@ -54,6 +54,46 @@ create policy "admin update focus settings" on focus_nfe_settings for update to 
   using (exists(select 1 from admin_users where id = auth.uid()))
   with check (exists(select 1 from admin_users where id = auth.uid()));
 
+create table if not exists order_focus_amounts (
+  order_id uuid primary key references orders(id),
+  shipping_order_cents integer not null check(shipping_order_cents >= 0),
+  discount_order_cents integer not null check(discount_order_cents >= 0),
+  shipping_treatment text not null check(shipping_treatment in ('included','excluded')),
+  discount_treatment text not null check(discount_treatment in ('included_in_items','separate')),
+  fx_rate_brl_per_order_unit numeric(18,8) not null check(fx_rate_brl_per_order_unit > 0),
+  fx_source text not null check(length(trim(fx_source)) >= 3),
+  fx_date date not null,
+  freight_brl_cents integer not null check(freight_brl_cents >= 0),
+  discount_brl_cents integer not null check(discount_brl_cents >= 0),
+  insurance_brl_cents integer not null check(insurance_brl_cents >= 0),
+  other_brl_cents integer not null check(other_brl_cents >= 0),
+  ii_brl_cents integer not null check(ii_brl_cents >= 0),
+  ipi_brl_cents integer not null check(ipi_brl_cents >= 0),
+  services_brl_cents integer not null check(services_brl_cents >= 0),
+  icms_relief_brl_cents integer not null check(icms_relief_brl_cents >= 0),
+  icms_st_brl_cents integer not null check(icms_st_brl_cents >= 0),
+  approved_by uuid not null references auth.users(id),
+  approved_at timestamptz not null default now()
+);
+alter table order_focus_amounts enable row level security;
+create policy "admin read focus amounts" on order_focus_amounts for select to authenticated
+  using (exists(select 1 from admin_users where id = auth.uid()));
+create policy "admin manage focus amounts" on order_focus_amounts for all to authenticated
+  using (exists(select 1 from admin_users where id = auth.uid()))
+  with check (exists(select 1 from admin_users where id = auth.uid()));
+create or replace function guard_focus_amounts() returns trigger language plpgsql
+security definer set search_path = public, pg_temp as $$
+declare pedido_id uuid;
+begin
+  pedido_id := case when tg_op = 'DELETE' then old.order_id else new.order_id end;
+  perform 1 from orders where id = pedido_id for update;
+  if exists(select 1 from order_focus_nfe where order_id = pedido_id) then
+    raise exception 'Valores fiscais congelados após tentativa Focus';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $$;
+
 create table if not exists order_focus_nfe (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null unique references orders(id),
@@ -151,12 +191,10 @@ create or replace function freeze_snapshot_after_focus() returns trigger languag
 security definer set search_path = public, pg_temp as $$
 declare pedido_id uuid;
 begin
-  if tg_table_name = 'addresses' or tg_table_name = 'customers' then
-    perform 1 from orders o where (tg_table_name = 'addresses' and o.address_id = old.id)
-      or (tg_table_name = 'customers' and o.customer_id = old.id) for update;
+  if tg_table_name = 'addresses' then
+    perform 1 from orders o where o.address_id = old.id for update;
     if exists(select 1 from orders o join order_focus_nfe n on n.order_id = o.id
-      where (tg_table_name = 'addresses' and o.address_id = old.id)
-        or (tg_table_name = 'customers' and o.customer_id = old.id)) then
+      where o.address_id = old.id) then
       raise exception 'Destinatário congelado após tentativa Focus';
     end if;
   else
@@ -177,15 +215,20 @@ create trigger freeze_focus_packages before insert or update or delete on order_
   for each row execute function freeze_snapshot_after_focus();
 create trigger freeze_focus_addresses before update or delete on addresses
   for each row execute function freeze_snapshot_after_focus();
-create trigger freeze_focus_customers before update or delete on customers
-  for each row execute function freeze_snapshot_after_focus();
 create trigger freeze_facts_fiscal before insert or update or delete on order_export_item_facts
   for each row execute function freeze_export_item_facts();
+create trigger guard_focus_amounts before insert or update or delete on order_focus_amounts
+  for each row execute function guard_focus_amounts();
 
 create or replace function guard_focus_order_identity() returns trigger language plpgsql
 security definer set search_path = public, pg_temp as $$
 begin
-  if (new.address_id is distinct from old.address_id or new.customer_id is distinct from old.customer_id)
+  if (new.address_id is distinct from old.address_id or new.customer_id is distinct from old.customer_id
+    or new.subtotal_cents is distinct from old.subtotal_cents
+    or new.discount_cents is distinct from old.discount_cents
+    or new.shipping_cents is distinct from old.shipping_cents
+    or new.total_cents is distinct from old.total_cents
+    or new.currency is distinct from old.currency)
     and exists(select 1 from order_focus_nfe where order_id = old.id) then
     raise exception 'Identidade do destinatário congelada após tentativa Focus';
   end if;

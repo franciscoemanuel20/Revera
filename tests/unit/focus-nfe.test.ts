@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { FocusNfeProvider, FocusRequestError, focusReference } from "@/lib/fiscal/focus-nfe";
 import { issueWithPermanentReservation } from "@/lib/fiscal/focus-idempotency";
-import { focusBlockers, validateFocusPayload, type FiscalSettings } from "@/lib/fiscal/focus-validation";
+import { amountBlockers, focusBlockers, validateFocusPayload, type FiscalAmounts, type FiscalSettings } from "@/lib/fiscal/focus-validation";
 import type { EntradaProcesso } from "@/lib/internacional/processo-exportacao";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -83,6 +83,7 @@ describe("travas persistidas da reserva Focus", () => {
     expect(migration).toContain("create trigger guard_focus_nfe_document before insert or update or delete on order_export_documents");
     expect(migration).toContain("NF-e Focus vinculada: documento manual ou substituição bloqueada");
     expect(migration).toContain("perform 1 from orders where id = pedido_id for update");
+    expect(migration).not.toContain("freeze_focus_customers");
   });
   it("bloqueia despacho direto e remessa nova sem autorização Focus", () => {
     const dispatch = readFileSync(resolve(process.cwd(), "supabase/migrations/00000000000041_focus_dispatch_guard.sql"), "utf8");
@@ -91,6 +92,7 @@ describe("travas persistidas da reserva Focus", () => {
     expect(dispatch).toContain("n.xml_storage_path is not null and n.danfe_storage_path = d.storage_path");
     expect(dispatch).toContain("Despacho exige NF-e autorizada na Focus com XML e DANFE privados");
     expect(dispatch).toContain("Remessa DHL exige NF-e Focus autorizada e conferida");
+    expect(dispatch).toContain("n.consulted_at >= statement_timestamp() - interval '60 seconds'");
   });
   it("permite registrar cancelamento consultado sem reautorizar uma nota cancelada", () => {
     expect(migration).toContain("new.status = 'cancelled' and coalesce(auth.role(), '') = 'service_role'");
@@ -100,6 +102,12 @@ describe("travas persistidas da reserva Focus", () => {
 
 const settings: FiscalSettings = { cfop: "7501", natureza_operacao: "validada", tributacao: "validada",
   regime_exportacao: "validado", serie: "1", numeracao: "Focus", emitente_confirmado: true, contador_validou: true };
+const amounts: FiscalAmounts = { shipping_order_cents: 0, discount_order_cents: 0,
+  shipping_treatment: "excluded", discount_treatment: "included_in_items",
+  fx_rate_brl_per_order_unit: 6, fx_source: "PTAX validada", fx_date: "2026-10-07",
+  freight_brl_cents: 0, discount_brl_cents: 0, insurance_brl_cents: 0,
+  other_brl_cents: 0, ii_brl_cents: 0, ipi_brl_cents: 0, services_brl_cents: 0,
+  icms_relief_brl_cents: 0, icms_st_brl_cents: 0, approved_by: "admin" };
 const entrada: EntradaProcesso = { internacional: true, pago: true, cancelado: false,
   contato: { nome: "Teste" }, destino: { country: "DE", city: "Berlin", line1: "Rua 1" },
   linhas: [{ id: "item1", nome: "Produto teste", quantity: 1 }],
@@ -108,7 +116,8 @@ const entrada: EntradaProcesso = { internacional: true, pago: true, cancelado: f
     fx_rate_brl_per_unit: 6, fx_source: "test", fx_date: "2026-10-07" }],
   pacote: { gross_weight_g: 100, length_cm: 20, width_cm: 10, height_cm: 10, incoterm: "DAP" },
   documentos: [], exportador: null, rastreio: null, remessaEmProcessamento: false,
-  moedaPedido: "EUR", valorMercadoriasCents: 1000 };
+  moedaPedido: "EUR", valorMercadoriasCents: 1000,
+  valorFretePedidoCents: 0, valorDescontoPedidoCents: 0 };
 
 describe("trava fiscal", () => {
   it("bloqueia campos humanos e caixa sem peso bruto", () => {
@@ -116,12 +125,19 @@ describe("trava fiscal", () => {
     expect(focusBlockers(p, null).join(" ")).toContain("CFOP");
     expect(focusBlockers(p, null).join(" ")).toContain("peso bruto");
   });
+  it("liga frete e desconto aprovados aos valores efetivos do pedido", () => {
+    const order = { ...entrada, valorFretePedidoCents: 500, valorDescontoPedidoCents: 100 };
+    expect(amountBlockers(order, amounts).join(" ")).toContain("mudaram");
+    const approved = { ...amounts, shipping_order_cents: 500, discount_order_cents: 100,
+      shipping_treatment: "included" as const, freight_brl_cents: 3000 };
+    expect(amountBlockers(order, approved)).toEqual([]);
+  });
   it("recusa NF-e com NCM ou valor diferente do snapshot", () => {
     const payload = { natureza_operacao: "validada", serie: "1", tipo_documento: 1, local_destino: 3,
       nome_destinatario: "Teste", cnpj_emitente: "1".repeat(14), valor_produtos: 60, valor_total: 60,
       items: [{ codigo_ncm: "39191000", cfop: "7501", quantidade_comercial: 1, valor_bruto: 60,
         descricao: "Produto", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
-    expect(validateFocusPayload(payload, entrada, settings).join(" ")).toContain("diverge");
+    expect(validateFocusPayload(payload, entrada, settings, amounts).join(" ")).toContain("diverge");
   });
   it("compara emitente e destinatário com o pedido, não só com formato de CPF/CNPJ", () => {
     const order: EntradaProcesso = { ...entrada,
@@ -137,14 +153,16 @@ describe("trava fiscal", () => {
       logradouro_destinatario: "Rua 1", valor_produtos: 60, valor_total: 60,
       items: [{ codigo_ncm: "67042000", cfop: "7501", quantidade_comercial: 1,
         valor_bruto: 60, descricao: "Produto", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
-    expect(validateFocusPayload(payload, order, settings)).toEqual([]);
-    expect(validateFocusPayload({ ...payload, cnpj_emitente: "99999999000199" }, order, settings))
+    expect(validateFocusPayload(payload, order, settings, amounts)).toEqual([]);
+    expect(validateFocusPayload({ ...payload, cnpj_emitente: "99999999000199" }, order, settings, amounts))
       .toContain("Identidade do emitente difere do exportador confirmado.");
-    expect(validateFocusPayload({ ...payload, nome_destinatario: "Outra Pessoa" }, order, settings))
+    expect(validateFocusPayload({ ...payload, nome_destinatario: "Outra Pessoa" }, order, settings, amounts))
       .toContain("Destinatário da NF-e difere do pedido.");
-    expect(validateFocusPayload({ ...payload, valor_total: 1 }, order, settings))
+    expect(validateFocusPayload({ ...payload, valor_total: 1 }, order, settings, amounts))
       .toContain("Valor total da NF-e diverge dos componentes fiscais informados.");
-    expect(validateFocusPayload({ ...payload, items: [{ ...payload.items[0], valor_unitario_comercial: 1 }] }, order, settings))
+    expect(validateFocusPayload({ ...payload, items: [{ ...payload.items[0], valor_unitario_comercial: 1 }] }, order, settings, amounts))
       .toContain("Valor unitário vezes quantidade diverge do valor bruto do item.");
+    expect(validateFocusPayload({ ...payload, valor_frete: 5, valor_total: 65 }, order, settings, amounts))
+      .toContain("valor_frete difere dos valores aprovados para o pedido.");
   });
 });

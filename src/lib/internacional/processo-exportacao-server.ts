@@ -6,7 +6,7 @@ import { avaliarExportacao, escolherModoInvoicePedido, guiaDhlValida, type Docum
 type Cliente = Awaited<ReturnType<typeof createClient>>;
 type PedidoLinha = {
   id: string; payment_status: string; canceled_at: string | null; shipping_status: string;
-  subtotal_cents: number; discount_cents: number; currency: string;
+  subtotal_cents: number; discount_cents: number; shipping_cents: number; currency: string;
   customers: { full_name: string | null; email: string | null; phone: string | null } | null;
   addresses: { country: string | null; city: string | null; postal_code: string | null;
     line1: string | null; recipient_name: string | null } | null;
@@ -24,7 +24,7 @@ export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
   const resultado = new Map<string, { entrada: EntradaProcesso; avaliacao: ReturnType<typeof avaliarExportacao> }>();
   if (!ids.length) return resultado;
   const [pedidos, itens, pacotes, documentos, config, focusNotas] = await Promise.all([
-    s.from("orders").select("id,payment_status,canceled_at,shipping_status,subtotal_cents,discount_cents,currency,customers(full_name,email,phone),addresses(country,city,postal_code,line1,recipient_name),order_items(id,product_name_snapshot,quantity),shipments(id,provider,tracking_code,status,metadata)").in("id", ids),
+    s.from("orders").select("id,payment_status,canceled_at,shipping_status,subtotal_cents,discount_cents,shipping_cents,currency,customers(full_name,email,phone),addresses(country,city,postal_code,line1,recipient_name),order_items(id,product_name_snapshot,quantity),shipments(id,provider,tracking_code,status,metadata)").in("id", ids),
     s.from("order_export_items").select("order_id,order_item_id,ncm,hs_code,country_of_origin,description_en,net_weight_g,customs_value_cents,fiscal_value_brl_cents,fx_rate_brl_per_unit,fx_source,fx_date").in("order_id", ids),
     s.from("order_export_packages").select("*").in("order_id", ids),
     s.from("order_export_documents").select("*").in("order_id", ids),
@@ -65,6 +65,8 @@ export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
       contato: { nome: c?.full_name, email: c?.email, telefone: c?.phone }, destino: a,
       linhas: (p.order_items ?? []).map(l => ({ id: l.id, nome: l.product_name_snapshot, quantity: l.quantity })),
       valorMercadoriasCents: p.subtotal_cents - p.discount_cents,
+      valorFretePedidoCents: p.shipping_cents,
+      valorDescontoPedidoCents: p.discount_cents,
       moedaPedido: p.currency,
       itens: (itens.data ?? []).filter(i => i.order_id === p.id) as ItemExportacao[],
       pacote: (pacotes.data ?? []).find(i => i.order_id === p.id) as PacoteExportacao | undefined ?? null,

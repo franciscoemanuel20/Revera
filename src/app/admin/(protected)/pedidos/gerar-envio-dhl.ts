@@ -8,6 +8,7 @@ import { registrarAuditoria } from "@/lib/admin/audit";
 import { MyDhlProvider, exigirAmbienteDhlParaTransacao, indiceEtiquetaDhl } from "@/lib/shipping/dhl/mydhl-provider";
 import { planejadaPadrao } from "@/lib/shipping/dhl/admin-quote";
 import { carregarProcessosExportacao } from "@/lib/internacional/processo-exportacao-server";
+import { exigirFocusAutorizadaRecente } from "@/lib/fiscal/focus-fresh-authorization";
 import type { DhlShipmentResult } from "@/lib/shipping/dhl/types";
 import { deveRepararStatusAposGuia, enviarRastreioDhlAoPaypal, guiaDhlFinal } from "@/lib/shipping/dhl/paypal-tracking";
 
@@ -123,6 +124,15 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
 
   const processo = (await carregarProcessosExportacao(s, [orderId])).get(orderId);
   if (!processo?.avaliacao.podeCriarEtiqueta) return { error: processo?.avaliacao.bloqueiosEtiqueta.join(" ") ?? "Exportação indisponível.", waitingForOwner: true };
+  const focusFresh = await exigirFocusAutorizadaRecente(orderId);
+  if ("error" in focusFresh) return { error: focusFresh.error, waitingForOwner: true };
+  const { data: focusSnapshot } = await s.from("order_focus_nfe").select("request_snapshot")
+    .eq("order_id", orderId).maybeSingle();
+  const issuerAtIssue = (focusSnapshot?.request_snapshot as { order?: { exporter?: Record<string, unknown> } } | null)?.order?.exporter;
+  const issuerNow = processo.entrada.exportador;
+  const issuerFields = ["legal_name", "tax_id", "country", "postal_code", "city", "address_line1"] as const;
+  if (!issuerAtIssue || !issuerNow || issuerFields.some(key => issuerAtIssue[key] !== issuerNow[key]))
+    return { error: "Dados do exportador mudaram após a NF-e Focus. Reconcilie antes da DHL.", waitingForOwner: true };
 
   const requiredExporter = ["legal_name","tax_id","country","postal_code","city","address_line1","contact_name","phone","email"];
   if (!exporter || !exporter.dhl_account_confirmed ||
@@ -170,7 +180,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
   const { data: exporterAtCall } = await s.from("international_export_settings").select("*").eq("singleton", true).maybeSingle();
   const { data: aindaValido } = await s.from("orders").select("id").eq("id", orderId)
     .eq("payment_status", "paid").eq("shipping_status", "label_processing").is("canceled_at", null).maybeSingle();
-  if (!exporterAtCall || !aindaValido) {
+  if (!exporterAtCall || !aindaValido || issuerFields.some(key => issuerAtIssue[key] !== exporterAtCall[key])) {
     await s.from("shipments").delete().eq("id", lock.id).eq("status", "creating");
     await s.from("orders").update({ shipping_status: order.shipping_status, updated_at: new Date().toISOString() })
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
@@ -196,7 +206,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       orderAtCall.shipping_status !== "label_processing" || orderAtCall.canceled_at ||
       orderAtCall.currency !== order.currency ||
       orderAtCall.subtotal_cents - orderAtCall.discount_cents !== processoTravado.entrada.valorMercadoriasCents ||
-      !freshCustomer.full_name || !freshCustomer.email || !freshCustomer.phone ||
+      !freshAddress.recipient_name || !freshCustomer.email || !freshCustomer.phone ||
       !freshAddress.line1 || !freshAddress.city || !freshAddress.postal_code || !freshAddress.country) {
     await s.from("shipments").delete().eq("id", lock.id).eq("status", "creating");
     await s.from("orders").update({ shipping_status: order.shipping_status, updated_at: new Date().toISOString() })
@@ -224,7 +234,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       declaredValueCents: lineItems.reduce((sum, i) => sum + i.valueCents, 0),
       packageInfo: { weightGrams: pacote.gross_weight_g, lengthCm: pacote.length_cm, widthCm: pacote.width_cm, heightCm: pacote.height_cm },
       shipper: { legalName: exporterAtCall.legal_name, contactName: exporterAtCall.contact_name, taxId: exporterAtCall.tax_id, phone: exporterAtCall.phone, email: exporterAtCall.email, countryCode: exporterAtCall.country, postalCode: exporterAtCall.postal_code, cityName: exporterAtCall.city, provinceCode: exporterAtCall.region, addressLine1: exporterAtCall.address_line1 },
-      receiver: { name: String(freshCustomer.full_name), phone: String(freshCustomer.phone), email: String(freshCustomer.email), countryCode: String(freshAddress.country), postalCode: freshAddress.postal_code as string | null, cityName: String(freshAddress.city), provinceCode: freshAddress.region as string | null, addressLine1: String(freshAddress.line1), addressLine2: freshAddress.line2 as string | null },
+      receiver: { name: String(freshAddress.recipient_name), phone: String(freshCustomer.phone), email: String(freshCustomer.email), countryCode: String(freshAddress.country), postalCode: freshAddress.postal_code as string | null, cityName: String(freshAddress.city), provinceCode: freshAddress.region as string | null, addressLine1: String(freshAddress.line1), addressLine2: freshAddress.line2 as string | null },
       lineItems, requestPickup: process.env.DHL_PICKUP_ENABLED?.trim() === "1", requestInvoice: invoiceMode === "api",
     };
   const exporterSnapshot = { legal_name: exporterAtCall.legal_name, tax_id: exporterAtCall.tax_id,

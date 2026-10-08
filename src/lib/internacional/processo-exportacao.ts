@@ -52,6 +52,8 @@ export type EntradaProcesso = {
     line1?: string | null; recipient_name?: string | null } | null;
   linhas: { id: string; nome: string; quantity: number }[];
   valorMercadoriasCents: number;
+  valorFretePedidoCents?: number;
+  valorDescontoPedidoCents?: number;
   moedaPedido: string;
   itens: ItemExportacao[];
   pacote: PacoteExportacao | null;

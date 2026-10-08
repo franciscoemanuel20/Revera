@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/admin/audit";
 import { carregarProcessosExportacao } from "@/lib/internacional/processo-exportacao-server";
+import { exigirFocusAutorizadaRecente } from "@/lib/fiscal/focus-fresh-authorization";
 import {
   ENVIO_LABEL,
   validarTransicaoEnvio,
@@ -95,6 +96,10 @@ export async function marcarEnvioAction(input: MarcarEnvioInput): Promise<AcaoPe
       return { error: `Despacho bloqueado: ${processo.avaliacao.bloqueiosDespacho.join(" ")}` };
     }
     if (!processo) return { error: "Não foi possível conferir a documentação da exportação." };
+    if (processo.entrada.internacional) {
+      const focus = await exigirFocusAutorizadaRecente(orderId);
+      if ("error" in focus) return { error: focus.error };
+    }
   }
   const validacao = validarTransicaoEnvio(atual, novoEnvio as ShippingStatusValue);
   if (!validacao.ok) {

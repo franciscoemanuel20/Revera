@@ -96,6 +96,7 @@ begin
     select 1 from order_focus_nfe n
     join order_export_documents d on d.order_id = n.order_id and d.kind = 'nfe'
     where n.order_id = new.id and n.status = 'authorized'
+      and n.consulted_at >= statement_timestamp() - interval '60 seconds'
       and n.access_key = d.reference and d.status = 'verified'
       and n.xml_storage_path is not null and n.danfe_storage_path = d.storage_path
       and exists(select 1 from storage.objects o where o.bucket_id = 'export-documents'
@@ -161,6 +162,7 @@ begin
     select 1 from order_focus_nfe n
     join order_export_documents d on d.order_id = n.order_id and d.kind = 'nfe'
     where n.order_id = new.order_id and n.status = 'authorized'
+      and n.consulted_at >= statement_timestamp() - interval '60 seconds'
       and n.access_key = d.reference and d.status = 'verified'
       and n.xml_storage_path is not null and n.danfe_storage_path = d.storage_path
   ) then

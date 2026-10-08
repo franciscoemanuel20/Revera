@@ -22,7 +22,7 @@ import { GerarEtiquetaDhl } from "../GerarEtiquetaDhl";
 import { RecuperarInvoiceDhl } from "../RecuperarInvoiceDhl";
 import { ExportacaoOperacao } from "../ExportacaoOperacao";
 import { FocusNfeOperacao } from "../FocusNfeOperacao";
-import { focusBlockers, type FiscalSettings } from "@/lib/fiscal/focus-validation";
+import { focusBlockers, type FiscalAmounts, type FiscalSettings } from "@/lib/fiscal/focus-validation";
 import { carregarProcessosExportacao } from "@/lib/internacional/processo-exportacao-server";
 import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacional/endereco";
 import { ehInternacional } from "@/lib/internacional/paises";
@@ -175,12 +175,13 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
   const processoExportacao = pedidoInternacional
     ? (await carregarProcessosExportacao(supabase, [id])).get(id) ?? null
     : null;
-  const [{ data: focusRow }, { data: focusConfig }, { data: itemFacts }, { data: emailDraft }] = pedidoInternacional ? await Promise.all([
+  const [{ data: focusRow }, { data: focusConfig }, { data: itemFacts }, { data: emailDraft }, { data: focusAmounts }] = pedidoInternacional ? await Promise.all([
     supabase.from("order_focus_nfe").select("environment,status,reference,number,series,access_key,rejection_reason,xml_storage_path,danfe_storage_path,consultation_attempts").eq("order_id", id).maybeSingle(),
     supabase.from("focus_nfe_settings").select("*").eq("singleton", true).maybeSingle(),
     supabase.from("order_export_item_facts").select("order_item_id,ncm,hs_code,country_of_origin,net_weight_g,length_cm,width_cm,height_cm").eq("order_id", id),
     supabase.from("order_shipping_email_drafts").select("locale,subject,body").eq("order_id", id).maybeSingle(),
-  ]) : [{ data: null }, { data: null }, { data: null }, { data: null }];
+    supabase.from("order_focus_amounts").select("*").eq("order_id", id).maybeSingle(),
+  ]) : [{ data: null }, { data: null }, { data: null }, { data: null }, { data: null }];
   const avaliacaoExportacao = processoExportacao?.avaliacao ?? null;
   const documentosExportacao = await Promise.all((processoExportacao?.entrada.documentos ?? []).map(async doc => {
     if (doc.kind === "nfe" && focusRow?.status === "authorized" && doc.storage_path === focusRow.danfe_storage_path)
@@ -385,7 +386,12 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
       {pedidoInternacional && processoExportacao && avaliacaoExportacao ? (
         <FocusNfeOperacao orderId={id}
           focus={focusRow as Parameters<typeof FocusNfeOperacao>[0]["focus"]}
-          blockers={focusBlockers(processoExportacao.entrada, focusConfig as FiscalSettings | null)}
+          blockers={focusBlockers(processoExportacao.entrada, focusConfig as FiscalSettings | null,
+            focusAmounts as FiscalAmounts | null)}
+          amounts={focusAmounts as FiscalAmounts | null}
+          orderMoney={{ currency: processoExportacao.entrada.moedaPedido,
+            shippingCents: processoExportacao.entrada.valorFretePedidoCents ?? 0,
+            discountCents: processoExportacao.entrada.valorDescontoPedidoCents ?? 0 }}
           emissionEnabled={process.env.FOCUS_NFE_ISSUANCE_ENABLED === "1" &&
             (process.env.FOCUS_NFE_AMBIENTE === "homologacao" ||
               (process.env.FOCUS_NFE_AMBIENTE === "producao" && process.env.FOCUS_NFE_PRODUCTION_APPROVED === "1"))}

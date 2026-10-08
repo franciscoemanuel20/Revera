@@ -6,8 +6,36 @@ export type FiscalSettings = {
   regime_exportacao: string | null; serie: string | null; numeracao: string | null;
   emitente_confirmado: boolean; contador_validou: boolean;
 };
+export type FiscalAmounts = {
+  shipping_order_cents: number; discount_order_cents: number;
+  shipping_treatment: "included" | "excluded";
+  discount_treatment: "included_in_items" | "separate";
+  fx_rate_brl_per_order_unit: number; fx_source: string; fx_date: string;
+  freight_brl_cents: number; discount_brl_cents: number;
+  insurance_brl_cents: number; other_brl_cents: number; ii_brl_cents: number;
+  ipi_brl_cents: number; services_brl_cents: number; icms_relief_brl_cents: number;
+  icms_st_brl_cents: number; approved_by: string;
+};
 
-export function focusBlockers(input: EntradaProcesso, settings: FiscalSettings | null): string[] {
+export function amountBlockers(input: EntradaProcesso, amounts: FiscalAmounts | null): string[] {
+  if (!amounts || !amounts.approved_by) return ["WAITING_FOR_OWNER: componentes e conversão dos valores fiscais validados pelo contador."];
+  const result: string[] = [];
+  const rate = Number(amounts.fx_rate_brl_per_order_unit);
+  if (input.valorFretePedidoCents === undefined || input.valorDescontoPedidoCents === undefined ||
+    amounts.shipping_order_cents !== input.valorFretePedidoCents ||
+    amounts.discount_order_cents !== input.valorDescontoPedidoCents)
+    result.push("Valores de frete ou desconto do pedido mudaram após a validação fiscal.");
+  if (!Number.isFinite(rate) || rate <= 0 || !amounts.fx_source || !amounts.fx_date ||
+    amounts.freight_brl_cents !== (amounts.shipping_treatment === "included"
+      ? Math.round(amounts.shipping_order_cents * rate) : 0) ||
+    amounts.discount_brl_cents !== (amounts.discount_treatment === "separate"
+      ? Math.round(amounts.discount_order_cents * rate) : 0))
+    result.push("Conversão fiscal de frete ou desconto não fecha com o pedido.");
+  return result;
+}
+
+export function focusBlockers(input: EntradaProcesso, settings: FiscalSettings | null,
+  amounts: FiscalAmounts | null = null): string[] {
   const b: string[] = [];
   if (!input.internacional || !input.pago || input.cancelado) b.push("Pedido internacional pago e não cancelado obrigatório.");
   if (!input.destino?.country || !input.destino.city || !input.destino.line1 ||
@@ -34,10 +62,12 @@ export function focusBlockers(input: EntradaProcesso, settings: FiscalSettings |
   for (const [key, label] of fields) if (!settings?.[key]) b.push(`WAITING_FOR_OWNER: ${label}.`);
   if (!settings?.emitente_confirmado) b.push("WAITING_FOR_OWNER: dados do emitente confirmados.");
   if (!settings?.contador_validou) b.push("WAITING_FOR_OWNER: configuração fiscal validada pelo contador.");
+  b.push(...amountBlockers(input, amounts));
   return b;
 }
 
-export function validateFocusPayload(payload: unknown, input: EntradaProcesso, settings: FiscalSettings): string[] {
+export function validateFocusPayload(payload: unknown, input: EntradaProcesso, settings: FiscalSettings,
+  amounts: FiscalAmounts): string[] {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return ["JSON da NF-e inválido."];
   const p = payload as Record<string, unknown>;
   const errors: string[] = [];
@@ -92,6 +122,17 @@ export function validateFocusPayload(payload: unknown, input: EntradaProcesso, s
     "icms_valor_total_desonerado", "icms_valor_total_st"];
   if (components.some(key => !Number.isFinite(money(key)) || money(key) < 0))
     errors.push("Componentes do valor total inválidos.");
+  const expectedComponents: Record<string, number> = {
+    valor_frete: amounts.freight_brl_cents, valor_desconto: amounts.discount_brl_cents,
+    valor_seguro: amounts.insurance_brl_cents, valor_outras_despesas: amounts.other_brl_cents,
+    valor_total_ii: amounts.ii_brl_cents, valor_ipi: amounts.ipi_brl_cents,
+    valor_total_servicos: amounts.services_brl_cents,
+    icms_valor_total_desonerado: amounts.icms_relief_brl_cents,
+    icms_valor_total_st: amounts.icms_st_brl_cents,
+  };
+  for (const [key, cents] of Object.entries(expectedComponents)) {
+    if (Math.round(money(key) * 100) !== cents) errors.push(`${key} difere dos valores aprovados para o pedido.`);
+  }
   const expectedTotal = money("valor_produtos") - money("valor_desconto") + money("valor_frete") +
     money("valor_seguro") + money("valor_outras_despesas") + money("valor_total_ii") +
     money("valor_ipi") + money("valor_total_servicos") - money("icms_valor_total_desonerado") +
