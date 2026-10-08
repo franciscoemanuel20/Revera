@@ -138,6 +138,14 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       !(process.env.DHL_MYDHL_API_SECRET || process.env.DHL_API_SECRET)) {
     return { error: "Criação DHL indisponível: confira configuração de ambiente, conta e credenciais antes de criar a tentativa." };
   }
+  let dhlPersistence: ReturnType<typeof createAdminClient>;
+  try {
+    // A DHL pode devolver uma guia real. A credencial que consegue persistir
+    // essa resposta precisa existir ANTES de reservar e antes da chamada HTTP.
+    dhlPersistence = createAdminClient();
+  } catch {
+    return { error: "Persistência segura da resposta DHL indisponível: SUPABASE_SERVICE_ROLE_KEY ausente." };
+  }
 
   const { data: lock, error: lockError } = await s.from("shipments").insert({ order_id: orderId, provider: "dhl", service_name: "DHL Express", status: "creating", metadata: { message_reference: orderId, communication: "prepared_not_sent", exporter_snapshot: { invoice_mode: processo.entrada.invoiceModeForOrder } } }).select("id").single();
   if (lockError || !lock) return { error: "Outra tentativa já existe. Recarregue e confira o MyDHL antes de tentar novamente." };
@@ -227,7 +235,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     settings_updated_at: exporterAtCall.updated_at };
   const snapshot = { request, order_number: orderAtCall.order_number, exporter_snapshot: exporterSnapshot,
     order_updated_at: orderAtCall.updated_at, exporter_updated_at: exporterAtCall.updated_at };
-  const { data: snapSaved } = await s.from("shipments").update({
+  const { data: snapSaved } = await dhlPersistence.from("shipments").update({
     metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "prepared_not_sent" },
     updated_at: new Date().toISOString(),
   }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
@@ -240,7 +248,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
     return { error: "O pedido mudou antes da chamada DHL. Recarregue." };
   }
-  const { data: markedInFlight } = await s.from("shipments").update({
+  const { data: markedInFlight } = await dhlPersistence.from("shipments").update({
     metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "request_in_flight" },
     updated_at: new Date().toISOString(),
   }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
@@ -252,7 +260,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     result = await new MyDhlProvider().createShipment(request);
   } catch (e) {
     const reason = e instanceof Error ? e.message : "Falha desconhecida";
-    await s.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "request_in_flight", error: reason.slice(0, 300), requires_manual_reconciliation: true }, updated_at: new Date().toISOString() }).eq("id", lock.id);
+    await dhlPersistence.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "request_in_flight", error: reason.slice(0, 300), requires_manual_reconciliation: true }, updated_at: new Date().toISOString() }).eq("id", lock.id);
     await s.from("orders").update({ shipping_status: "shipping_error", updated_at: new Date().toISOString() })
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
     await registrarAuditoria(s, { action: "pedido.dhl_resposta_incerta", entityType: "orders", entityId: orderId,
@@ -262,26 +270,25 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
   const storedDocuments: Array<{ typeCode: string | null; storagePath: string }> = [];
   let savedToShipment = false;
   try {
-    const adminStorage = createAdminClient();
     for (const document of result.documents) {
       const content = Buffer.from(document.contentBase64, "base64");
       if (content.subarray(0, 5).toString() !== "%PDF-") throw new Error("Documento DHL não é PDF");
       const storagePath = `${orderId}/dhl/${lock.id}/${randomUUID()}.pdf`;
-      const { error: uploadError } = await adminStorage.storage.from("export-documents")
+      const { error: uploadError } = await dhlPersistence.storage.from("export-documents")
         .upload(storagePath, content, { contentType: "application/pdf", upsert: false });
       if (uploadError) throw new Error("Falha ao guardar documento DHL em storage privado");
       storedDocuments.push({ typeCode: document.typeCode, storagePath });
     }
     const labelPath = storedDocuments[indiceEtiquetaDhl(storedDocuments)]?.storagePath;
     if (!labelPath) throw new Error("DHL não devolveu PDF da etiqueta");
-    const { data: shipmentSaved, error: shipmentSaveError } = await adminStorage.from("shipments").update({ provider_shipment_id: result.shipmentId, tracking_code: result.trackingNumber, label_url: `export-documents:${labelPath}`, status: "label_created", metadata: { message_reference: orderId, request_snapshot: snapshot, documents: storedDocuments, exporter_snapshot: exporterSnapshot, communication: "response_received", pickup_requested: process.env.DHL_PICKUP_ENABLED?.trim() === "1" }, updated_at: new Date().toISOString() }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
+    const { data: shipmentSaved, error: shipmentSaveError } = await dhlPersistence.from("shipments").update({ provider_shipment_id: result.shipmentId, tracking_code: result.trackingNumber, label_url: `export-documents:${labelPath}`, status: "label_created", metadata: { message_reference: orderId, request_snapshot: snapshot, documents: storedDocuments, exporter_snapshot: exporterSnapshot, communication: "response_received", pickup_requested: process.env.DHL_PICKUP_ENABLED?.trim() === "1" }, updated_at: new Date().toISOString() }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
     if (shipmentSaveError || !shipmentSaved) {
-      const { data: fallback } = await s.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId,
+      const { data: fallback } = await dhlPersistence.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId,
         request_snapshot: snapshot, exporter_snapshot: exporterSnapshot, communication: "response_received", documents: storedDocuments, provider_shipment_id: result.shipmentId,
         tracking_code_returned: result.trackingNumber, requires_manual_reconciliation: true,
         error: shipmentSaveError?.message?.slice(0, 300) ?? "Gravação da resposta DHL não confirmada" },
         updated_at: new Date().toISOString() }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
-      if (!fallback && storedDocuments.length) await adminStorage.storage.from("export-documents").remove(storedDocuments.map(d => d.storagePath));
+      if (!fallback && storedDocuments.length) await dhlPersistence.storage.from("export-documents").remove(storedDocuments.map(d => d.storagePath));
       await s.from("orders").update({ shipping_status: "shipping_error", updated_at: new Date().toISOString() })
         .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
       await registrarAuditoria(s, { action: "pedido.dhl_resposta_nao_persistida", entityType: "orders", entityId: orderId,
@@ -306,10 +313,10 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     return { ok: true, tracking: result.trackingNumber, paypal, aviso: aviso ?? undefined };
   } catch (e) {
     const reason = e instanceof Error ? e.message : "Falha ao registrar resposta DHL";
-    const { data: fallback } = await s.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId, request_snapshot: snapshot, exporter_snapshot: exporterSnapshot, communication: "response_received", documents: storedDocuments,
+    const { data: fallback } = await dhlPersistence.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId, request_snapshot: snapshot, exporter_snapshot: exporterSnapshot, communication: "response_received", documents: storedDocuments,
       provider_shipment_id: result.shipmentId, tracking_code_returned: result.trackingNumber,
       error: reason.slice(0, 300), requires_manual_reconciliation: true }, updated_at: new Date().toISOString() }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
-    if (!fallback && !savedToShipment && storedDocuments.length) await createAdminClient().storage.from("export-documents").remove(storedDocuments.map(d => d.storagePath));
+    if (!fallback && !savedToShipment && storedDocuments.length) await dhlPersistence.storage.from("export-documents").remove(storedDocuments.map(d => d.storagePath));
     await s.from("orders").update({ shipping_status: "shipping_error", updated_at: new Date().toISOString() })
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
     await registrarAuditoria(s, { action: "pedido.dhl_resposta_nao_persistida", entityType: "orders", entityId: orderId,

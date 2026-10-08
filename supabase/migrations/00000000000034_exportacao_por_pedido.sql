@@ -14,7 +14,10 @@ create unique index if not exists shipments_dhl_awb_unico
   )))
   where provider = 'dhl'
     and (tracking_code is not null or metadata->>'tracking_code_returned' is not null);
-alter table order_items add constraint order_items_order_id_id_unique unique (order_id, id);
+-- Um índice único satisfaz a exigência do FK composto abaixo e pode ser
+-- reaplicado mesmo quando uma execução anterior parou no meio da migration.
+create unique index if not exists order_items_order_id_id_unique
+  on order_items(order_id, id);
 create table if not exists order_export_items (
   order_item_id uuid primary key references order_items(id) on delete cascade,
   order_id uuid not null references orders(id) on delete cascade,
@@ -70,12 +73,15 @@ create unique index if not exists order_export_documents_storage_path_unico
 alter table order_export_items enable row level security;
 alter table order_export_packages enable row level security;
 alter table order_export_documents enable row level security;
+drop policy if exists "admin manage order export items" on order_export_items;
 create policy "admin manage order export items" on order_export_items for all
   using (exists(select 1 from admin_users where id = auth.uid()))
   with check (exists(select 1 from admin_users where id = auth.uid()));
+drop policy if exists "admin manage order export packages" on order_export_packages;
 create policy "admin manage order export packages" on order_export_packages for all
   using (exists(select 1 from admin_users where id = auth.uid()))
   with check (exists(select 1 from admin_users where id = auth.uid()));
+drop policy if exists "admin manage order export documents" on order_export_documents;
 create policy "admin manage order export documents" on order_export_documents for all
   using (exists(select 1 from admin_users where id = auth.uid()))
   with check (exists(select 1 from admin_users where id = auth.uid()));
@@ -83,10 +89,13 @@ create policy "admin manage order export documents" on order_export_documents fo
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 values ('export-documents','export-documents',false,10485760,array['application/pdf','image/jpeg','image/png'])
 on conflict(id) do nothing;
+drop policy if exists "admin read export documents" on storage.objects;
 create policy "admin read export documents" on storage.objects for select to authenticated
   using (bucket_id = 'export-documents' and exists(select 1 from admin_users where id = auth.uid()));
+drop policy if exists "admin insert export documents" on storage.objects;
 create policy "admin insert export documents" on storage.objects for insert to authenticated
   with check (bucket_id = 'export-documents' and exists(select 1 from admin_users where id = auth.uid()));
+drop policy if exists "admin delete export documents" on storage.objects;
 create policy "admin delete export documents" on storage.objects for delete to authenticated
   using (bucket_id = 'export-documents' and exists(select 1 from admin_users where id = auth.uid()));
 
@@ -111,6 +120,7 @@ begin
   end if;
   return old;
 end $$;
+drop trigger if exists protect_export_document_object on storage.objects;
 create trigger protect_export_document_object before delete on storage.objects
   for each row execute function protect_export_document_object();
 
@@ -261,14 +271,19 @@ begin
   if tg_op = 'DELETE' then return old; end if;
   return new;
 end $$;
+drop trigger if exists export_items_lock on order_export_items;
 create trigger export_items_lock before insert or update or delete on order_export_items
   for each row execute function export_lock_order();
+drop trigger if exists export_order_items_lock on order_items;
 create trigger export_order_items_lock before insert or update or delete on order_items
   for each row execute function export_lock_order();
+drop trigger if exists export_packages_lock on order_export_packages;
 create trigger export_packages_lock before insert or update or delete on order_export_packages
   for each row execute function export_lock_order();
+drop trigger if exists export_documents_lock on order_export_documents;
 create trigger export_documents_lock before insert or update or delete on order_export_documents
   for each row execute function export_lock_order();
+drop trigger if exists export_shipments_lock on shipments;
 create trigger export_shipments_lock before insert or update or delete on shipments
   for each row execute function export_lock_order();
 
@@ -284,6 +299,7 @@ begin
   end if;
   return new;
 end $$;
+drop trigger if exists export_refund_during_creation on orders;
 create trigger export_refund_during_creation before update of payment_status on orders
   for each row execute function export_refund_during_creation();
 
@@ -313,8 +329,10 @@ begin
   end if;
   return new;
 end $$;
+drop trigger if exists export_order_destination_lock on orders;
 create trigger export_order_destination_lock before update of address_id on orders
   for each row execute function export_protect_destination();
+drop trigger if exists export_address_lock on addresses;
 create trigger export_address_lock before update on addresses
   for each row execute function export_protect_destination();
 
@@ -556,6 +574,7 @@ begin
   end if;
   return new;
 end $$;
+drop trigger if exists export_dispatch_guard on orders;
 create trigger export_dispatch_guard before update of shipping_status on orders
   for each row execute function export_require_documents_for_dispatch();
 
@@ -568,5 +587,6 @@ begin
   if tg_op = 'DELETE' then return old; end if;
   return new;
 end $$;
+drop trigger if exists export_settings_guard on international_export_settings;
 create trigger export_settings_guard before update or delete on international_export_settings
   for each row execute function export_settings_guard();
