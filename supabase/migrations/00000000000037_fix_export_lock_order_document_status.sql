@@ -9,9 +9,17 @@ declare item_quantity integer;
 begin
   pedido_id := case when tg_op = 'DELETE' then old.order_id else new.order_id end;
   select payment_status, canceled_at, shipping_status into situacao from orders where id = pedido_id for update;
+  if tg_op = 'UPDATE' then
+    if tg_table_name in ('order_export_packages','order_export_documents')
+       and new.order_id is distinct from old.order_id then
+      raise exception 'Pedido da embalagem ou documento fiscal é imutável';
+    end if;
+  end if;
   if tg_table_name = 'order_items' then
-    if tg_op = 'UPDATE' and new.order_id is distinct from old.order_id then
-      raise exception 'Item de pedido não pode trocar de pedido';
+    if tg_op = 'UPDATE' then
+      if new.order_id is distinct from old.order_id then
+        raise exception 'Item de pedido não pode trocar de pedido';
+      end if;
     end if;
     if exists(select 1 from order_export_items where order_id = pedido_id)
        or exists(select 1 from order_export_documents where order_id = pedido_id)
@@ -62,35 +70,39 @@ begin
           raise exception 'Guia DHL exige pedido pago e não cancelado';
         end if;
       end if;
-    elsif tg_op = 'DELETE' and old.provider = 'dhl' then
-      if not (old.status = 'creating' and
-              coalesce(old.metadata->>'communication','') = 'prepared_not_sent') then
-        raise exception 'Remessa DHL não pode ser apagada; reconcilie a tentativa';
+    elsif tg_op = 'DELETE' then
+      if old.provider = 'dhl' then
+        if not (old.status = 'creating' and
+                coalesce(old.metadata->>'communication','') = 'prepared_not_sent') then
+          raise exception 'Remessa DHL não pode ser apagada; reconcilie a tentativa';
+        end if;
       end if;
-    elsif new.provider = 'dhl' then
-      if situacao.canceled_at is not null or situacao.payment_status <> 'paid' then
-        raise exception 'Remessa DHL exige pedido pago e não cancelado';
+    else
+      if new.provider = 'dhl' then
+        if situacao.canceled_at is not null or situacao.payment_status <> 'paid' then
+          raise exception 'Remessa DHL exige pedido pago e não cancelado';
+        end if;
+        if exists(select 1 from shipments where order_id = pedido_id) then
+          raise exception 'Pedido já possui remessa; reconciliar antes de nova tentativa';
+        end if;
+        if new.tracking_code is not null and (
+          new.status <> 'registrado_manual'
+          or length(coalesce(new.metadata->'manual_evidence'->>'lookup_reference','')) < 3
+          or coalesce(new.metadata->'manual_evidence'->>'awb','') <> new.tracking_code
+          or coalesce(new.metadata->'manual_evidence'->>'verified_by','') = ''
+          or new.metadata->'manual_evidence'->>'evidence_path' not like
+            pedido_id::text || '/manual/%'
+          or not exists(select 1 from storage.objects o where o.bucket_id = 'export-documents'
+            and o.name = new.metadata->'manual_evidence'->>'evidence_path')) then
+          raise exception 'Guia manual exige comprovante MyDHL privado';
+        end if;
+        if new.tracking_code is not null then
+          perform 1 from storage.objects o where o.bucket_id = 'export-documents'
+            and o.name = new.metadata->'manual_evidence'->>'evidence_path' for update;
+          if not found then raise exception 'Comprovante MyDHL ausente'; end if;
+        end if;
+        perform 1 from international_export_settings where singleton = true for update;
       end if;
-      if exists(select 1 from shipments where order_id = pedido_id) then
-        raise exception 'Pedido já possui remessa; reconciliar antes de nova tentativa';
-      end if;
-      if new.tracking_code is not null and (
-        new.status <> 'registrado_manual'
-        or length(coalesce(new.metadata->'manual_evidence'->>'lookup_reference','')) < 3
-        or coalesce(new.metadata->'manual_evidence'->>'awb','') <> new.tracking_code
-        or coalesce(new.metadata->'manual_evidence'->>'verified_by','') = ''
-        or new.metadata->'manual_evidence'->>'evidence_path' not like
-          pedido_id::text || '/manual/%'
-        or not exists(select 1 from storage.objects o where o.bucket_id = 'export-documents'
-          and o.name = new.metadata->'manual_evidence'->>'evidence_path')) then
-        raise exception 'Guia manual exige comprovante MyDHL privado';
-      end if;
-      if new.tracking_code is not null then
-        perform 1 from storage.objects o where o.bucket_id = 'export-documents'
-          and o.name = new.metadata->'manual_evidence'->>'evidence_path' for update;
-        if not found then raise exception 'Comprovante MyDHL ausente'; end if;
-      end if;
-      perform 1 from international_export_settings where singleton = true for update;
     end if;
   end if;
   if tg_table_name in ('order_export_items','order_export_packages') then
@@ -116,10 +128,15 @@ begin
     if situacao.shipping_status in ('shipped','delivered') then
       raise exception 'Documento fiscal de pedido despachado é imutável';
     end if;
-    if tg_op = 'DELETE' and old.status = 'verified' then
-      raise exception 'Documento fiscal verificado é imutável';
+    if tg_op = 'DELETE' then
+      if old.status = 'verified' then
+        raise exception 'Documento fiscal verificado é imutável';
+      end if;
     end if;
     if tg_op in ('INSERT','UPDATE') then
+      if new.storage_path not like pedido_id::text || '/%' then
+        raise exception 'Arquivo fiscal deve pertencer ao diretório do pedido';
+      end if;
       perform 1 from storage.objects where bucket_id = 'export-documents'
         and name = new.storage_path for update;
       if not found then raise exception 'Arquivo fiscal privado ausente'; end if;

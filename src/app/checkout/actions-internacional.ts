@@ -568,6 +568,10 @@ export async function criarPedidoInternacionalAction(
 
   const { error: erroItens } = await admin.from("order_items").insert(itensPayload);
   if (erroItens) {
+    console.error("[checkout-intl] falha ao registrar itens", {
+      code: erroItens.code,
+      message: erroItens.message,
+    });
     return desfazerPedidoParcial("Não foi possível registrar os itens do pedido. Tente novamente.");
   }
 

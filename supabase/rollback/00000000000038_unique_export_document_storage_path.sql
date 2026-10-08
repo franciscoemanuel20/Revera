@@ -1,0 +1,3 @@
+-- Não remover o índice: numa instalação nova ele pode ter sido criado pela
+-- migration 34, e retirar a unicidade reabre o vínculo cruzado de evidências.
+-- O rollback operacional reverte o aplicativo e preserva esta defesa.
