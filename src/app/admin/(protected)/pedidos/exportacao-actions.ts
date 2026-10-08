@@ -30,6 +30,16 @@ export async function reconciliarReservaDhlAction(input: unknown): Promise<Resul
   return { ok: true };
 }
 
+export async function reconciliarModoInvoiceLegadoAction(input: unknown): Promise<Resultado> {
+  const p = z.object({ orderId: uuid }).safeParse(input);
+  if (!p.success) return { error: "Pedido inválido." };
+  const a = await admin(); if (!a) return { error: "Acesso administrativo necessário." };
+  const { error } = await a.s.rpc("reconcile_legacy_shipment_invoice_mode", { p_order_id: p.data.orderId });
+  if (error) return { error: error.message };
+  atualizar(p.data.orderId);
+  return { ok: true };
+}
+
 const itemSchema = z.object({ orderId: uuid, itemId: uuid, ncm: z.string().regex(/^\d{8}$/),
   hsCode: z.string().regex(/^\d{6,10}$/), origin: z.string().regex(/^[A-Z]{2}$/),
   descriptionEn: z.string().trim().min(3), netWeightG: z.number().int().positive(),
@@ -92,13 +102,18 @@ export async function salvarPacoteExportacaoAction(input: unknown): Promise<Resu
 }
 
 const docSchema = z.object({ orderId: uuid, kind: z.enum(["nfe", "invoice", "declaration"]),
-  reference: z.string().trim().min(1).max(100), regime: z.enum(["DRE", "DUE"]).nullable() });
+  reference: z.string().trim().min(1).max(100), regime: z.enum(["DRE", "DUE"]).nullable(),
+  source: z.enum(["external", "dhl"]).default("external") });
 const BUCKET = "export-documents";
 export async function anexarDocumentoExportacaoAction(form: FormData): Promise<Resultado> {
   const p = docSchema.safeParse({ orderId: form.get("orderId"), kind: form.get("kind"),
-    reference: form.get("reference"), regime: form.get("regime") || null });
+    reference: form.get("reference"), regime: form.get("regime") || null,
+    source: form.get("source") || "external" });
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Documento inválido." };
   const d = p.data; if (d.kind === "declaration" && !d.regime) return { error: "Informe DRE ou DU-E." };
+  const myDhlReference = String(form.get("myDhlReference") ?? "").trim();
+  if (d.source === "dhl" && (d.kind !== "invoice" || form.get("myDhlConfirmed") !== "yes" || myDhlReference.length < 3))
+    return { error: "Confirme a invoice no MyDHL+ e informe a referência da consulta." };
   if (d.kind === "nfe" && !/^\d{44}$/.test(d.reference)) return { error: "A chave da NF-e deve ter 44 dígitos." };
   const arquivo = form.get("file");
   if (!(arquivo instanceof File) || !arquivo.size || arquivo.size > 10_000_000) return { error: "Envie um PDF ou imagem de até 10 MB." };
@@ -107,19 +122,34 @@ export async function anexarDocumentoExportacaoAction(form: FormData): Promise<R
   const png = bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
   const jpg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   if (!pdf && !png && !jpg) return { error: "Formato de arquivo inválido." };
+  if (d.source === "dhl" && !pdf) return { error: "A invoice recuperada no MyDHL+ deve ser PDF." };
   const a = await admin(); if (!a) return { error: "Acesso administrativo necessário." };
   const processo = (await carregarProcessosExportacao(a.s, [d.orderId])).get(d.orderId);
   if (!processo?.entrada.internacional || processo.entrada.cancelado) return { error: "Pedido internacional indisponível." };
+  if (d.source === "dhl" && (processo.entrada.invoiceModeForOrder !== "api" || !processo.entrada.rastreio))
+    return { error: "A invoice recuperada exige guia DHL final e modo API fixado na remessa." };
+  if (d.kind === "invoice" && d.source === "external" && processo.entrada.rastreio &&
+      processo.entrada.invoiceModeForOrder === "api")
+    return { error: "Esta remessa exige invoice devolvida pela API DHL. Consulte a DHL para resolver a emissão." };
   const atual = processo.entrada.documentos.find(x => x.kind === d.kind);
   if (atual?.status === "verified") return { error: "Documento já conferido. Uma substituição exige reconciliação fiscal." };
   if (atual?.status === "pending") return { error: "Documento já aguarda conferência. Rejeite antes de substituí-lo." };
   const ext = pdf ? "pdf" : png ? "png" : "jpg";
-  const path = `${d.orderId}/${d.kind}/${randomUUID()}.${ext}`;
+  const path = d.source === "dhl" ? `${d.orderId}/dhl/invoice-manual/${randomUUID()}.pdf`
+    : `${d.orderId}/${d.kind}/${randomUUID()}.${ext}`;
   const { error: uploadError } = await a.s.storage.from(BUCKET).upload(path, bytes,
     { contentType: pdf ? "application/pdf" : png ? "image/png" : "image/jpeg", upsert: false });
   if (uploadError) return { error: "Não foi possível guardar o documento privado." };
+  if (d.source === "dhl") {
+    const { error: rpcError } = await a.s.rpc("register_manual_dhl_invoice" as never, {
+      p_order_id: d.orderId, p_storage_path: path,
+      p_invoice_reference: d.reference, p_lookup_reference: myDhlReference,
+    } as never);
+    if (rpcError) { await a.s.storage.from(BUCKET).remove([path]); return { error: "Não foi possível vincular a invoice à guia. Recarregue e confira o MyDHL+." }; }
+    atualizar(d.orderId); return { ok: true };
+  }
   const payload = { order_id: d.orderId, kind: d.kind,
-    source: "external", status: "pending", reference: d.reference, storage_path: path, regime: d.regime,
+    source: d.source, status: "pending", reference: d.reference, storage_path: path, regime: d.regime,
     validated_by: null, validated_at: null, updated_at: new Date().toISOString() };
   const gravacao = atual
     ? await a.s.from("order_export_documents").update(payload).eq("order_id", d.orderId).eq("kind", d.kind)
@@ -128,7 +158,7 @@ export async function anexarDocumentoExportacaoAction(form: FormData): Promise<R
   if (gravacao.error || !gravacao.data) { await a.s.storage.from(BUCKET).remove([path]); return { error: "O documento mudou em outra aba. Recarregue antes de anexar." }; }
   if (atual?.storage_path && atual.storage_path !== path) await a.s.storage.from(BUCKET).remove([atual.storage_path]);
   await registrarAuditoria(a.s, { action: "exportacao.anexar_documento", entityType: "orders", entityId: d.orderId,
-    diff: { kind: d.kind, reference: d.reference, regime: d.regime, storage_path: path } });
+    diff: { kind: d.kind, source: d.source, reference: d.reference, regime: d.regime, storage_path: path } });
   atualizar(d.orderId); return { ok: true };
 }
 

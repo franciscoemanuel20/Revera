@@ -10,5 +10,6 @@ begin
   return new;
 end $$;
 
+drop trigger if exists export_snapshot_identity_guard on order_export_items;
 create trigger export_snapshot_identity_guard before update on order_export_items
   for each row execute function export_snapshot_identity_guard();

@@ -16,8 +16,16 @@ export type GerarDhlResultado = { ok: true; tracking: string; paypal: "enviado" 
 type DocumentoDhl = { typeCode: string | null; storagePath: string };
 type RemessaComDocumentos = {
   id: string; provider: string | null; tracking_code: string | null; status: string | null;
-  metadata?: { documents?: DocumentoDhl[]; exporter_snapshot?: { invoice_mode?: string } } | null;
+  metadata?: { documents?: DocumentoDhl[]; exporter_snapshot?: { invoice_mode?: string };
+    request_snapshot?: { exporter_snapshot?: { invoice_mode?: string }; request?: { requestInvoice?: boolean } } } | null;
 };
+
+function modoInvoiceRemessa(remessa: RemessaComDocumentos): string | undefined {
+  return remessa.metadata?.exporter_snapshot?.invoice_mode ??
+    remessa.metadata?.request_snapshot?.exporter_snapshot?.invoice_mode ??
+    (remessa.metadata?.request_snapshot?.request?.requestInvoice === true ? "api" :
+      remessa.metadata?.request_snapshot?.request?.requestInvoice === false ? "external" : undefined);
+}
 
 function caminhoInvoiceDhl(orderId: string, remessa: RemessaComDocumentos): string | null {
   const documentos = remessa.metadata?.documents;
@@ -31,15 +39,23 @@ async function registrarInvoiceDhlPendente(
   s: Awaited<ReturnType<typeof createClient>>, orderId: string, orderNumber: string,
   remessa: RemessaComDocumentos,
 ): Promise<string | null> {
-  if (remessa.metadata?.exporter_snapshot?.invoice_mode !== "api") return null;
+  if (modoInvoiceRemessa(remessa) !== "api") return null;
   const path = caminhoInvoiceDhl(orderId, remessa);
-  if (!path) return "A guia existe, mas a DHL não devolveu a Commercial Invoice. Confira no MyDHL+.";
+  if (!path) return "A guia existe, mas a API DHL não devolveu o PDF da invoice. Consulte a DHL; o despacho permanece bloqueado até um retorno da API com o documento.";
   const consultar = () => s.from("order_export_documents").select("source,storage_path,status")
     .eq("order_id", orderId).eq("kind", "invoice").maybeSingle();
   const { data: existente, error: erroConsulta } = await consultar();
   if (erroConsulta) return "Não foi possível conferir a invoice registrada. Tente recuperar novamente.";
-  if (existente) return existente.source === "dhl" && existente.storage_path === path
-    ? null : "Já existe outra invoice para este pedido. Confira os documentos antes de reconciliar.";
+  if (existente) {
+    if (existente.source !== "dhl" || existente.storage_path !== path)
+      return "Já existe outra invoice para este pedido. Confira os documentos antes de reconciliar.";
+    if (existente.status !== "rejected") return null;
+    const { data: recuperado, error: erroRecuperacao } = await s.from("order_export_documents")
+      .update({ status: "pending", validated_by: null, validated_at: null, updated_at: new Date().toISOString() })
+      .eq("order_id", orderId).eq("kind", "invoice").eq("status", "rejected")
+      .eq("storage_path", path).select("order_id").maybeSingle();
+    return erroRecuperacao || !recuperado ? "Não foi possível recolocar a invoice rejeitada para conferência." : null;
+  }
   const { error } = await s.from("order_export_documents").insert({ order_id: orderId,
     kind: "invoice", source: "dhl", status: "pending", reference: orderNumber,
     storage_path: path, regime: null, validated_by: null, validated_at: null });
@@ -60,7 +76,7 @@ export async function recuperarInvoiceDhlAction(input: unknown): Promise<{ ok: t
   if (error || !order) return { error: "Pedido não encontrado." };
   const remessa = (order.shipments ?? []).find(x => x.provider === "dhl") as RemessaComDocumentos | undefined;
   if (!remessa || !guiaDhlFinal(remessa)) return { error: "Confira a guia final no MyDHL antes de recuperar a invoice." };
-  if (remessa.metadata?.exporter_snapshot?.invoice_mode !== "api") return { error: "Esta remessa não usa invoice gerada pela DHL." };
+  if (modoInvoiceRemessa(remessa) !== "api") return { error: "Esta remessa não usa invoice gerada pela DHL." };
   const aviso = await registrarInvoiceDhlPendente(s, orderId, order.order_number, remessa);
   if (aviso) return { error: aviso };
   await registrarAuditoria(s, { action: "pedido.recuperar_invoice_dhl", entityType: "orders", entityId: orderId,
@@ -109,7 +125,9 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
   if (!processo?.avaliacao.podeCriarEtiqueta) return { error: processo?.avaliacao.bloqueiosEtiqueta.join(" ") ?? "Exportação indisponível.", waitingForOwner: true };
 
   const requiredExporter = ["legal_name","tax_id","country","postal_code","city","address_line1","contact_name","phone","email"];
-  if (!exporter || !exporter.dhl_account_confirmed || exporter.invoice_mode === "not_configured" || requiredExporter.some((k) => !(exporter as Record<string, unknown>)[k])) {
+  if (!exporter || !exporter.dhl_account_confirmed ||
+      !["api", "external"].includes(processo.entrada.invoiceModeForOrder ?? "") ||
+      requiredExporter.some((k) => !(exporter as Record<string, unknown>)[k])) {
     return { error: "WAITING_FOR_OWNER: complete e confirme o exportador e o modo fiscal no painel Internacional.", waitingForOwner: true };
   }
   const recipientFields = [customer?.full_name, customer?.email, customer?.phone, address.line1, address.city, address.postal_code, address.country];
@@ -120,8 +138,16 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       !(process.env.DHL_MYDHL_API_SECRET || process.env.DHL_API_SECRET)) {
     return { error: "Criação DHL indisponível: confira configuração de ambiente, conta e credenciais antes de criar a tentativa." };
   }
+  let dhlPersistence: ReturnType<typeof createAdminClient>;
+  try {
+    // A DHL pode devolver uma guia real. A credencial que consegue persistir
+    // essa resposta precisa existir ANTES de reservar e antes da chamada HTTP.
+    dhlPersistence = createAdminClient();
+  } catch {
+    return { error: "Persistência segura da resposta DHL indisponível: SUPABASE_SERVICE_ROLE_KEY ausente." };
+  }
 
-  const { data: lock, error: lockError } = await s.from("shipments").insert({ order_id: orderId, provider: "dhl", service_name: "DHL Express", status: "creating", metadata: { message_reference: orderId, communication: "prepared_not_sent" } }).select("id").single();
+  const { data: lock, error: lockError } = await s.from("shipments").insert({ order_id: orderId, provider: "dhl", service_name: "DHL Express", status: "creating", metadata: { message_reference: orderId, communication: "prepared_not_sent", exporter_snapshot: { invoice_mode: processo.entrada.invoiceModeForOrder } } }).select("id").single();
   if (lockError || !lock) return { error: "Outra tentativa já existe. Recarregue e confira o MyDHL antes de tentar novamente." };
   const { data: estadoAplicado } = await s.from("orders").update({ shipping_status: "label_processing", updated_at: new Date().toISOString() })
     .eq("id", orderId).eq("shipping_status", order.shipping_status).eq("payment_status", "paid")
@@ -149,6 +175,15 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     await s.from("orders").update({ shipping_status: order.shipping_status, updated_at: new Date().toISOString() })
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
     return { error: "Pedido ou exportador mudou antes da chamada DHL. Recarregue." };
+  }
+  const invoiceDocument = processoTravado.entrada.documentos.find(d => d.kind === "invoice" && d.status === "verified");
+  const invoiceMode = invoiceDocument?.source === "dhl" ? "api"
+    : invoiceDocument?.source === "external" ? "external" : exporterAtCall.invoice_mode;
+  if (invoiceMode !== processoTravado.entrada.invoiceModeForOrder) {
+    await s.from("shipments").delete().eq("id", lock.id).eq("status", "creating");
+    await s.from("orders").update({ shipping_status: order.shipping_status, updated_at: new Date().toISOString() })
+      .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
+    return { error: "O modo da invoice mudou antes da chamada DHL. Recarregue o pedido." };
   }
   // A reserva precede a leitura definitiva dos dados mutáveis. O payload
   // completo é persistido antes da chamada para permitir reconciliação pelo
@@ -190,11 +225,17 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       packageInfo: { weightGrams: pacote.gross_weight_g, lengthCm: pacote.length_cm, widthCm: pacote.width_cm, heightCm: pacote.height_cm },
       shipper: { legalName: exporterAtCall.legal_name, contactName: exporterAtCall.contact_name, taxId: exporterAtCall.tax_id, phone: exporterAtCall.phone, email: exporterAtCall.email, countryCode: exporterAtCall.country, postalCode: exporterAtCall.postal_code, cityName: exporterAtCall.city, provinceCode: exporterAtCall.region, addressLine1: exporterAtCall.address_line1 },
       receiver: { name: String(freshCustomer.full_name), phone: String(freshCustomer.phone), email: String(freshCustomer.email), countryCode: String(freshAddress.country), postalCode: freshAddress.postal_code as string | null, cityName: String(freshAddress.city), provinceCode: freshAddress.region as string | null, addressLine1: String(freshAddress.line1), addressLine2: freshAddress.line2 as string | null },
-      lineItems, requestPickup: process.env.DHL_PICKUP_ENABLED?.trim() === "1", requestInvoice: exporterAtCall.invoice_mode === "api",
+      lineItems, requestPickup: process.env.DHL_PICKUP_ENABLED?.trim() === "1", requestInvoice: invoiceMode === "api",
     };
-  const snapshot = { request, order_number: orderAtCall.order_number,
+  const exporterSnapshot = { legal_name: exporterAtCall.legal_name, tax_id: exporterAtCall.tax_id,
+    country: exporterAtCall.country, postal_code: exporterAtCall.postal_code, city: exporterAtCall.city,
+    address_line1: exporterAtCall.address_line1, region: exporterAtCall.region,
+    contact_name: exporterAtCall.contact_name, phone: exporterAtCall.phone, email: exporterAtCall.email,
+    dhl_account_confirmed: exporterAtCall.dhl_account_confirmed, invoice_mode: invoiceMode,
+    settings_updated_at: exporterAtCall.updated_at };
+  const snapshot = { request, order_number: orderAtCall.order_number, exporter_snapshot: exporterSnapshot,
     order_updated_at: orderAtCall.updated_at, exporter_updated_at: exporterAtCall.updated_at };
-  const { data: snapSaved } = await s.from("shipments").update({
+  const { data: snapSaved } = await dhlPersistence.from("shipments").update({
     metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "prepared_not_sent" },
     updated_at: new Date().toISOString(),
   }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
@@ -207,7 +248,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
     return { error: "O pedido mudou antes da chamada DHL. Recarregue." };
   }
-  const { data: markedInFlight } = await s.from("shipments").update({
+  const { data: markedInFlight } = await dhlPersistence.from("shipments").update({
     metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "request_in_flight" },
     updated_at: new Date().toISOString(),
   }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
@@ -219,7 +260,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     result = await new MyDhlProvider().createShipment(request);
   } catch (e) {
     const reason = e instanceof Error ? e.message : "Falha desconhecida";
-    await s.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "request_in_flight", error: reason.slice(0, 300), requires_manual_reconciliation: true }, updated_at: new Date().toISOString() }).eq("id", lock.id);
+    await dhlPersistence.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "request_in_flight", error: reason.slice(0, 300), requires_manual_reconciliation: true }, updated_at: new Date().toISOString() }).eq("id", lock.id);
     await s.from("orders").update({ shipping_status: "shipping_error", updated_at: new Date().toISOString() })
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
     await registrarAuditoria(s, { action: "pedido.dhl_resposta_incerta", entityType: "orders", entityId: orderId,
@@ -229,26 +270,25 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
   const storedDocuments: Array<{ typeCode: string | null; storagePath: string }> = [];
   let savedToShipment = false;
   try {
-    const adminStorage = createAdminClient();
     for (const document of result.documents) {
       const content = Buffer.from(document.contentBase64, "base64");
       if (content.subarray(0, 5).toString() !== "%PDF-") throw new Error("Documento DHL não é PDF");
       const storagePath = `${orderId}/dhl/${lock.id}/${randomUUID()}.pdf`;
-      const { error: uploadError } = await adminStorage.storage.from("export-documents")
+      const { error: uploadError } = await dhlPersistence.storage.from("export-documents")
         .upload(storagePath, content, { contentType: "application/pdf", upsert: false });
       if (uploadError) throw new Error("Falha ao guardar documento DHL em storage privado");
       storedDocuments.push({ typeCode: document.typeCode, storagePath });
     }
     const labelPath = storedDocuments[indiceEtiquetaDhl(storedDocuments)]?.storagePath;
     if (!labelPath) throw new Error("DHL não devolveu PDF da etiqueta");
-    const { data: shipmentSaved, error: shipmentSaveError } = await adminStorage.from("shipments").update({ provider_shipment_id: result.shipmentId, tracking_code: result.trackingNumber, label_url: `export-documents:${labelPath}`, status: "label_created", metadata: { message_reference: orderId, request_snapshot: snapshot, documents: storedDocuments, exporter_snapshot: { legal_name: exporterAtCall.legal_name, tax_id: exporterAtCall.tax_id, country: exporterAtCall.country, postal_code: exporterAtCall.postal_code, city: exporterAtCall.city, address_line1: exporterAtCall.address_line1, invoice_mode: exporterAtCall.invoice_mode, settings_updated_at: exporterAtCall.updated_at }, communication: "response_received", pickup_requested: process.env.DHL_PICKUP_ENABLED?.trim() === "1" }, updated_at: new Date().toISOString() }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
+    const { data: shipmentSaved, error: shipmentSaveError } = await dhlPersistence.from("shipments").update({ provider_shipment_id: result.shipmentId, tracking_code: result.trackingNumber, label_url: `export-documents:${labelPath}`, status: "label_created", metadata: { message_reference: orderId, request_snapshot: snapshot, documents: storedDocuments, exporter_snapshot: exporterSnapshot, communication: "response_received", pickup_requested: process.env.DHL_PICKUP_ENABLED?.trim() === "1" }, updated_at: new Date().toISOString() }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
     if (shipmentSaveError || !shipmentSaved) {
-      const { data: fallback } = await s.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId,
-        request_snapshot: snapshot, communication: "response_received", documents: storedDocuments, provider_shipment_id: result.shipmentId,
+      const { data: fallback } = await dhlPersistence.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId,
+        request_snapshot: snapshot, exporter_snapshot: exporterSnapshot, communication: "response_received", documents: storedDocuments, provider_shipment_id: result.shipmentId,
         tracking_code_returned: result.trackingNumber, requires_manual_reconciliation: true,
         error: shipmentSaveError?.message?.slice(0, 300) ?? "Gravação da resposta DHL não confirmada" },
         updated_at: new Date().toISOString() }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
-      if (!fallback && storedDocuments.length) await adminStorage.storage.from("export-documents").remove(storedDocuments.map(d => d.storagePath));
+      if (!fallback && storedDocuments.length) await dhlPersistence.storage.from("export-documents").remove(storedDocuments.map(d => d.storagePath));
       await s.from("orders").update({ shipping_status: "shipping_error", updated_at: new Date().toISOString() })
         .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
       await registrarAuditoria(s, { action: "pedido.dhl_resposta_nao_persistida", entityType: "orders", entityId: orderId,
@@ -263,7 +303,7 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     }
     const aviso = await registrarInvoiceDhlPendente(s, orderId, orderAtCall.order_number, {
       id: lock.id, provider: "dhl", tracking_code: result.trackingNumber, status: "label_created",
-      metadata: { documents: storedDocuments, exporter_snapshot: { invoice_mode: exporterAtCall.invoice_mode } },
+      metadata: { documents: storedDocuments, exporter_snapshot: { invoice_mode: invoiceMode ?? undefined } },
     });
     const resultadoPaypal = await enviarRastreioDhlAoPaypal(payments, orderId, result.trackingNumber);
     const paypal: "enviado" | "nao_aplicavel" | "falhou" = resultadoPaypal === "enviado"
@@ -273,10 +313,10 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     return { ok: true, tracking: result.trackingNumber, paypal, aviso: aviso ?? undefined };
   } catch (e) {
     const reason = e instanceof Error ? e.message : "Falha ao registrar resposta DHL";
-    const { data: fallback } = await s.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId, request_snapshot: snapshot, communication: "response_received", documents: storedDocuments,
+    const { data: fallback } = await dhlPersistence.from("shipments").update({ status: "creation_unknown", metadata: { message_reference: orderId, request_snapshot: snapshot, exporter_snapshot: exporterSnapshot, communication: "response_received", documents: storedDocuments,
       provider_shipment_id: result.shipmentId, tracking_code_returned: result.trackingNumber,
       error: reason.slice(0, 300), requires_manual_reconciliation: true }, updated_at: new Date().toISOString() }).eq("id", lock.id).eq("status", "creating").select("id").maybeSingle();
-    if (!fallback && !savedToShipment && storedDocuments.length) await createAdminClient().storage.from("export-documents").remove(storedDocuments.map(d => d.storagePath));
+    if (!fallback && !savedToShipment && storedDocuments.length) await dhlPersistence.storage.from("export-documents").remove(storedDocuments.map(d => d.storagePath));
     await s.from("orders").update({ shipping_status: "shipping_error", updated_at: new Date().toISOString() })
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null);
     await registrarAuditoria(s, { action: "pedido.dhl_resposta_nao_persistida", entityType: "orders", entityId: orderId,
