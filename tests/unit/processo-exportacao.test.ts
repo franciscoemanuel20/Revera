@@ -96,6 +96,11 @@ describe("regra única da exportação", () => {
     e.documentos[0]!.status = "verified"; e.documentos[2]!.regime = null;
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
   });
+  it("cancelamento Focus revoga a liberação mesmo com DANFE antigo conferido", () => {
+    const e = base(); e.focusNfeAuthorized = false;
+    expect(avaliarExportacao(e).podeCriarEtiqueta).toBe(false);
+    expect(avaliarExportacao(e).podeDespachar).toBe(false);
+  });
   it("não aceita invoice de origem diferente do modo fiscal atual", () => {
     const e = base(); e.documentos[1]!.source = "dhl";
     expect(avaliarExportacao(e).podeDespachar).toBe(false);

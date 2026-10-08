@@ -176,6 +176,18 @@ export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
     await event(db, row.id, "response_unknown", a.user.id, { reason: failure(error) });
     return { error: "Consulta inconclusiva. A emissão permanece reservada; confira a referência na Focus." };
   }
+  if (row.status === "authorized" && result.status === "cancelled") {
+    const { error } = await db.from("order_focus_nfe").update({ status: "cancelled",
+      response_sanitized: result.safeResponse, consulted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "authorized");
+    if (error) return { error: "Cancelamento detectado, mas não foi possível bloquear a NF-e local. Interrompa o despacho e consulte novamente." };
+    await event(db, row.id, "cancelled_detected", a.user.id, { reference: row.reference });
+    await registrarAuditoria(a.s, { action: "focus.cancelamento_detectado", entityType: "orders", entityId: row.order_id,
+      diff: { reference: row.reference } });
+    refresh(row.order_id);
+    return { ok: true, message: "NF-e cancelada na Focus. Etiqueta e despacho estão bloqueados; reconcilie o pedido." };
+  }
+  if (row.status === "cancelled") return { error: "NF-e cancelada. Este pedido exige reconciliação fiscal antes de qualquer envio." };
   if (row.status !== "authorized" && row.status !== "cancelled") {
     try { await applyResult(db, row, result, a.user.id, true); }
     catch { return { error: "Resposta obtida, mas persistência fiscal falhou. Consulte novamente." }; }

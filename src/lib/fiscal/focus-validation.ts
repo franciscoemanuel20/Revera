@@ -78,10 +78,26 @@ export function validateFocusPayload(payload: unknown, input: EntradaProcesso, s
     if (String(x.cfop) !== settings.cfop) errors.push("CFOP de item diverge da configuração fiscal.");
     if (!x.descricao || !x.unidade_comercial || !x.valor_unitario_comercial)
       errors.push("Item sem descrição, unidade ou valor unitário.");
+    if (!Number.isFinite(Number(x.valor_unitario_comercial)) ||
+      Math.abs(Math.round(Number(x.valor_unitario_comercial) * Number(x.quantidade_comercial) * 100) -
+        Math.round(Number(x.valor_bruto) * 100)) > 1)
+      errors.push("Valor unitário vezes quantidade diverge do valor bruto do item.");
   }
   if (remaining.length) errors.push("Há itens do pedido ausentes na NF-e.");
   const sum = input.itens.reduce((n, i) => n + i.fiscal_value_brl_cents, 0);
   if (Math.round(Number(p.valor_produtos) * 100) !== sum) errors.push("Valor dos produtos diverge do snapshot fiscal.");
-  if (!Number.isFinite(Number(p.valor_total)) || Number(p.valor_total) <= 0) errors.push("Valor total inválido.");
+  const money = (key: string) => p[key] === undefined ? 0 : Number(p[key]);
+  const components = ["valor_produtos", "valor_desconto", "valor_frete", "valor_seguro",
+    "valor_outras_despesas", "valor_total_ii", "valor_ipi", "valor_total_servicos",
+    "icms_valor_total_desonerado", "icms_valor_total_st"];
+  if (components.some(key => !Number.isFinite(money(key)) || money(key) < 0))
+    errors.push("Componentes do valor total inválidos.");
+  const expectedTotal = money("valor_produtos") - money("valor_desconto") + money("valor_frete") +
+    money("valor_seguro") + money("valor_outras_despesas") + money("valor_total_ii") +
+    money("valor_ipi") + money("valor_total_servicos") - money("icms_valor_total_desonerado") +
+    money("icms_valor_total_st");
+  if (!Number.isFinite(Number(p.valor_total)) || Number(p.valor_total) <= 0 ||
+    Math.abs(Math.round(Number(p.valor_total) * 100) - Math.round(expectedTotal * 100)) > 1)
+    errors.push("Valor total da NF-e diverge dos componentes fiscais informados.");
   return [...new Set(errors)];
 }

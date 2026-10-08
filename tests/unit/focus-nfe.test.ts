@@ -33,6 +33,8 @@ describe("Focus NFe provider", () => {
     expect(JSON.stringify(result.safeResponse)).not.toContain("segredo_extra");
     const rejected = new FocusNfeProvider("homologacao", "test", mock(ok({ status: "erro_autorizacao", mensagem_sefaz: "CFOP inválido" })) as typeof fetch);
     expect((await rejected.consult(focusReference(orderId))).rejection).toBe("CFOP inválido");
+    const cancelled = new FocusNfeProvider("homologacao", "test", mock(ok({ status: "cancelado" })) as typeof fetch);
+    expect((await cancelled.consult(focusReference(orderId))).status).toBe("cancelled");
   });
   it("classifica timeout e HTTP 5xx como ambíguos para consulta posterior", async () => {
     const timeout = new FocusNfeProvider("homologacao", "test", mock(new Error("timeout")) as typeof fetch);
@@ -82,6 +84,18 @@ describe("travas persistidas da reserva Focus", () => {
     expect(migration).toContain("NF-e Focus vinculada: documento manual ou substituição bloqueada");
     expect(migration).toContain("perform 1 from orders where id = pedido_id for update");
   });
+  it("bloqueia despacho direto e remessa nova sem autorização Focus", () => {
+    const dispatch = readFileSync(resolve(process.cwd(), "supabase/migrations/00000000000041_focus_dispatch_guard.sql"), "utf8");
+    expect(dispatch).toContain("n.status = 'authorized'");
+    expect(dispatch).toContain("n.access_key = d.reference");
+    expect(dispatch).toContain("n.xml_storage_path is not null and n.danfe_storage_path = d.storage_path");
+    expect(dispatch).toContain("Despacho exige NF-e autorizada na Focus com XML e DANFE privados");
+    expect(dispatch).toContain("Remessa DHL exige NF-e Focus autorizada e conferida");
+  });
+  it("permite registrar cancelamento consultado sem reautorizar uma nota cancelada", () => {
+    expect(migration).toContain("new.status = 'cancelled' and coalesce(auth.role(), '') = 'service_role'");
+    expect(migration).toContain("NF-e cancelada não pode voltar a autorizada");
+  });
 });
 
 const settings: FiscalSettings = { cfop: "7501", natureza_operacao: "validada", tributacao: "validada",
@@ -128,5 +142,9 @@ describe("trava fiscal", () => {
       .toContain("Identidade do emitente difere do exportador confirmado.");
     expect(validateFocusPayload({ ...payload, nome_destinatario: "Outra Pessoa" }, order, settings))
       .toContain("Destinatário da NF-e difere do pedido.");
+    expect(validateFocusPayload({ ...payload, valor_total: 1 }, order, settings))
+      .toContain("Valor total da NF-e diverge dos componentes fiscais informados.");
+    expect(validateFocusPayload({ ...payload, items: [{ ...payload.items[0], valor_unitario_comercial: 1 }] }, order, settings))
+      .toContain("Valor unitário vezes quantidade diverge do valor bruto do item.");
   });
 });

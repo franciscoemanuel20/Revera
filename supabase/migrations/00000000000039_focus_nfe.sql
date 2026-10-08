@@ -117,8 +117,13 @@ begin
       or new.requested_by is distinct from old.requested_by or new.requested_at is distinct from old.requested_at then
       raise exception 'Identidade e snapshot Focus são imutáveis';
     end if;
-    if old.status in ('authorized','cancelled') and new.status is distinct from old.status then
-      raise exception 'NF-e autorizada/cancelada não pode ser sobrescrita';
+    if old.status = 'cancelled' and new.status is distinct from old.status then
+      raise exception 'NF-e cancelada não pode voltar a autorizada';
+    end if;
+    if old.status = 'authorized' and new.status is distinct from old.status
+      and not (new.status = 'cancelled' and coalesce(auth.role(), '') = 'service_role'
+        and new.response_sanitized->>'status' = 'cancelado') then
+      raise exception 'NF-e autorizada só muda após cancelamento confirmado pela Focus';
     end if;
     if old.post_started_at is not null and new.post_started_at is distinct from old.post_started_at then
       raise exception 'Início do POST Focus é imutável';
@@ -227,7 +232,7 @@ create table if not exists order_focus_nfe_events (
   id bigint generated always as identity primary key,
   focus_nfe_id uuid references order_focus_nfe(id) on delete set null,
   event text not null check(event in ('issue_requested','processing','authorized','rejected',
-    'response_unknown','reconciled','documents_retrieved')),
+    'response_unknown','reconciled','documents_retrieved','cancelled_detected')),
   safe_detail jsonb not null default '{}'::jsonb,
   actor uuid references auth.users(id),
   created_at timestamptz not null default now()
