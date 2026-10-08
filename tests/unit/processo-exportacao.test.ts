@@ -73,6 +73,7 @@ describe("regra única da exportação", () => {
   it("bloqueia etiqueta até Commercial Invoice e declaração estarem conferidas", () => {
     const e = base(); e.exportador!.invoice_mode = "api"; e.documentos = e.documentos.filter(d => d.kind !== "invoice");
     expect(avaliarExportacao(e).podeCriarEtiqueta).toBe(false);
+    expect(avaliarExportacao(e).bloqueiosEtiqueta.join(" ")).toContain("externa");
     expect(avaliarExportacao(e).podeRegistrarGuia).toBe(false);
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
     e.documentos.push({ kind: "invoice", source: "dhl", status: "pending", reference: "INV-DHL", storage_path: "dhl.pdf", regime: null });
@@ -81,6 +82,13 @@ describe("regra única da exportação", () => {
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
     e.invoiceDhlComprovada = true;
     expect(avaliarExportacao(e).podeDespachar).toBe(true);
+  });
+  it("permite modo externo quando invoice externa foi conferida antes da guia", () => {
+    const e = base(); e.exportador!.invoice_mode = "api"; e.rastreio = null;
+    e.invoiceModeForOrder = escolherModoInvoicePedido(false, null,
+      e.documentos.find(d => d.kind === "invoice"), "api");
+    expect(e.invoiceModeForOrder).toBe("external");
+    expect(avaliarExportacao(e).podeCriarEtiqueta).toBe(true);
   });
   it("documento rejeitado ou declaração sem regime nunca vale como pronta", () => {
     const e = base(); e.documentos[0]!.status = "rejected";

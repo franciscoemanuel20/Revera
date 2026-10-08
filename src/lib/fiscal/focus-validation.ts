@@ -11,7 +11,10 @@ export function focusBlockers(input: EntradaProcesso, settings: FiscalSettings |
   if (!input.internacional || !input.pago || input.cancelado) b.push("Pedido internacional pago e não cancelado obrigatório.");
   if (!input.destino?.country || !input.destino.city || !input.destino.line1 || !input.contato.nome)
     b.push("Conferir destinatário e endereço.");
-  if (input.itens.length !== input.linhas.length || input.itens.some(i => !i.ncm || !i.fiscal_value_brl_cents || !i.net_weight_g))
+  if (input.itens.length !== input.linhas.length || input.itens.some(i => !i.ncm || !i.fiscal_value_brl_cents ||
+    !i.net_weight_g || !i.description_en || !i.fx_source || !i.fx_date || !i.customs_value_cents ||
+    Math.abs(Math.round(i.customs_value_cents * i.fx_rate_brl_per_unit) - i.fiscal_value_brl_cents) > 1) ||
+    input.itens.reduce((sum, i) => sum + i.customs_value_cents, 0) !== input.valorMercadoriasCents)
     b.push("Conferir snapshot fiscal de todos os produtos.");
   const net = input.itens.reduce((total, i) => total + i.net_weight_g *
     (input.linhas.find(l => l.id === i.order_item_id)?.quantity ?? 0), 0);

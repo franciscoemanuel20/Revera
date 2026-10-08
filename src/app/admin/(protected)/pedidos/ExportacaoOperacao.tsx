@@ -104,11 +104,11 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, facts, pacot
           <button disabled={busy} onClick={() => void executar(() => conferirDocumentoExportacaoAction({ orderId, kind, aprovado: false }))}
             className="rounded border border-red-300 px-3 py-2 text-sm">Rejeitar</button>
         </div> : null}
-        {kind === "invoice" && invoiceMode === "api" && !guideFinal ? <p className="mt-2 text-xs text-ink/60">A invoice será obtida da DHL após a emissão da guia.</p> : null}
-        {kind !== "nfe" && d?.status !== "verified" && !(kind === "invoice" && invoiceMode === "api" && !guideFinal) ? <form className="mt-3 grid gap-2 md:grid-cols-3" onSubmit={ev => { ev.preventDefault();
+        {kind === "invoice" && invoiceMode === "api" && !guideFinal ? <p className="mt-2 text-xs text-ink/60">Para uma nova guia, anexe e confira uma Commercial Invoice externa antes da DHL. A recuperação pela API continua disponível para remessas antigas.</p> : null}
+        {kind !== "nfe" && d?.status !== "verified" ? <form className="mt-3 grid gap-2 md:grid-cols-3" onSubmit={ev => { ev.preventDefault();
           const f = new FormData(ev.currentTarget); f.set("orderId", orderId); f.set("kind", kind);
           void executar(() => anexarDocumentoExportacaoAction(f)); }}>
-          {kind === "invoice" && invoiceMode === "api" ? <>
+          {kind === "invoice" && invoiceMode === "api" && guideFinal ? <>
             <input type="hidden" name="source" value="dhl" />
             <label className="flex flex-col gap-1 text-xs md:col-span-3">Referência da consulta MyDHL+
               <input required name="myDhlReference" className="min-h-10 rounded border border-sand p-2" /></label>

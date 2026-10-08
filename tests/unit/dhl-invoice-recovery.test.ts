@@ -109,12 +109,13 @@ describe("persistência autenticada da tentativa DHL", () => {
     expect(action).toContain('dhlPersistence.from("shipments").update({ status: "creation_unknown"');
   });
 
-  it("rollback remove a trava incompatível com o aplicativo anterior", () => {
+  it("rollback preserva a trava de remessas e exige desligar criação de etiqueta", () => {
     const rollback = readFileSync(
       resolve(process.cwd(), "supabase/rollback/00000000000036_invoice_mode_por_remessa.sql"),
       "utf8"
     );
-    expect(rollback).toContain("drop trigger if exists export_freeze_shipment_invoice_mode_trigger on shipments");
-    expect(rollback).toContain("drop function if exists export_freeze_shipment_invoice_mode()");
+    expect(rollback).not.toContain("drop trigger if exists export_freeze_shipment_invoice_mode_trigger on shipments");
+    expect(rollback).not.toContain("drop function if exists export_freeze_shipment_invoice_mode()");
+    expect(rollback).toContain("DHL_SHIPMENT_CREATION_ENABLED");
   });
 });

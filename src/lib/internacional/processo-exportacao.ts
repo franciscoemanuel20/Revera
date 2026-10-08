@@ -140,8 +140,11 @@ export function avaliarExportacao(e: EntradaProcesso): AvaliacaoExportacao {
   const bloqueiosEtiqueta = [...base,
     ...(!invoice ? ["Commercial Invoice ainda não conferida antes da etiqueta."] : []),
     ...(!declaracao ? ["DRE ou DU-E ainda não conferida antes da etiqueta."] : []),
+    ...(modo === "api" ? ["Nova guia exige Commercial Invoice externa conferida antes da DHL; anexe-a para fixar o modo externo."] : []),
     ...(modo !== "external" && modo !== "api" ? ["Defina o modo de emissão da Commercial Invoice."] : [])];
-  const bloqueiosGuia = [...bloqueiosEtiqueta];
+  const bloqueiosGuia = [...base,
+    ...(!invoice ? ["Commercial Invoice ainda não conferida."] : []),
+    ...(!declaracao ? ["DRE ou DU-E ainda não conferida."] : [])];
   const bloqueiosDespacho = [...bloqueiosGuia,
     ...(!invoice ? ["Commercial Invoice ainda não conferida."] : []),
     ...(!declaracao ? ["Declaração aduaneira ainda não conferida."] : []),

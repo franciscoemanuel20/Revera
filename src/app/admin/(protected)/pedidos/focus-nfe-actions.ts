@@ -88,7 +88,7 @@ export async function emitirFocusNfeAction(input: unknown): Promise<Result> {
   const reference = focusReference(orderId);
   const outcome = await issueWithPermanentReservation(async () => {
     const { data, error } = await db.from("order_focus_nfe").insert({
-      order_id: orderId, reference, environment: env, status: "response_unknown",
+      order_id: orderId, reference, environment: env, status: "reserved_unsent",
       request_snapshot: { payload, order: {
         id: orderId, lines: processo.entrada.linhas, items: processo.entrada.itens,
         package: processo.entrada.pacote, destination: processo.entrada.destino,
@@ -105,6 +105,13 @@ export async function emitirFocusNfeAction(input: unknown): Promise<Result> {
       JSON.stringify(fresh.entrada.pacote) !== JSON.stringify(processo.entrada.pacote) ||
       JSON.stringify(fresh.entrada.destino) !== JSON.stringify(processo.entrada.destino))
       throw new Error("Snapshot do pedido mudou antes da emissão; referência reservada para reconciliação manual.");
+    // Este update acontece antes do POST. Se o processo morrer depois dele,
+    // a resposta é ambígua; se morrer antes, a reserva pode ser liberada.
+    const { data: started, error } = await db.from("order_focus_nfe").update({
+      status: "response_unknown", post_started_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }).eq("id", inserted.id).eq("status", "reserved_unsent").is("post_started_at", null)
+      .select("id").maybeSingle();
+    if (error || !started) throw new Error("Não foi possível registrar início do POST Focus.");
   }, async () => focus.issueOnce(reference, payload));
   if (outcome.state === "existing") return { error: "Já existe tentativa de NF-e para este pedido. Consulte a referência; outra emissão está bloqueada." };
   if (outcome.state === "sent") {
@@ -115,9 +122,35 @@ export async function emitirFocusNfeAction(input: unknown): Promise<Result> {
       ? "NF-e autorizada. Consulte para recuperar XML e DANFE privados."
       : "Solicitação registrada. Consulte a referência para acompanhar autorização ou rejeição." };
   }
+  const { data: released } = await db.from("order_focus_nfe").delete().eq("id", outcome.row.id)
+    .eq("status", "reserved_unsent").is("post_started_at", null).select("id").maybeSingle();
+  if (released) {
+    await registrarAuditoria(a.s, { action: "focus.reserva_nao_enviada_liberada", entityType: "orders", entityId: orderId,
+      diff: { reference } });
+    refresh(orderId);
+    return { error: "A requisição não começou e a reserva foi liberada. Reconfira o pedido antes de tentar novamente." };
+  }
   await event(db, outcome.row.id, "response_unknown", a.user.id, { reason: failure(outcome.error) });
   refresh(orderId);
   return { error: "Resposta de emissão desconhecida. A referência está reservada; use Consultar Focus. Não repita a emissão." };
+}
+
+export async function liberarReservaFocusNaoEnviadaAction(input: unknown): Promise<Result> {
+  const p = z.object({ orderId: uuid, confirmed: z.literal(true) }).safeParse(input);
+  if (!p.success) return { error: "Confirme a liberação da reserva." };
+  const a = await admin(); if (!a) return { error: "Acesso administrativo necessário." };
+  const db = createAdminClient();
+  const { data: row } = await db.from("order_focus_nfe").select("id,reference,status,post_started_at")
+    .eq("order_id", p.data.orderId).maybeSingle();
+  if (!row || row.status !== "reserved_unsent" || row.post_started_at)
+    return { error: "A requisição pode ter começado. Consulte a Focus; esta reserva não pode ser liberada." };
+  const { data: deleted, error } = await db.from("order_focus_nfe").delete().eq("id", row.id)
+    .eq("status", "reserved_unsent").is("post_started_at", null).select("id").maybeSingle();
+  if (error || !deleted) return { error: "A reserva mudou; recarregue e consulte a Focus." };
+  await registrarAuditoria(a.s, { action: "focus.reserva_nao_enviada_liberada", entityType: "orders", entityId: p.data.orderId,
+    diff: { reference: row.reference } });
+  refresh(p.data.orderId);
+  return { ok: true, message: "Reserva não enviada liberada. Reconfira os dados antes de emitir." };
 }
 
 export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
@@ -127,6 +160,7 @@ export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
   const db = createAdminClient();
   const { data: row } = await db.from("order_focus_nfe").select("*").eq("order_id", parsed.data.orderId).maybeSingle();
   if (!row) return { error: "Nenhuma tentativa Focus para este pedido." };
+  if (row.status === "reserved_unsent") return { error: "Nenhum POST Focus começou. Libere a reserva não enviada após conferir o snapshot." };
   let focus: FocusNfeProvider;
   try { focus = provider(row.environment as FocusEnvironment); } catch { return { error: "Token Focus indisponível para este ambiente." }; }
   await db.from("order_focus_nfe").update({ consultation_attempts: row.consultation_attempts + 1,

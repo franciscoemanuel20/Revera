@@ -63,6 +63,13 @@ describe("reserva permanente da emissão", () => {
     expect((await issueWithPermanentReservation(reserve, async () => {}, lost)).state).toBe("existing");
     expect(lost).toHaveBeenCalledTimes(1);
   });
+  it("não faz POST se a validação final antes da chamada falhar", async () => {
+    const post = vi.fn(async () => ({ status: "autorizado" }));
+    const result = await issueWithPermanentReservation(async () => ({ id: 1 }),
+      async () => { throw new Error("snapshot changed"); }, post);
+    expect(result.state).toBe("unknown");
+    expect(post).not.toHaveBeenCalled();
+  });
 });
 
 const settings: FiscalSettings = { cfop: "7501", natureza_operacao: "validada", tributacao: "validada",

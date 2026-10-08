@@ -59,7 +59,8 @@ create table if not exists order_focus_nfe (
   order_id uuid not null unique references orders(id),
   reference text not null unique check(reference ~ '^[A-Z0-9]+$'),
   environment text not null check(environment in ('homologacao','producao')),
-  status text not null check(status in ('response_unknown','processing','authorized','rejected','cancelled')),
+  status text not null check(status in ('reserved_unsent','response_unknown','processing','authorized','rejected','cancelled')),
+  post_started_at timestamptz,
   number text,
   series text,
   access_key text check(access_key is null or access_key ~ '^[0-9]{44}$'),
@@ -104,6 +105,12 @@ create trigger validate_focus_nfe_reservation before insert on order_focus_nfe
 create or replace function protect_focus_nfe() returns trigger language plpgsql
 security definer set search_path = public, pg_temp as $$
 begin
+  if tg_op = 'DELETE' then
+    if old.post_started_at is not null then
+      raise exception 'Tentativa Focus enviada não pode ser apagada';
+    end if;
+    return old;
+  end if;
   if tg_op = 'UPDATE' then
     if new.order_id is distinct from old.order_id or new.reference is distinct from old.reference
       or new.environment is distinct from old.environment or new.request_snapshot is distinct from old.request_snapshot
@@ -112,6 +119,13 @@ begin
     end if;
     if old.status in ('authorized','cancelled') and new.status is distinct from old.status then
       raise exception 'NF-e autorizada/cancelada não pode ser sobrescrita';
+    end if;
+    if old.post_started_at is not null and new.post_started_at is distinct from old.post_started_at then
+      raise exception 'Início do POST Focus é imutável';
+    end if;
+    if old.post_started_at is null and new.post_started_at is not null and
+      (old.status <> 'reserved_unsent' or new.status <> 'response_unknown') then
+      raise exception 'Transição de envio Focus inválida';
     end if;
     if old.access_key is not null and new.access_key is distinct from old.access_key then
       raise exception 'Chave de acesso Focus é imutável';
@@ -125,7 +139,7 @@ begin
   end if;
   return new;
 end $$;
-create trigger protect_focus_nfe_update before update on order_focus_nfe
+create trigger protect_focus_nfe_update before update or delete on order_focus_nfe
   for each row execute function protect_focus_nfe();
 
 create or replace function freeze_snapshot_after_focus() returns trigger language plpgsql
@@ -160,7 +174,7 @@ create trigger freeze_facts_fiscal before insert or update or delete on order_ex
 
 create table if not exists order_focus_nfe_events (
   id bigint generated always as identity primary key,
-  focus_nfe_id uuid not null references order_focus_nfe(id),
+  focus_nfe_id uuid references order_focus_nfe(id) on delete set null,
   event text not null check(event in ('issue_requested','processing','authorized','rejected',
     'response_unknown','reconciled','documents_retrieved')),
   safe_detail jsonb not null default '{}'::jsonb,

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { consultarFocusNfeAction, emitirFocusNfeAction } from "./focus-nfe-actions";
+import { consultarFocusNfeAction, emitirFocusNfeAction, liberarReservaFocusNaoEnviadaAction } from "./focus-nfe-actions";
 import { prepararComunicacaoEnvioAction } from "./comunicacao-envio-actions";
 import type { ShippingEmailLocale } from "@/lib/internacional/email-envio";
 
@@ -50,8 +50,12 @@ export function FocusNfeOperacao({ orderId, focus, blockers, emissionEnabled, do
       <p>Consultas: {focus.consultation_attempts}. XML: {focus.xml_storage_path ? "privado" : "pendente"}; DANFE: {focus.danfe_storage_path ? "privado" : "pendente"}.</p>
       {focus.xml_storage_path ? <a className="mr-3 underline" href={`/api/admin/focus-nfe/${orderId}/xml`}>Baixar XML autenticado</a> : null}
       {focus.danfe_storage_path ? <a className="underline" href={`/api/admin/focus-nfe/${orderId}/danfe`}>Baixar DANFE autenticado</a> : null}
-      <button disabled={busy} onClick={() => void run(() => consultarFocusNfeAction({ orderId }))}
-        className="mt-2 rounded border border-ink px-3 py-2 disabled:opacity-50">Consultar Focus e recuperar documentos</button>
+      {focus.status === "reserved_unsent" ? <button disabled={busy} onClick={() => {
+        if (window.confirm("Confirmo que o POST Focus não começou e quero liberar esta reserva para reconferir o pedido."))
+          void run(() => liberarReservaFocusNaoEnviadaAction({ orderId, confirmed: true }));
+      }} className="mt-2 rounded border border-ink px-3 py-2 disabled:opacity-50">Liberar reserva não enviada</button>
+        : <button disabled={busy} onClick={() => void run(() => consultarFocusNfeAction({ orderId }))}
+          className="mt-2 rounded border border-ink px-3 py-2 disabled:opacity-50">Consultar Focus e recuperar documentos</button>}
     </div> : <div className="mt-3 grid gap-2">
       <label className="flex flex-col gap-1">JSON completo da NF-e revisado pelo contador para este pedido
         <textarea value={payload} onChange={e => setPayload(e.target.value)} rows={6}
