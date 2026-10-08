@@ -361,7 +361,27 @@ export async function criarPedidoAction(input: unknown): Promise<CheckoutResult>
 
   const { error: erroItens } = await admin.from("order_items").insert(itensPayload);
   if (erroItens) {
-    return falhar("Não foi possível registrar os itens do pedido. Tente novamente.");
+    console.error("[checkout] falha ao registrar itens", { orderId, code: erroItens.code });
+    // O token ainda não saiu desta action e nenhum pagamento foi iniciado.
+    // Compensa somente o pedido criado nesta tentativa; o cliente remove seu
+    // endereço por cascade. Uma limpeza incerta mantém a trava do carrinho.
+    try {
+      const { error: erroOrder } = await admin.from("orders").delete()
+        .eq("id", orderId).eq("customer_id", customerId).eq("access_token", accessToken);
+      if (erroOrder) {
+        console.error("[checkout] compensação do pedido incompleta", { orderId, code: erroOrder.code });
+      } else {
+        const { error: erroCliente } = await admin.from("customers").delete().eq("id", customerId);
+        if (erroCliente) {
+          console.error("[checkout] compensação do cliente incompleta", { orderId, code: erroCliente.code });
+        } else {
+          return falhar("Não foi possível registrar os itens do pedido. Tente novamente.");
+        }
+      }
+    } catch {
+      console.error("[checkout] compensação indisponível; carrinho mantido travado", { orderId });
+    }
+    return { erro: "Não foi possível registrar os itens do pedido. A finalização está bloqueada para conferência; fale com a equipe." };
   }
 
   /**
