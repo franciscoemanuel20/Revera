@@ -86,8 +86,8 @@ export async function recuperarInvoiceDhlAction(input: unknown): Promise<{ ok: t
 }
 
 export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResultado> {
-  const parsed = z.object({ orderId: z.string().uuid() }).safeParse(input);
-  if (!parsed.success) return { error: "Pedido inválido." };
+  const parsed = z.object({ orderId: z.string().uuid(), confirmed: z.literal(true) }).safeParse(input);
+  if (!parsed.success) return { error: "Confirmação explícita necessária para criar remessa DHL." };
   const orderId = parsed.data.orderId;
   const s = await createClient();
   const [{ data: order, error }, { data: exporter }] = await Promise.all([
@@ -255,6 +255,8 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
   if (!markedInFlight) {
     return { error: "Tentativa DHL sem confirmação de início. Aguarde e reconcilie a reserva no Admin.", waitingForOwner: true };
   }
+  await registrarAuditoria(s, { action: "pedido.dhl_etiqueta_solicitada", entityType: "orders", entityId: orderId,
+    diff: { tentativa: lock.id, referencia: orderId } });
   let result: DhlShipmentResult;
   try {
     result = await new MyDhlProvider().createShipment(request);
@@ -296,6 +298,8 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
       return { error: `A DHL criou a remessa ${result.trackingNumber}, mas o sistema não conseguiu gravar a etiqueta. Não gere outra: registre a guia manualmente após conferir o MyDHL.`, waitingForOwner: true };
     }
     savedToShipment = true;
+    await registrarAuditoria(s, { action: "pedido.dhl_etiqueta_criada", entityType: "orders", entityId: orderId,
+      diff: { tentativa: lock.id, tracking: result.trackingNumber } });
     const { data: orderSaved, error: orderSaveError } = await s.from("orders").update({ shipping_status: "label_created", updated_at: new Date().toISOString() })
       .eq("id", orderId).eq("shipping_status", "label_processing").eq("payment_status", "paid").is("canceled_at", null).select("id").maybeSingle();
     if (orderSaveError || !orderSaved) {
@@ -308,6 +312,8 @@ export async function gerarEnvioDhlAction(input: unknown): Promise<GerarDhlResul
     const resultadoPaypal = await enviarRastreioDhlAoPaypal(payments, orderId, result.trackingNumber);
     const paypal: "enviado" | "nao_aplicavel" | "falhou" = resultadoPaypal === "enviado"
       ? "enviado" : resultadoPaypal === "sem_paypal" ? "nao_aplicavel" : "falhou";
+    if (paypal === "enviado") await registrarAuditoria(s, { action: "pedido.rastreio_paypal_enviado", entityType: "orders", entityId: orderId,
+      diff: { tracking: result.trackingNumber } });
     await registrarAuditoria(s, { action: "pedido.gerar_envio_dhl", entityType: "orders", entityId: orderId, diff: { tracking: result.trackingNumber, paypal } });
     revalidatePath(`/admin/pedidos/${orderId}`); revalidatePath("/admin/pedidos");
     return { ok: true, tracking: result.trackingNumber, paypal, aviso: aviso ?? undefined };

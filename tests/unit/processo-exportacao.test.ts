@@ -16,6 +16,7 @@ const base = (): EntradaProcesso => ({
     { kind: "invoice", source: "external", status: "verified", reference: "INV-1", storage_path: "invoice.pdf", regime: null },
     { kind: "declaration", source: "external", status: "verified", reference: "DRE-1", storage_path: "dre.pdf", regime: "DRE" },
   ],
+  focusNfeAuthorized: true,
   exportador: { legal_name: "Exportadora", tax_id: "123", country: "BR", postal_code: "12216530", city: "SJC",
     address_line1: "Rua", contact_name: "Pessoa", phone: "+5511", email: "a@b.com",
     invoice_mode: "external", dhl_account_confirmed: true },
@@ -69,10 +70,10 @@ describe("regra única da exportação", () => {
     e.pago = true; e.cancelado = true;
     expect(avaliarExportacao(e).podeCriarEtiqueta).toBe(false);
   });
-  it("permite pedir invoice à DHL, mas só libera despacho após retorno e conferência", () => {
+  it("bloqueia etiqueta até Commercial Invoice e declaração estarem conferidas", () => {
     const e = base(); e.exportador!.invoice_mode = "api"; e.documentos = e.documentos.filter(d => d.kind !== "invoice");
-    expect(avaliarExportacao(e).podeCriarEtiqueta).toBe(true);
-    expect(avaliarExportacao(e).podeRegistrarGuia).toBe(true);
+    expect(avaliarExportacao(e).podeCriarEtiqueta).toBe(false);
+    expect(avaliarExportacao(e).podeRegistrarGuia).toBe(false);
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
     e.documentos.push({ kind: "invoice", source: "dhl", status: "pending", reference: "INV-DHL", storage_path: "dhl.pdf", regime: null });
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
@@ -107,7 +108,7 @@ describe("regra única da exportação", () => {
     const e = base();
     e.invoiceModeForOrder = null;
     e.rastreio = null;
-    expect(avaliarExportacao(e).podeRegistrarGuia).toBe(true);
+    expect(avaliarExportacao(e).podeRegistrarGuia).toBe(false);
     e.rastreio = "1234567890";
     expect(avaliarExportacao(e).podeDespachar).toBe(false);
     e.invoiceModeForOrder = "external";

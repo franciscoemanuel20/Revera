@@ -55,6 +55,7 @@ export type EntradaProcesso = {
   itens: ItemExportacao[];
   pacote: PacoteExportacao | null;
   documentos: DocumentoExportacao[];
+  focusNfeAuthorized?: boolean;
   exportador: Exportador | null;
   invoiceModeForOrder?: string | null;
   invoiceDhlComprovada?: boolean;
@@ -121,8 +122,8 @@ export function avaliarExportacao(e: EntradaProcesso): AvaliacaoExportacao {
     x.address_line1, x.contact_name, x.phone, x.email].every(presente));
   adicionar("exportador", "Dados do exportador", exportador, "Complete os dados da empresa exportadora no painel Internacional.");
   const docs = Object.fromEntries(e.documentos.map(d => [d.kind, d])) as Partial<Record<DocumentoTipo, DocumentoExportacao>>;
-  const nfe = documentoValido(docs.nfe);
-  adicionar("nfe", "NF-e de exportação", nfe, "Anexe a NF-e e registre sua chave após emissão e conferência.");
+  const nfe = documentoValido(docs.nfe) && e.focusNfeAuthorized === true;
+  adicionar("nfe", "NF-e de exportação", nfe, "A NF-e deve estar autorizada na Focus, com XML e DANFE privados, e conferida neste pedido.");
   const modo = e.invoiceModeForOrder === undefined ? x?.invoice_mode : e.invoiceModeForOrder;
   const invoice = documentoValido(docs.invoice) &&
     ((modo === "external" && docs.invoice?.source === "external") ||
@@ -137,10 +138,10 @@ export function avaliarExportacao(e: EntradaProcesso): AvaliacaoExportacao {
 
   const base = etapas.filter(t => ["pagamento","cliente","endereco","fiscal_produto","pacote","exportador","nfe","dhl"].includes(t.chave) && t.estado !== "pronto").map(t => t.detalhe!);
   const bloqueiosEtiqueta = [...base,
-    ...(modo === "external" && !invoice ? ["Commercial Invoice externa ainda não conferida."] : []),
+    ...(!invoice ? ["Commercial Invoice ainda não conferida antes da etiqueta."] : []),
+    ...(!declaracao ? ["DRE ou DU-E ainda não conferida antes da etiqueta."] : []),
     ...(modo !== "external" && modo !== "api" ? ["Defina o modo de emissão da Commercial Invoice."] : [])];
-  const bloqueiosGuia = [...base,
-    ...(modo === "external" && !invoice ? ["Commercial Invoice externa ainda não conferida."] : [])];
+  const bloqueiosGuia = [...bloqueiosEtiqueta];
   const bloqueiosDespacho = [...bloqueiosGuia,
     ...(!invoice ? ["Commercial Invoice ainda não conferida."] : []),
     ...(!declaracao ? ["Declaração aduaneira ainda não conferida."] : []),

@@ -7,6 +7,7 @@ import { paisesDoCheckout, nomeDoPais, bandeira, PAISES } from "@/lib/internacio
 import { PrecosInternacionais } from "./PrecosInternacionais";
 import { CotacoesFrete } from "./CotacoesFrete";
 import { ExpedicaoDhl } from "./ExpedicaoDhl";
+import { ConfiguracaoFocus } from "./ConfiguracaoFocus";
 
 /**
  * Painel Internacional — as três alavancas que abrem (ou mantêm fechado)
@@ -24,7 +25,7 @@ import { ExpedicaoDhl } from "./ExpedicaoDhl";
 export default async function InternacionalPage() {
   const supabase = await createClient();
 
-  const [{ data: variantes }, { data: cotacoes }, { data: exportador }] = await Promise.all([
+  const [{ data: variantes }, { data: cotacoes }, { data: exportador }, { data: focusSettings }] = await Promise.all([
     supabase
       .from("product_variants")
       .select("id, sku, price_cents, shipping_weight_g, shipping_length_cm, shipping_width_cm, shipping_height_cm, customs_hs_code, origin_country, products(name, status), variant_prices(currency, price_cents, is_active)")
@@ -36,6 +37,7 @@ export default async function InternacionalPage() {
       )
       .order("created_at", { ascending: false }),
     supabase.from("international_export_settings").select("*").eq("singleton", true).maybeSingle(),
+    supabase.from("focus_nfe_settings").select("*").eq("singleton", true).maybeSingle(),
   ]);
 
   const gatewayInternacionalOk = reveraInternationalPaymentAvailable();
@@ -118,6 +120,7 @@ export default async function InternacionalPage() {
           origin_country: v.origin_country as string | null,
         }))}
       />
+      <ConfiguracaoFocus settings={(focusSettings as Parameters<typeof ConfiguracaoFocus>[0]["settings"]) ?? null} />
 
       <CotacoesFrete
         cotacoes={((cotacoes ?? []) as Array<Record<string, unknown>>).map((c) => ({

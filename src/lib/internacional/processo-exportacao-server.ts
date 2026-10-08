@@ -22,14 +22,15 @@ const um = <T>(x: T | T[] | null | undefined): T | null => Array.isArray(x) ? (x
 export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
   const resultado = new Map<string, { entrada: EntradaProcesso; avaliacao: ReturnType<typeof avaliarExportacao> }>();
   if (!ids.length) return resultado;
-  const [pedidos, itens, pacotes, documentos, config] = await Promise.all([
+  const [pedidos, itens, pacotes, documentos, config, focusNotas] = await Promise.all([
     s.from("orders").select("id,payment_status,canceled_at,shipping_status,subtotal_cents,discount_cents,currency,customers(full_name,email,phone),addresses(country,city,postal_code,line1),order_items(id,product_name_snapshot,quantity),shipments(id,provider,tracking_code,status,metadata)").in("id", ids),
     s.from("order_export_items").select("order_id,order_item_id,ncm,hs_code,country_of_origin,description_en,net_weight_g,customs_value_cents,fiscal_value_brl_cents,fx_rate_brl_per_unit,fx_source,fx_date").in("order_id", ids),
     s.from("order_export_packages").select("*").in("order_id", ids),
     s.from("order_export_documents").select("*").in("order_id", ids),
     s.from("international_export_settings").select("*").eq("singleton", true).maybeSingle(),
+    s.from("order_focus_nfe").select("order_id,status,access_key,xml_storage_path,danfe_storage_path").in("order_id", ids),
   ]);
-  const erro = [pedidos.error, itens.error, pacotes.error, documentos.error, config.error].find(Boolean);
+  const erro = [pedidos.error, itens.error, pacotes.error, documentos.error, config.error, focusNotas.error].find(Boolean);
   if (erro) throw new Error(`Não foi possível avaliar a exportação: ${erro.message}`);
   const exporter = config.data as Exportador | null;
   for (const raw of pedidos.data ?? []) {
@@ -37,6 +38,7 @@ export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
     const c = um(p.customers), a = um(p.addresses);
     const envios = Array.isArray(p.shipments) ? p.shipments : p.shipments ? [p.shipments] : [];
     const documentosPedido = (documentos.data ?? []).filter(i => i.order_id === p.id) as DocumentoExportacao[];
+    const focus = (focusNotas.data ?? []).find(n => n.order_id === p.id);
     const remessa = envios.find(e => e.provider === "dhl");
     const modoRemessa = remessa?.metadata?.exporter_snapshot?.invoice_mode ??
       remessa?.metadata?.request_snapshot?.exporter_snapshot?.invoice_mode ??
@@ -66,6 +68,8 @@ export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
       itens: (itens.data ?? []).filter(i => i.order_id === p.id) as ItemExportacao[],
       pacote: (pacotes.data ?? []).find(i => i.order_id === p.id) as PacoteExportacao | undefined ?? null,
       documentos: documentosPedido,
+      focusNfeAuthorized: focus?.status === "authorized" && Boolean(focus.access_key && focus.xml_storage_path &&
+        focus.danfe_storage_path && documentosPedido.some(d => d.kind === "nfe" && d.reference === focus.access_key)),
       exportador: exporter,
       invoiceModeForOrder: modoInvoice,
       invoiceDhlComprovada: invoiceDaApi || invoiceManual,

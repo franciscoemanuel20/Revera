@@ -21,6 +21,8 @@ import { RegistrarEnvioDhl } from "../RegistrarEnvioDhl";
 import { GerarEtiquetaDhl } from "../GerarEtiquetaDhl";
 import { RecuperarInvoiceDhl } from "../RecuperarInvoiceDhl";
 import { ExportacaoOperacao } from "../ExportacaoOperacao";
+import { FocusNfeOperacao } from "../FocusNfeOperacao";
+import { focusBlockers, type FiscalSettings } from "@/lib/fiscal/focus-validation";
 import { carregarProcessosExportacao } from "@/lib/internacional/processo-exportacao-server";
 import { daLinha, formatarEndereco, type LinhaEndereco } from "@/lib/internacional/endereco";
 import { ehInternacional } from "@/lib/internacional/paises";
@@ -173,8 +175,16 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
   const processoExportacao = pedidoInternacional
     ? (await carregarProcessosExportacao(supabase, [id])).get(id) ?? null
     : null;
+  const [{ data: focusRow }, { data: focusConfig }, { data: itemFacts }, { data: emailDraft }] = pedidoInternacional ? await Promise.all([
+    supabase.from("order_focus_nfe").select("environment,status,reference,number,series,access_key,rejection_reason,xml_storage_path,danfe_storage_path,consultation_attempts").eq("order_id", id).maybeSingle(),
+    supabase.from("focus_nfe_settings").select("*").eq("singleton", true).maybeSingle(),
+    supabase.from("order_export_item_facts").select("order_item_id,ncm,hs_code,country_of_origin,net_weight_g,length_cm,width_cm,height_cm").eq("order_id", id),
+    supabase.from("order_shipping_email_drafts").select("locale,subject,body").eq("order_id", id).maybeSingle(),
+  ]) : [{ data: null }, { data: null }, { data: null }, { data: null }];
   const avaliacaoExportacao = processoExportacao?.avaliacao ?? null;
   const documentosExportacao = await Promise.all((processoExportacao?.entrada.documentos ?? []).map(async doc => {
+    if (doc.kind === "nfe" && focusRow?.status === "authorized" && doc.storage_path === focusRow.danfe_storage_path)
+      return { ...doc, url: `/api/admin/focus-nfe/${id}/danfe` };
     const { data } = await supabase.storage.from("export-documents").createSignedUrl(doc.storage_path, 300);
     return { ...doc, url: data?.signedUrl ?? null };
   }));
@@ -373,8 +383,19 @@ export default async function DetalhePedidoPage({ params }: { params: Promise<{ 
         />
       ) : null}
       {pedidoInternacional && processoExportacao && avaliacaoExportacao ? (
+        <FocusNfeOperacao orderId={id}
+          focus={focusRow as Parameters<typeof FocusNfeOperacao>[0]["focus"]}
+          blockers={focusBlockers(processoExportacao.entrada, focusConfig as FiscalSettings | null)}
+          emissionEnabled={process.env.FOCUS_NFE_ISSUANCE_ENABLED === "1" &&
+            (process.env.FOCUS_NFE_AMBIENTE === "homologacao" ||
+              (process.env.FOCUS_NFE_AMBIENTE === "producao" && process.env.FOCUS_NFE_PRODUCTION_APPROVED === "1"))}
+          docs={processoExportacao.entrada.documentos}
+          emailDraft={emailDraft}
+          guideFinal={envio?.provider === "dhl" && ["label_created", "registrado_manual"].includes(envio.status ?? "") && Boolean(envio.tracking_code)} />
+      ) : null}
+      {pedidoInternacional && processoExportacao && avaliacaoExportacao ? (
         <ExportacaoOperacao orderId={id} moeda={processoExportacao.entrada.moedaPedido} linhas={processoExportacao.entrada.linhas}
-          itens={processoExportacao.entrada.itens} pacote={processoExportacao.entrada.pacote}
+          itens={processoExportacao.entrada.itens} facts={itemFacts ?? []} pacote={processoExportacao.entrada.pacote}
           documentos={documentosExportacao} reservaDhl={envio?.provider === "dhl" ? { status: envio.status, updated_at: envio.updated_at } : null}
           invoiceMode={processoExportacao.entrada.invoiceModeForOrder ?? null}
           guideFinal={envio?.provider === "dhl" && ["label_created", "registrado_manual"].includes(envio.status ?? "") && Boolean(envio.tracking_code)}

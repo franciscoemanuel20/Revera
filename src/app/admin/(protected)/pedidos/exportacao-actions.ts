@@ -51,14 +51,17 @@ export async function salvarItemExportacaoAction(input: unknown): Promise<Result
   const d = p.data;
   if (Math.abs(Math.round(d.customsValueCents * d.fxRate) - d.fiscalValueBrlCents) > 1)
     return { error: "Valor fiscal em reais não corresponde ao valor aduaneiro e à taxa informada." };
-  const [{ data: linha }, { data: pedido }, { data: docs }, { data: envio }] = await Promise.all([
+  const [{ data: linha }, { data: pedido }, { data: docs }, { data: envio }, { data: fact }] = await Promise.all([
     a.s.from("order_items").select("id,quantity").eq("id", d.itemId).eq("order_id", d.orderId).maybeSingle(),
     a.s.from("orders").select("shipping_status,canceled_at").eq("id", d.orderId).maybeSingle(),
     a.s.from("order_export_documents").select("kind").eq("order_id", d.orderId).limit(1),
     a.s.from("shipments").select("id").eq("order_id", d.orderId).limit(1),
+    a.s.from("order_export_item_facts").select("ncm,hs_code,country_of_origin,net_weight_g").eq("order_item_id", d.itemId).maybeSingle(),
   ]);
   if (!linha || !pedido || pedido.canceled_at || ["shipped", "delivered"].includes(pedido.shipping_status)) return { error: "Pedido ou item indisponível." };
   if (d.customsValueCents % linha.quantity !== 0) return { error: "Distribua o valor aduaneiro em centavos igualmente entre as unidades deste item." };
+  if (fact && (d.ncm !== fact.ncm || d.hsCode !== fact.hs_code || d.origin !== fact.country_of_origin ||
+    d.netWeightG !== fact.net_weight_g)) return { error: "Os dados físicos diferem dos fatos confirmados para este pedido." };
   if (docs?.length || envio?.length) return { error: "Já existe documento ou remessa. Corrigir este snapshot exige reconciliação fiscal antes de alterar o pedido." };
   const { error } = await a.s.from("order_export_items").upsert({ order_item_id: d.itemId, order_id: d.orderId,
     ncm: d.ncm, hs_code: d.hsCode, country_of_origin: d.origin, description_en: d.descriptionEn,

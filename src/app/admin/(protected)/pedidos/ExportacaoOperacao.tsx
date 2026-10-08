@@ -11,10 +11,12 @@ type Doc = DocumentoExportacao & { url: string | null };
 const tipos = [
   ["nfe", "NF-e de exportação"], ["invoice", "Commercial Invoice"], ["declaration", "Declaração aduaneira"],
 ] as const;
-export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, documentos, reservaDhl, invoiceMode, guideFinal, bloqueiosEtiqueta,
+export function ExportacaoOperacao({ orderId, moeda, linhas, itens, facts, pacote, documentos, reservaDhl, invoiceMode, guideFinal, bloqueiosEtiqueta,
   bloqueiosDespacho }: { orderId: string; linhas: { id: string; nome: string; quantity: number }[];
   moeda: string;
-  itens: ItemExportacao[]; pacote: PacoteExportacao | null; documentos: Doc[];
+  itens: ItemExportacao[]; facts: Array<{ order_item_id: string; ncm: string; hs_code: string; country_of_origin: string;
+    net_weight_g: number; length_cm: number; width_cm: number; height_cm: number }>;
+  pacote: PacoteExportacao | null; documentos: Doc[];
   reservaDhl: { status: string | null; updated_at: string | null } | null;
   invoiceMode: string | null;
   guideFinal: boolean;
@@ -54,7 +56,7 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, docu
     </form> : null}
     <div className="grid gap-3">
       <h3 className="font-medium">Itens do pedido</h3>
-      {linhas.map(l => { const i = itens.find(x => x.order_item_id === l.id); return <form key={l.id}
+      {linhas.map(l => { const i = itens.find(x => x.order_item_id === l.id); const fact = facts.find(x => x.order_item_id === l.id); return <form key={l.id}
         className="grid gap-2 rounded border border-sand p-3 md:grid-cols-3" onSubmit={ev => { ev.preventDefault(); const f = new FormData(ev.currentTarget);
           void executar(() => salvarItemExportacaoAction({ orderId, itemId: l.id, ncm: f.get("ncm"), hsCode: f.get("hs"),
             origin: String(f.get("origin") ?? "").toUpperCase(), descriptionEn: f.get("description"),
@@ -62,8 +64,9 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, docu
             fiscalValueBrlCents: Math.round(Number(f.get("brl")) * 100), fxRate: Number(f.get("rate")),
             fxSource: f.get("source"), fxDate: f.get("date") })); }}>
         <p className="text-sm font-medium md:col-span-3">{l.nome} · {l.quantity} un.</p>
-        {[["ncm","NCM (8 dígitos)",i?.ncm],["hs","HS Code",i?.hs_code],["origin","Origem ISO",i?.country_of_origin],
-          ["description","Descrição em inglês",i?.description_en],["weight","Peso líquido por unidade (g)",i?.net_weight_g],
+        {fact ? <p className="text-xs text-ink/70 md:col-span-3">Fatos confirmados: {fact.net_weight_g} g líquidos por unidade; dimensões do item {fact.length_cm} × {fact.width_cm} × {fact.height_cm} cm. A embalagem final continua pendente até ser medida.</p> : null}
+        {[["ncm","NCM (8 dígitos)",i?.ncm ?? fact?.ncm],["hs","HS Code",i?.hs_code ?? fact?.hs_code],["origin","Origem ISO",i?.country_of_origin ?? fact?.country_of_origin],
+          ["description","Descrição em inglês",i?.description_en],["weight","Peso líquido por unidade (g)",i?.net_weight_g ?? fact?.net_weight_g],
           ["customs",`Valor aduaneiro da linha (${moeda})`,i ? (i.customs_value_cents / 100).toFixed(2) : ""],
           ["brl","Valor fiscal da linha (R$)",i ? (i.fiscal_value_brl_cents / 100).toFixed(2) : ""],
           ["rate",`Taxa BRL por ${moeda}`,i?.fx_rate_brl_per_unit],["source","Fonte da taxa validada",i?.fx_source],
@@ -93,6 +96,7 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, docu
       <h3 className="font-medium">Documentos</h3>
       {tipos.map(([kind,label]) => { const d = documentos.find(x => x.kind === kind); return <div key={kind} className="rounded border border-sand p-3">
         <p className="text-sm font-medium">{label}: {d ? `${d.status} · ${d.reference}` : "não anexado"}</p>
+        {kind === "nfe" && !d ? <p className="mt-2 text-xs text-ink/70">Emita pela Focus NFe na etapa acima. XML e DANFE serão guardados no storage privado e o DANFE aparecerá aqui para conferência.</p> : null}
         {d?.url ? <a href={d.url} target="_blank" rel="noreferrer" className="text-sm underline">Abrir arquivo privado para conferência</a> : null}
         {d?.status === "pending" ? <div className="mt-2 flex gap-2">
           <button disabled={busy || !d.url} onClick={() => void executar(() => conferirDocumentoExportacaoAction({ orderId, kind, aprovado: true }))}
@@ -101,7 +105,7 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, docu
             className="rounded border border-red-300 px-3 py-2 text-sm">Rejeitar</button>
         </div> : null}
         {kind === "invoice" && invoiceMode === "api" && !guideFinal ? <p className="mt-2 text-xs text-ink/60">A invoice será obtida da DHL após a emissão da guia.</p> : null}
-        {d?.status !== "verified" && !(kind === "invoice" && invoiceMode === "api" && !guideFinal) ? <form className="mt-3 grid gap-2 md:grid-cols-3" onSubmit={ev => { ev.preventDefault();
+        {kind !== "nfe" && d?.status !== "verified" && !(kind === "invoice" && invoiceMode === "api" && !guideFinal) ? <form className="mt-3 grid gap-2 md:grid-cols-3" onSubmit={ev => { ev.preventDefault();
           const f = new FormData(ev.currentTarget); f.set("orderId", orderId); f.set("kind", kind);
           void executar(() => anexarDocumentoExportacaoAction(f)); }}>
           {kind === "invoice" && invoiceMode === "api" ? <>
@@ -110,7 +114,7 @@ export function ExportacaoOperacao({ orderId, moeda, linhas, itens, pacote, docu
               <input required name="myDhlReference" className="min-h-10 rounded border border-sand p-2" /></label>
             <label className="flex items-center gap-2 text-xs md:col-span-3"><input required type="checkbox" name="myDhlConfirmed" value="yes" />Confirmei que este PDF é a Commercial Invoice desta guia no MyDHL+.</label>
           </> : null}
-          <label className="flex flex-col gap-1 text-xs">{kind === "nfe" ? "Chave da NF-e (44 dígitos)" : "Referência do documento"}
+          <label className="flex flex-col gap-1 text-xs">Referência do documento
             <input required name="reference" className="min-h-10 rounded border border-sand p-2" /></label>
           {kind === "declaration" ? <label className="flex flex-col gap-1 text-xs">Regime<select name="regime" required className="min-h-10 rounded border border-sand p-2">
             <option value="">Selecione</option><option value="DRE">DRE</option><option value="DUE">DU-E</option></select></label> : null}
