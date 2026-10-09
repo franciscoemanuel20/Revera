@@ -16,10 +16,16 @@ assert.equal((await db.query(`select confirmation_review_required from order_not
 assert.equal((await db.query(`select * from claim_paid_confirmation('${legacy}','{}')`)).rows.length,0);
 await db.exec('truncate order_notifications');
 const id='00000000-0000-0000-0000-000000000002';await db.exec(`insert into customers values('00000000-0000-0000-0000-000000000001','test@example.invalid');insert into orders values('${id}','00000000-0000-0000-0000-000000000001','paid',null);select reserve_paid_confirmations(null);`);
+// Reproduz a seleção do cron antigo durante overlap/rollback, antes e após lease.
+const legacyCandidates=()=>db.query(`select order_id from order_notifications where kind='confirmacao_cliente' and sent_at is null and created_at<=now()-interval '5 minutes' and created_at>=now()-interval '20 hours' and attempts<5`);
+await db.exec("update order_notifications set created_at=now()-interval '10 minutes'");
+assert.equal((await legacyCandidates()).rows.length,0);
 const claim=()=>db.query(`select * from claim_paid_confirmation('${id}','{"body":"test"}')`);
 const finish=(lease,sent=false,definite=false)=>db.query(`select finish_paid_confirmation('${id}',$1,$2,'isolated','simulated',$3) result`,[lease,sent,definite]);
 const reset=()=>db.exec('update order_notifications set confirmation_next_attempt_at=now()-interval \'1 minute\'');
 const [a,b]=await Promise.all([claim(),claim()]);assert.equal(a.rows.length+b.rows.length,1);const lease=(a.rows[0]||b.rows[0]).lease;
+assert.equal((await legacyCandidates()).rows.length,0);
+assert.equal((await db.query('select confirmation_attempts from order_notifications')).rows[0].confirmation_attempts,1);
 assert.equal((await finish('00000000-0000-0000-0000-000000000000',true)).rows[0].result,false);
 // Timeout après aceite simulado, seguido de429: preserve o relógio original.
 await finish(lease,false,false);await reset();const second=await claim();const first=(await db.query('select confirmation_first_attempt_at from order_notifications')).rows[0].confirmation_first_attempt_at;

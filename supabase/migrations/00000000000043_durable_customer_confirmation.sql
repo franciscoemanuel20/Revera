@@ -1,6 +1,7 @@
 -- Reserva recuperável; não envia mensagens e não habilita transporte.
 alter table public.order_notifications
   add column confirmation_generation integer not null default 0,
+  add column confirmation_attempts integer not null default 0,
   add column confirmation_had_uncertain_attempt boolean not null default false,
   add column confirmation_payload jsonb,
   add column confirmation_first_attempt_at timestamptz,
@@ -16,8 +17,10 @@ where kind = 'confirmacao_cliente' and sent_at is null;
 
 create or replace function public.reserve_paid_confirmations(p_order_id uuid default null)
 returns void language sql security definer set search_path = public, pg_temp as $$
-  insert into order_notifications(order_id, kind, channel, confirmation_review_required)
-  select o.id, 'confirmacao_cliente', 'email', false from orders o
+  -- attempts=5 é uma barreira para o cron legado (attempts<5), não o contador novo.
+  -- A unicidade impede também a reserva/envio direto pela versão antiga.
+  insert into order_notifications(order_id, kind, channel, confirmation_review_required, attempts)
+  select o.id, 'confirmacao_cliente', 'email', false, 5 from orders o
   join customers c on c.id = o.customer_id
   where o.payment_status = 'paid' and o.canceled_at is null
     and (p_order_id is null or o.id = p_order_id)
@@ -52,7 +55,8 @@ begin
     confirmation_had_uncertain_attempt = confirmation_had_uncertain_attempt or confirmation_first_attempt_at is not null,
     confirmation_payload = message,
     confirmation_first_attempt_at = coalesce(confirmation_first_attempt_at, clock_timestamp()),
-    attempts = attempts + 1 where id = q.id;
+    attempts = greatest(attempts, 5),
+    confirmation_attempts = confirmation_attempts + 1 where id = q.id;
   return query select token, message;
 end $$;
 
