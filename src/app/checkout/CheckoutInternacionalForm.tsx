@@ -15,6 +15,13 @@ import type { Moeda } from "@/lib/internacional/moeda";
 import type { ProviderInternacionalRevera } from "@/lib/payments/revera";
 
 const inputClass = "min-h-toque rounded-md border border-sand bg-paper px-3 py-2 text-ink";
+const rotuloCartao: Record<Idioma, string> = {
+  pt: "Cartão",
+  en: "Card",
+  es: "Tarjeta",
+  fr: "Carte",
+  de: "Karte",
+};
 
 /**
  * Formulário do checkout INTERNACIONAL — client irmão do CheckoutForm
@@ -358,7 +365,7 @@ export function CheckoutInternacionalForm({ resumo }: { resumo: ResumoInternacio
               onChange={() => setPaymentPreference(gateway)}
               className="h-4 w-4 accent-ink"
             />
-            <span>{gateway === "stripe" ? "Cartão — Stripe" : "PayPal"}</span>
+            <span>{gateway === "stripe" ? `${rotuloCartao[resumo.idioma]} — Stripe` : "PayPal"}</span>
           </label>
         ))}
         {erros.paymentPreference ? <p className="text-xs text-red-700">{erros.paymentPreference}</p> : null}
