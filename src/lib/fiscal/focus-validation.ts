@@ -17,6 +17,14 @@ export type FiscalAmounts = {
   icms_st_brl_cents: number; approved_by: string;
 };
 
+type FocusContact = { nome?: string | null; email?: string | null; telefone?: string | null };
+export function sameFocusContact(snapshot: FocusContact | null | undefined, current: FocusContact):
+  snapshot is { nome: string; email: string; telefone: string } {
+  return Boolean(snapshot?.nome && snapshot.email && snapshot.telefone &&
+    snapshot.nome === current.nome && snapshot.email === current.email &&
+    snapshot.telefone === current.telefone);
+}
+
 export function amountBlockers(input: EntradaProcesso, amounts: FiscalAmounts | null): string[] {
   if (!amounts || !amounts.approved_by) return ["WAITING_FOR_OWNER: componentes e conversão dos valores fiscais validados pelo contador."];
   const result: string[] = [];
@@ -41,8 +49,10 @@ export function focusBlockers(input: EntradaProcesso, settings: FiscalSettings |
   const b: string[] = [];
   if (!input.internacional || !input.pago || input.cancelado) b.push("Pedido internacional pago e não cancelado obrigatório.");
   if (!input.destino?.country || !input.destino.city || !input.destino.line1 ||
-    !(input.destino.recipient_name || input.contato.nome))
+    !input.destino.recipient_name)
     b.push("Conferir destinatário e endereço.");
+  if (!input.contato.nome || !input.contato.email || !input.contato.telefone)
+    b.push("WAITING_FOR_OWNER: nome, e-mail e telefone do contato do destinatário.");
   const exporter = input.exportador;
   if (!exporter || [exporter.tax_id, exporter.legal_name, exporter.city, exporter.postal_code,
     exporter.address_line1].some(x => !x)) b.push("WAITING_FOR_OWNER: identidade e endereço do emitente.");
@@ -77,6 +87,8 @@ export function validateFocusPayload(payload: unknown, input: EntradaProcesso, s
     .toLocaleLowerCase("pt-BR").replace(/[^a-z0-9]/g, "");
   const digits = (v: unknown) => String(v ?? "").replace(/\D/g, "");
   if (p.natureza_operacao !== settings.natureza_operacao) errors.push("Natureza da operação difere da configuração fiscal.");
+  if (String(p.informacoes_adicionais_fisco ?? "").trim() !== settings.regime_exportacao?.trim())
+    errors.push("Informações fiscais sobre o regime de exportação diferem da configuração aprovada.");
   if (String(p.serie ?? "") !== settings.serie) errors.push("Série difere da configuração fiscal.");
   if (p.tipo_documento !== 1 || p.local_destino !== 3) errors.push("Tipo de saída/exportação inválido.");
   const x = input.exportador;
@@ -85,7 +97,7 @@ export function validateFocusPayload(payload: unknown, input: EntradaProcesso, s
   if (x && (norm(p.municipio_emitente) !== norm(x.city) || digits(p.cep_emitente) !== digits(x.postal_code) ||
     !norm(x.address_line1).includes(norm(p.logradouro_emitente)) || !norm(p.logradouro_emitente)))
     errors.push("Endereço do emitente difere do exportador confirmado.");
-  const recipient = input.destino?.recipient_name || input.contato.nome;
+  const recipient = input.destino?.recipient_name;
   if (!recipient || norm(p.nome_destinatario) !== norm(recipient))
     errors.push("Destinatário da NF-e difere do pedido.");
   const country = input.destino?.country ?? "";
@@ -110,6 +122,8 @@ export function validateFocusPayload(payload: unknown, input: EntradaProcesso, s
     if (index < 0) errors.push("Descrição, NCM, quantidade ou valor fiscal de item diverge do snapshot do pedido.");
     else remaining.splice(index, 1);
     if (String(x.cfop) !== settings.cfop) errors.push("CFOP de item diverge da configuração fiscal.");
+    if (String(x.icms_situacao_tributaria ?? "") !== settings.tributacao)
+      errors.push("Situação tributária ICMS/CSOSN de item difere da configuração fiscal.");
     if (!x.descricao || !x.unidade_comercial || !x.valor_unitario_comercial)
       errors.push("Item sem descrição, unidade ou valor unitário.");
     if (!Number.isFinite(Number(x.valor_unitario_comercial)) ||

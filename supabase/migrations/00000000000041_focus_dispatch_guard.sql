@@ -134,6 +134,12 @@ begin
       and n.consulted_at >= clock_timestamp() - interval '60 seconds'
       and n.access_key = d.reference and d.status = 'verified'
       and n.xml_storage_path is not null and n.danfe_storage_path = d.storage_path
+      and exists(select 1 from orders o join customers c on c.id = o.customer_id
+        join addresses a on a.id = o.address_id where o.id = n.order_id
+        and c.full_name = n.request_snapshot->'order'->'contact'->>'nome'
+        and c.email = n.request_snapshot->'order'->'contact'->>'email'
+        and c.phone = n.request_snapshot->'order'->'contact'->>'telefone'
+        and a.recipient_name = n.request_snapshot->'order'->'destination'->>'recipient_name')
       and exists(select 1 from storage.objects o where o.bucket_id = 'export-documents'
         and o.name = n.xml_storage_path)
       and exists(select 1 from storage.objects o where o.bucket_id = 'export-documents'
@@ -223,6 +229,12 @@ begin
       and n.consulted_at >= clock_timestamp() - interval '60 seconds'
       and n.access_key = d.reference and d.status = 'verified'
       and n.xml_storage_path is not null and n.danfe_storage_path = d.storage_path
+      and exists(select 1 from orders o join customers c on c.id = o.customer_id
+        join addresses a on a.id = o.address_id where o.id = n.order_id
+        and c.full_name = n.request_snapshot->'order'->'contact'->>'nome'
+        and c.email = n.request_snapshot->'order'->'contact'->>'email'
+        and c.phone = n.request_snapshot->'order'->'contact'->>'telefone'
+        and a.recipient_name = n.request_snapshot->'order'->'destination'->>'recipient_name')
     for update of n
   ) then
     raise exception 'Remessa DHL exige NF-e Focus autorizada e conferida';

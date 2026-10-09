@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { FocusNfeProvider, FocusRequestError, focusReference } from "@/lib/fiscal/focus-nfe";
 import { issueWithPermanentReservation } from "@/lib/fiscal/focus-idempotency";
-import { amountBlockers, focusBlockers, validateFocusPayload, type FiscalAmounts, type FiscalSettings } from "@/lib/fiscal/focus-validation";
+import { amountBlockers, focusBlockers, sameFocusContact, validateFocusPayload, type FiscalAmounts, type FiscalSettings } from "@/lib/fiscal/focus-validation";
 import type { EntradaProcesso } from "@/lib/internacional/processo-exportacao";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -104,6 +104,7 @@ describe("travas persistidas da reserva Focus", () => {
     expect(dispatch).toContain("for update of n");
     expect(dispatch).toContain("create trigger block_focus_consultation_during_dhl before update on order_focus_nfe");
     expect(dispatch).toContain("join shipments s on s.id = r.shipment_id");
+    expect(dispatch).toContain("c.email = n.request_snapshot->'order'->'contact'->>'email'");
     expect(dispatch).toContain("and not exists(select 1 from order_focus_nfe n where n.order_id = new.id)");
   });
   it("permite registrar cancelamento consultado sem reautorizar uma nota cancelada", () => {
@@ -132,6 +133,12 @@ const entrada: EntradaProcesso = { internacional: true, pago: true, cancelado: f
   valorFretePedidoCents: 0, valorDescontoPedidoCents: 0 };
 
 describe("trava fiscal", () => {
+  it("bloqueia criação DHL se o contato mudar depois do snapshot fiscal", () => {
+    const snapshot = { nome: "Cliente", email: "cliente@example.com", telefone: "+4912345" };
+    expect(sameFocusContact(snapshot, { ...snapshot })).toBe(true);
+    expect(sameFocusContact(snapshot, { ...snapshot, email: "outro@example.com" })).toBe(false);
+    expect(sameFocusContact(snapshot, { ...snapshot, telefone: "+4999999" })).toBe(false);
+  });
   it("bloqueia campos humanos e caixa sem peso bruto", () => {
     const p = { ...entrada, pacote: null };
     expect(focusBlockers(p, null).join(" ")).toContain("CFOP");
@@ -148,9 +155,10 @@ describe("trava fiscal", () => {
   });
   it("recusa NF-e com NCM ou valor diferente do snapshot", () => {
     const payload = { natureza_operacao: "validada", serie: "1", tipo_documento: 1, local_destino: 3,
+      informacoes_adicionais_fisco: "validado",
       nome_destinatario: "Teste", cnpj_emitente: "1".repeat(14), valor_produtos: 60, valor_total: 60,
       items: [{ codigo_ncm: "39191000", cfop: "7501", quantidade_comercial: 1, valor_bruto: 60,
-        descricao: "Produto", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
+        descricao: "Produto", icms_situacao_tributaria: "validada", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
     expect(validateFocusPayload(payload, entrada, settings, amounts).join(" ")).toContain("diverge");
   });
   it("compara emitente e destinatário com o pedido, não só com formato de CPF/CNPJ", () => {
@@ -161,12 +169,14 @@ describe("trava fiscal", () => {
         contact_name: "Contato", phone: "5511999999999", email: "fiscal@example.com",
         invoice_mode: "external", dhl_account_confirmed: true } };
     const payload = { natureza_operacao: "validada", serie: "1", tipo_documento: 1, local_destino: 3,
+      informacoes_adicionais_fisco: "validado",
       cnpj_emitente: "12345678000199", nome_emitente: "Revera Ltda", municipio_emitente: "São José dos Campos",
       cep_emitente: "12216530", logradouro_emitente: "Rua das Flores", nome_destinatario: "Cliente Confirmado",
       pais_destinatario: "Alemanha", municipio_destinatario: "Berlin", cep_destinatario: "10115",
       logradouro_destinatario: "Rua 1", valor_produtos: 60, valor_total: 60,
       items: [{ codigo_ncm: "67042000", cfop: "7501", quantidade_comercial: 1,
-        valor_bruto: 60, descricao: "Produto teste", unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
+        valor_bruto: 60, descricao: "Produto teste", icms_situacao_tributaria: "validada",
+        unidade_comercial: "UN", valor_unitario_comercial: 60 }] };
     expect(validateFocusPayload(payload, order, settings, amounts)).toEqual([]);
     expect(validateFocusPayload({ ...payload, cnpj_emitente: "99999999000199" }, order, settings, amounts))
       .toContain("Identidade do emitente difere do exportador confirmado.");
@@ -178,6 +188,10 @@ describe("trava fiscal", () => {
       .toContain("Valor unitário vezes quantidade diverge do valor bruto do item.");
     expect(validateFocusPayload({ ...payload, items: [{ ...payload.items[0], descricao: "Outro produto" }] }, order, settings, amounts))
       .toContain("Descrição, NCM, quantidade ou valor fiscal de item diverge do snapshot do pedido.");
+    expect(validateFocusPayload({ ...payload, informacoes_adicionais_fisco: "outro regime" }, order, settings, amounts))
+      .toContain("Informações fiscais sobre o regime de exportação diferem da configuração aprovada.");
+    expect(validateFocusPayload({ ...payload, items: [{ ...payload.items[0], icms_situacao_tributaria: "500" }] }, order, settings, amounts))
+      .toContain("Situação tributária ICMS/CSOSN de item difere da configuração fiscal.");
     expect(validateFocusPayload({ ...payload, valor_frete: 5, valor_total: 65 }, order, settings, amounts))
       .toContain("valor_frete difere dos valores aprovados para o pedido.");
   });

@@ -11,7 +11,7 @@ export function ConfiguracaoFocus({ settings }: { settings: Settings | null }) {
   const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
   const fields = [
     ["cfop", "CFOP — proprietário + contador"], ["natureza_operacao", "Natureza da operação — contador"],
-    ["tributacao", "CSOSN/CST ou tributação — contador"], ["regime_exportacao", "Regime de exportação — contador"],
+    ["tributacao", "Código ICMS/CSOSN de cada item — contador"], ["regime_exportacao", "Texto exato para informações adicionais do fisco sobre exportação — contador"],
     ["serie", "Série da NF-e — contador"], ["numeracao", "Estratégia de numeração — contador"],
   ] as const;
   return <section className="rounded-lg border border-sand p-4 text-sm">
