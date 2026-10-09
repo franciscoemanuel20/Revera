@@ -14,7 +14,7 @@ class ConfirmationBank extends FakeSupabase {
         const customer = this.tabela("customers").find(c => c.id === order.customer_id);
         if (!String(customer?.email ?? "").includes("@")) continue;
         const r = await this.from("order_notifications").insert({order_id: order.id,
-          kind: "confirmacao_cliente", channel: "email", sent_at: null, attempts: 0,
+          kind: "confirmacao_cliente", channel: "email", sent_at: null, attempts: 5, confirmation_attempts: 0,
           confirmation_review_required: false, confirmation_next_attempt_at: new Date(0).toISOString()});
         if (r.error && (r.error as {code:string}).code !== "23505") return r;
       }
@@ -37,7 +37,8 @@ class ConfirmationBank extends FakeSupabase {
       row.confirmation_had_uncertain_attempt = Boolean(row.confirmation_had_uncertain_attempt || row.confirmation_first_attempt_at);
       row.confirmation_first_attempt_at ??= new Date().toISOString();
       row.confirmation_lease = "lease";
-      row.attempts = Number(row.attempts)+1;
+      row.attempts = Math.max(Number(row.attempts), 5);
+      row.confirmation_attempts = Number(row.confirmation_attempts ?? 0) + 1;
       return {data:[{lease:"lease",payload:row.confirmation_payload}],error:null};
     }
     if (name === "finish_paid_confirmation" && row && row.confirmation_lease === args.p_lease) {
@@ -155,7 +156,7 @@ describe("enviarConfirmacaoAoCliente", () => {
     const linha = fake.tabela("order_notifications")[0]!;
     expect(linha.sent_at ?? null).toBeNull();
     expect(linha.last_error).toBe("Resend fora");
-    expect(linha.attempts).toBe(1);
+    expect(linha.confirmation_attempts).toBe(1);
     linha.created_at = new Date(Date.now() - 10 * 60_000).toISOString();
     linha.sent_at = null; // no banco real a coluna nasce nula
     await expect(mod.reenviarConfirmacoesPendentes(fake as never)).resolves.toBe(1);
