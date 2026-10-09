@@ -67,7 +67,7 @@ describe("concorrência entre webhook e retorno Stripe", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await confirmarPagamento("order", { transactionId: "cs_test_exact" })).toMatchObject({ estado: "indisponivel" });
     expect(fake.tabela("payments")).toHaveLength(1);
-    expect(fake.tabela("orders")[0].payment_status).toBe("pending");
+    expect(fake.tabela("orders")[0]).toMatchObject({ payment_status: "pending" });
     expect(fixture.avisar).not.toHaveBeenCalled();
     log.mockRestore();
   });

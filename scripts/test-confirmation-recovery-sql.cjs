@@ -9,6 +9,12 @@ await db.exec(fs.readFileSync('supabase/migrations/00000000000043_durable_custom
 assert.equal((await db.query('select confirmation_review_required from order_notifications')).rows[0].confirmation_review_required,true);
 assert.equal((await db.query(`select * from claim_paid_confirmation('00000000-0000-0000-0000-000000000099','{}')`)).rows.length,0);
 await db.exec('truncate order_notifications');
+// O emissor legado pode inserir depois da migration, durante deploy/rollback.
+const legacy='00000000-0000-0000-0000-000000000098';
+await db.exec(`insert into orders(id,payment_status) values('${legacy}','paid');insert into order_notifications(order_id,kind,channel) values('${legacy}','confirmacao_cliente','email')`);
+assert.equal((await db.query(`select confirmation_review_required from order_notifications where order_id='${legacy}'`)).rows[0].confirmation_review_required,true);
+assert.equal((await db.query(`select * from claim_paid_confirmation('${legacy}','{}')`)).rows.length,0);
+await db.exec('truncate order_notifications');
 const id='00000000-0000-0000-0000-000000000002';await db.exec(`insert into customers values('00000000-0000-0000-0000-000000000001','test@example.invalid');insert into orders values('${id}','00000000-0000-0000-0000-000000000001','paid',null);select reserve_paid_confirmations(null);`);
 const claim=()=>db.query(`select * from claim_paid_confirmation('${id}','{"body":"test"}')`);
 const finish=(lease,sent=false,definite=false)=>db.query(`select finish_paid_confirmation('${id}',$1,$2,'isolated','simulated',$3) result`,[lease,sent,definite]);

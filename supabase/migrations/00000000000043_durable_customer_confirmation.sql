@@ -7,7 +7,8 @@ alter table public.order_notifications
   add column confirmation_lease uuid,
   add column confirmation_lease_until timestamptz,
   add column confirmation_next_attempt_at timestamptz not null default now(),
-  add column confirmation_review_required boolean not null default false;
+  -- Inserções do emissor antigo durante deploy/rollback têm resultado desconhecido.
+  add column confirmation_review_required boolean not null default true;
 -- Resultado histórico desconhecido: não reenvie além da janela do provedor.
 update public.order_notifications set confirmation_review_required = true,
   last_error = coalesce(last_error, 'Envio histórico sem resultado comprovado; reconciliar antes de reenviar')
@@ -15,8 +16,8 @@ where kind = 'confirmacao_cliente' and sent_at is null;
 
 create or replace function public.reserve_paid_confirmations(p_order_id uuid default null)
 returns void language sql security definer set search_path = public, pg_temp as $$
-  insert into order_notifications(order_id, kind, channel)
-  select o.id, 'confirmacao_cliente', 'email' from orders o
+  insert into order_notifications(order_id, kind, channel, confirmation_review_required)
+  select o.id, 'confirmacao_cliente', 'email', false from orders o
   join customers c on c.id = o.customer_id
   where o.payment_status = 'paid' and o.canceled_at is null
     and (p_order_id is null or o.id = p_order_id)
