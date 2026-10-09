@@ -42,12 +42,19 @@ export interface CotacaoDhlOperacionalResultado {
 }
 
 export function planejadaPadrao(): string {
-  const data = new Date();
-  data.setDate(data.getDate() + 1);
-  const yyyy = data.getFullYear();
-  const mm = String(data.getMonth() + 1).padStart(2, "0");
-  const dd = String(data.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}T10:00:00GMT-03:00`;
+  // A coleta sai de São José dos Campos. O calendário do servidor (UTC na
+  // Vercel) já está no dia seguinte após 21h no Brasil e não pode defini-la.
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const valor = (tipo: string) => Number(partes.find((p) => p.type === tipo)!.value);
+  // UTC é usado apenas para aritmética do calendário já convertido da origem.
+  const data = new Date(Date.UTC(valor("year"), valor("month") - 1, valor("day")));
+  do {
+    data.setUTCDate(data.getUTCDate() + 1);
+  } while (data.getUTCDay() === 0 || data.getUTCDay() === 6);
+  // Feriados/disponibilidade final continuam sendo validados pela DHL.
+  return `${data.toISOString().slice(0, 10)}T10:00:00GMT-03:00`;
 }
 
 function inteiroPositivo(v: number, campo: string): number {
