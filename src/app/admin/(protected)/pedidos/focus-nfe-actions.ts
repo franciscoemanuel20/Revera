@@ -51,10 +51,11 @@ async function applyResult(db: ReturnType<typeof createAdminClient>, row: { id: 
     number: result.number, series: result.series, access_key: result.accessKey,
     protocol: result.protocol, rejection_reason: result.rejection,
     response_sanitized: result.safeResponse,
-    consulted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    consulted_at: consultationNonce ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
     ...(status === "authorized" ? { authorized_at: new Date().toISOString() } : {}),
   }).eq("id", row.id).neq("status", "cancelled");
   if (consultationNonce) update = update.eq("consultation_nonce", consultationNonce);
+  else update = update.is("consultation_nonce", null);
   const { data: saved, error } = await update.select("id").maybeSingle();
   if (error || !saved) throw new Error("Falha ao persistir resposta Focus atual.");
   await event(db, row.id, status === "authorized" ? "authorized" : status === "rejected" ? "rejected"

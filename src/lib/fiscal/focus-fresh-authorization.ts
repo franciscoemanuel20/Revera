@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/server";
 import { FocusNfeProvider, type FocusEnvironment } from "./focus-nfe";
+import { ehProducao } from "@/lib/config/ambiente";
 
 /** Consulta a fonte fiscal imediatamente antes de uma ação física irreversível. */
 export async function exigirFocusAutorizadaRecente(orderId: string): Promise<{ ok: true } | { error: string }> {
@@ -10,6 +11,8 @@ export async function exigirFocusAutorizadaRecente(orderId: string): Promise<{ o
     .eq("order_id", orderId).maybeSingle();
   if (!row || row.status !== "authorized" || !row.access_key)
     return { error: "NF-e Focus não está autorizada para este pedido." };
+  if (row.environment !== (ehProducao() ? "producao" : "homologacao"))
+    return { error: "Ambiente da NF-e incompatível com a operação: produção exige NF-e de produção." };
   const consultationNonce = randomUUID();
   const { error: resetError } = await db.from("order_focus_nfe").update({
     consulted_at: null, consultation_nonce: consultationNonce,
