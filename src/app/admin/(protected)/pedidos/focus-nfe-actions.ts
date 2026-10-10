@@ -9,6 +9,7 @@ import { carregarProcessosExportacao } from "@/lib/internacional/processo-export
 import { FocusNfeProvider, FocusRequestError, focusReference, type FocusEnvironment, type FocusResult } from "@/lib/fiscal/focus-nfe";
 import { amountBlockers, focusBlockers, validateFocusPayload, type FiscalAmounts, type FiscalSettings } from "@/lib/fiscal/focus-validation";
 import { issueWithPermanentReservation } from "@/lib/fiscal/focus-idempotency";
+import { reconcileFocusDocumentLink } from "@/lib/fiscal/focus-document-link";
 
 const uuid = z.string().uuid();
 const inputSchema = z.object({ orderId: uuid, confirmed: z.literal(true), payloadJson: z.string().min(2).max(65536) });
@@ -238,10 +239,11 @@ export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
     return { error: "Consulta inconclusiva. A emissão permanece reservada; confira a referência na Focus." };
   }
   if (row.status === "authorized" && result.status === "cancelled") {
-    const { error } = await db.from("order_focus_nfe").update({ status: "cancelled",
+    const { data: cancelled, error } = await db.from("order_focus_nfe").update({ status: "cancelled",
       response_sanitized: result.safeResponse, consulted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "authorized");
-    if (error) return { error: "Cancelamento detectado, mas não foi possível bloquear a NF-e local. Interrompa o despacho e consulte novamente." };
+      updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "authorized")
+      .eq("consultation_nonce", consultationNonce).select("id").maybeSingle();
+    if (error || !cancelled) return { error: "Cancelamento detectado, mas não foi possível bloquear a NF-e local. Interrompa o despacho e consulte novamente." };
     await event(db, row.id, "cancelled_detected", a.user.id, { reference: row.reference });
     await registrarAuditoria(a.s, { action: "focus.cancelamento_detectado", entityType: "orders", entityId: row.order_id,
       diff: { reference: row.reference } });
@@ -278,15 +280,23 @@ export async function consultarFocusNfeAction(input: unknown): Promise<Result> {
         { contentType: "application/xml", upsert: false }); if (error) throw error; }
       if (danfe) { const { error } = await db.storage.from("export-documents").upload(danfePath, danfe,
         { contentType: "application/pdf", upsert: false }); if (error) throw error; }
-      const { error } = await db.from("order_focus_nfe").update({ xml_storage_path: xmlPath,
-        danfe_storage_path: danfePath, documents_at: new Date().toISOString() }).eq("id", row.id);
-      if (error) throw error;
+      const { data: linked, error } = await db.from("order_focus_nfe").update({ xml_storage_path: xmlPath,
+        danfe_storage_path: danfePath, documents_at: new Date().toISOString() }).eq("id", row.id)
+        .eq("status", "authorized").eq("access_key", result.accessKey)
+        .eq("consultation_nonce", consultationNonce).select("id").maybeSingle();
+      if (error || !linked) throw new Error("Consulta fiscal substituída antes de vincular documentos");
       await event(db, row.id, "documents_retrieved", a.user.id);
-      const { data: doc } = await a.s.from("order_export_documents").select("kind")
-        .eq("order_id", row.order_id).eq("kind", "nfe").maybeSingle();
-      if (!doc) await db.from("order_export_documents").insert({ order_id: row.order_id, kind: "nfe",
-        source: "external", status: "pending", reference: result.accessKey,
-        storage_path: danfePath, regime: null });
+      await reconcileFocusDocumentLink({ reference: result.accessKey, storage_path: danfePath }, async () => {
+        const { data, error } = await db.from("order_export_documents")
+          .select("reference,storage_path,source").eq("order_id", row.order_id).eq("kind", "nfe").maybeSingle();
+        if (error) throw error;
+        return data;
+      }, async () => {
+        const { error } = await db.from("order_export_documents").insert({ order_id: row.order_id, kind: "nfe",
+          source: "external", status: "pending", reference: result.accessKey,
+          storage_path: danfePath, regime: null });
+        if (error) throw error;
+      });
     } catch {
       refresh(row.order_id);
       return { error: "NF-e autorizada, mas XML ou DANFE não foram recuperados. Consulte novamente; a etiqueta permanece bloqueada." };

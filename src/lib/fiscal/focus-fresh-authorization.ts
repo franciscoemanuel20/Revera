@@ -25,10 +25,11 @@ export async function exigirFocusAutorizadaRecente(orderId: string): Promise<{ o
   }
   const consultedAt = new Date().toISOString();
   if (result.status === "cancelled") {
-    const { error } = await db.from("order_focus_nfe").update({ status: "cancelled",
+    const { data: cancelled, error } = await db.from("order_focus_nfe").update({ status: "cancelled",
       response_sanitized: result.safeResponse, consulted_at: consultedAt, updated_at: consultedAt })
-      .eq("id", row.id).eq("status", "authorized");
-    if (!error) await db.from("order_focus_nfe_events").insert({ focus_nfe_id: row.id,
+      .eq("id", row.id).eq("status", "authorized")
+      .eq("consultation_nonce", consultationNonce).select("id").maybeSingle();
+    if (!error && cancelled) await db.from("order_focus_nfe_events").insert({ focus_nfe_id: row.id,
       event: "cancelled_detected", safe_detail: { source: "pre_shipping_check" } });
     return { error: "NF-e cancelada na Focus. Remessa e despacho bloqueados." };
   }

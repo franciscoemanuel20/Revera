@@ -56,10 +56,32 @@ if (!stg || !prod) {
 }
 const refStgUrl = new URL(stg.NEXT_PUBLIC_SUPABASE_URL).host.split(".")[0];
 const refProdUrl = new URL(prod.NEXT_PUBLIC_SUPABASE_URL).host.split(".")[0];
+// Identidade pública do projeto aprovado para ensaios da Reverá. Não derive
+// o alvo apenas de um .env que pode ter recebido a URL de outro projeto.
+const stagingAprovado = "dpeluxmzuuijuveesgtu";
 const refDaKey = refDaChave(stg.SUPABASE_SERVICE_ROLE_KEY);
-if (!refStgUrl || refStgUrl === refProdUrl || refDaKey !== refStgUrl) {
+const chaveOpaca = /^sb_secret_[A-Za-z0-9_-]+$/.test(stg.SUPABASE_SERVICE_ROLE_KEY ?? "");
+if (refStgUrl !== stagingAprovado || refStgUrl === refProdUrl ||
+  !new URL(stg.NEXT_PUBLIC_SUPABASE_URL).hostname.endsWith(".supabase.co") ||
+  stg.SUPABASE_SERVICE_ROLE_KEY === prod.SUPABASE_SERVICE_ROLE_KEY ||
+  (refDaKey !== refStgUrl && !chaveOpaca)) {
   console.error("✗ Isolamento não comprovado. NADA foi escrito. Rode provar-isolamento-staging.mjs.");
   process.exit(1);
+}
+// Chaves secret atuais são opacas: valide a associação ao projeto por uma
+// leitura autenticada antes de qualquer escrita, sem imprimir chave ou resposta.
+if (chaveOpaca) {
+  try {
+    const r = await fetch(`${stg.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/admin_users?select=id&limit=0`, {
+      headers: { apikey: stg.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${stg.SUPABASE_SERVICE_ROLE_KEY}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) throw new Error("auth");
+  } catch {
+    console.error("✗ Chave de staging não validada no projeto isolado. NADA foi escrito.");
+    process.exit(1);
+  }
 }
 console.log(`\n=== TESTE VIVO — staging ${refStgUrl} (produção ${refProdUrl} intocada) ===\n`);
 

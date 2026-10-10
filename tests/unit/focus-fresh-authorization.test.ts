@@ -81,4 +81,16 @@ describe("consulta Focus antes de remessa/despacho", () => {
     expect(await antiga).toHaveProperty("error");
     expect(state.updates.at(-1)?.consulted_at).toBeNull();
   });
+  it("cancelamento de consulta antiga não substitui uma confirmação mais nova", async () => {
+    state.remote = "hold";
+    const antiga = exigirFocusAutorizadaRecente("order-1");
+    for (let n = 0; n < 10 && !state.heldResolve; n++) await Promise.resolve();
+    expect(state.heldResolve).not.toBeNull();
+    state.remote = "authorized";
+    expect(await exigirFocusAutorizadaRecente("order-1")).toEqual({ ok: true });
+    state.heldResolve?.({ status: "cancelled", accessKey: "1".repeat(44), safeResponse: { status: "cancelado" } });
+    expect(await antiga).toHaveProperty("error");
+    expect(state.updates.some(u => u.status === "cancelled")).toBe(false);
+    expect(state.events).toHaveLength(0);
+  });
 });
