@@ -54,8 +54,17 @@ validada sem exposição de valores.
   Token Focus instalado como sensitive; verify:deploy aprovado pelo cofre.
 - Smoke autenticado de staging: site, configuração internacional e painel
   fiscal do pedido fictício retornaram HTTP 200 e exibiram os bloqueios.
-- Publicação de produção deve ocorrer por push de main; conferência de
-  proveniência, domínio e painel será registrada após o deploy.
+- Código final publicado por push de `main`, commit `121ea74`, deploy
+  `dpl_D6ChXwV38W29vRWeCKH3vzdn1CgE`, estado READY. Proveniência confirmou
+  clone Git desse SHA no domínio `www.reveraprotesecapilar.com`.
+- Produção: home, checkout e login HTTP 200; documento fiscal sem sessão
+  HTTP 403. Smoke autenticado: configuração internacional e pedido alemão
+  HTTP 200; sequência fiscal visível, WAITING_FOR_OWNER e emissão Focus
+  desabilitada confirmados no HTML do painel.
+- Staging final: deploy `dpl_76zZsunZ75jt3jneWrGEdwDnP8pH`, READY;
+  comparação de conteúdo com `0071737`: 566 arquivos iguais, nenhuma
+  divergência ou arquivo adicional. Home e dois painéis HTTP 200.
+- Este registro final acrescenta somente documentação ao código validado.
 
 ## Pedido da Alemanha — WAITING_FOR_OWNER
 
