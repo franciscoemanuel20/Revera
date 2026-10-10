@@ -90,7 +90,7 @@ export async function marcarEnvioAction(input: MarcarEnvioInput): Promise<AcaoPe
   }
 
   const atual = pedido.shipping_status as ShippingStatusValue;
-  if (novoEnvio === "shipped") {
+  if (novoEnvio === "shipped" || novoEnvio === "delivered") {
     const processo = (await carregarProcessosExportacao(supabase, [orderId])).get(orderId);
     if (processo?.entrada.internacional && !processo.avaliacao.podeDespachar) {
       return { error: `Despacho bloqueado: ${processo.avaliacao.bloqueiosDespacho.join(" ")}` };
