@@ -1,77 +1,89 @@
-# Focus NFe + DHL — preparação para publicação
+# Focus NFe + DHL — validação e publicação
 
-## Estado em 10/10/2026
+## Validação em 10/10/2026
 
-- Branch: `feat/focus-nfe-dhl-20261007`, base de continuidade `47bae8b`.
-- Suíte sobre o diff final: 942 testes, 85 arquivos aprovados.
-- Typecheck, build e verificação de segredos aprovados sobre o diff final.
-- Revisão adversarial independente pelo Codex CLI encerrada sem achados
-  concretos no diff `origin/main...HEAD` e nas alterações locais finais.
-  O wrapper do plugin não saiu de `starting`; essa execução foi cancelada
-  e substituída pela CLI autenticada.
-- Staging confirmado no painel: `dpeluxmzuuijuveesgtu` (REVERA-STAGING).
-- Produção: `ngnaemfiytutyplolgxb` (REVERA).
-- Teste vivo das constraints existentes: 47 verificações aprovadas;
-  seis clientes fictícios e seus registros dependentes limpos ao final.
-- Bucket `export-documents` de staging confirmado privado.
-- Novas tabelas Focus e fatos físicos indisponíveis via REST em staging.
-- Nenhuma migração aplicada nesta execução; fluxo fiscal completo ainda
-  não homologado. Não fazer merge/deploy de produção antes desse gate.
+Continuidade de `47bae8b` na branch `feat/focus-nfe-dhl-20261007`.
+`origin/main` (`fd6ab20`) incorporada preservando as correções de confirmação
+permanente ao cliente. Código final validado: `0071737`.
+
+- Suíte completa: 1.020 testes em 92 arquivos aprovados.
+- Typecheck, build e verificação de segredos aprovados.
+- Revisão adversarial independente pelo Codex CLI, modelo gpt-6.1-sol:
+  **Approve**, sem achados relevantes após as correções finais. A revisão
+  executou também 52 testes fiscais/de exportação dirigidos.
+- Staging: 47 verificações do teste vivo e 21 verificações PostgreSQL do
+  fluxo fiscal; fixtures exclusivamente fictícias. Fixtures fiscais em
+  transação revertida; fixtures do site limpas ao final.
+- Testes cobrem idempotência, timeout/resposta ambígua, reconciliação,
+  snapshots imutáveis, ambiente fiscal, documentos privados, concorrência,
+  consulta fiscal recente e prevenção de duplicidade DHL.
+- Rollbacks operacionais 39–42 verificados em staging: preservam dados e
+  bloqueios, com emissão e criação DHL desabilitadas.
 
 ## Correções desta execução
 
-- Recuperação idempotente do vínculo da NF-e com o pedido: falha de insert
-  passa a ser reportada e consulta posterior pode reparar o vínculo.
-- Documentos divergentes não são sobrescritos. Insert concorrente só é
-  aceito se referência, origem e caminho forem iguais.
-- Persistência dos caminhos exige autorização, chave e nonce da consulta atual.
-- Cancelamento detectado em consulta exige nonce atual e linha atualizada;
-  teste comprova que resposta antiga não cancela confirmação mais nova.
-- Teste vivo suporta chave opaca atual do Supabase, com alvo de staging
-  fixado, chave diferente de produção e leitura autenticada antes de escrever.
+- `c0fbce3`: recuperação idempotente do vínculo de documento Focus, falhas
+  de insert explícitas, proteção contra caminhos e cancelamentos obsoletos.
+- `e9d62f5`: merge de main preservando mudanças posteriores.
+- `9f87aeb`: ambiente fiscal compatível com o despacho, guarda PostgreSQL
+  da migração 42 e proteção contra resposta inicial tardia do POST.
+- `0071737`: renovar consulta Focus antes de registrar entrega internacional,
+  evitando bloquear entregas dias depois do despacho; falha impede UPDATE.
+
+## Migrações e ambientes
+
+- Staging `dpeluxmzuuijuveesgtu`: aplicadas 37, 38, 39, 40, 41, 42, 43 e 44.
+  A 36 já existia; sua estrutura foi conferida. Política fiscal da 42
+  configurada explicitamente como `homologacao`.
+- Produção `ngnaemfiytutyplolgxb`: aplicadas 36, 37, 38, 39, 40, 41 e 42.
+  As 43 e 44 já existiam e foram preservadas. Política fiscal `producao`.
+- Migrações aplicadas em transações e verificadas pelo schema real; não se
+  repetiram triggers/policies existentes. Bucket `export-documents` privado.
 
 ## Cofre e configuração
 
 Política localizada em `~/.claude/secrets/README.md`; o caminho antigo
-`~/.Codex/secrets/README.md` não existe nesta máquina.
+`~/.Codex/secrets/README.md` não existe nesta máquina. Conexão PostgreSQL
+staging guardada no Doppler após o proprietário salvar a senha; conexão
+validada sem exposição de valores.
 
-`revera stg DATABASE_URL` continua ausente. Importação Vercel não recuperou
-uma conexão nova. CLI Supabase não autenticada; painel autenticado mostra
-conexão com placeholder de senha. Alteração de senha exige execução humana
-pela política de controle do navegador.
+- Staging: Focus homologação, pagamento mock, DHL sandbox, emissão Focus
+  e criação DHL desligadas; configuração instalada na Vercel.
+- Produção: Focus produção, `FOCUS_NFE_ISSUANCE_ENABLED=0`,
+  `FOCUS_NFE_PRODUCTION_APPROVED=0`, `DHL_SHIPMENT_CREATION_ENABLED=0`.
+  Token Focus instalado como sensitive; verify:deploy aprovado pelo cofre.
+- Smoke autenticado de staging: site, configuração internacional e painel
+  fiscal do pedido fictício retornaram HTTP 200 e exibiram os bloqueios.
+- Publicação de produção deve ocorrer por push de main; conferência de
+  proveniência, domínio e painel será registrada após o deploy.
 
-Configuração gravada no Doppler staging, ainda sem exportação Vercel:
+## Pedido da Alemanha — WAITING_FOR_OWNER
 
-- `FOCUS_NFE_AMBIENTE=homologacao`
-- `FOCUS_NFE_ISSUANCE_ENABLED=0`
-- `FOCUS_NFE_PRODUCTION_APPROVED=0`
-- `REVERA_PAYMENT_PROVIDER=mock`
+`REV-7DA5CEBF` (`2c4d3a59-0c6e-453d-b5af-78c10cd8c120`): pagamento PayPal
+confirmado, sem cancelamento e sem remessa. Já existem documentos manuais
+`nfe` e `invoice`, pendentes e externos, anteriores à integração.
 
-Configuração existente conferida: `DHL_AMBIENTE=sandbox`, criação DHL e
-aprovação de produção desligadas. `verify:deploy` via cofre staging aprovado.
+A tentativa de gravar os fatos físicos fornecidos com
+`supabase/aplicar/PREPARAR-REV-7DA5CEBF.sql` foi integralmente revertida pela
+trava de imutabilidade após documento/remessa. Nenhum fato foi parcialmente
+persistido. Não remover documentos nem contornar a trava sem reconciliar
+fiscalmente sua existência.
 
-Produção conferida por leitura do cofre: variáveis Focus ainda ausentes
-(runtime recusa emissão por padrão); criação de remessa DHL em `0`.
+Pendências para despachar:
 
-## Pedido da Alemanha
+1. Responsável fiscal deve reconciliar a NF-e e invoice manuais pendentes:
+   confirmar se são reais, seus dados e o tratamento correto antes de criar
+   novo snapshot ou documento Focus.
+2. Confirmar emitente/exportador, natureza da operação, CFOP, tributação,
+   numeração e demais parâmetros fiscais com o contador.
+3. Validar itens, valores em BRL, câmbio/data/fonte, rateio de frete/desconto
+   e declaração/documentação aduaneira apropriada.
+4. Medir peso bruto e dimensões finais do pacote, confirmar incoterm e
+   demais dados aduaneiros. Os fatos líquidos informados não substituem o
+   pacote final: prótese 75 g, 16 × 5 × 11 cm, NCM 67042000/HS 670420/BR;
+   fita 138 g, 11 × 11 × 2,5 cm, NCM/HS 39191000/BR.
+5. Após esses dados, obter confirmação específica para emissão real e para
+   etiqueta cobrável. Comunicação permanece como rascunho preparado.
 
-`REV-7DA5CEBF` (`2c4d3a59-0c6e-453d-b5af-78c10cd8c120`): consulta de produção
-confirmou pagamento `paid`, ausência de cancelamento e nenhuma remessa.
-Tabela de fatos físicos ainda indisponível em produção. O script
-`supabase/aplicar/PREPARAR-REV-7DA5CEBF.sql` não foi executado.
-
-Antes de despachar: dados fiscais e emitente validados pelo contador,
-tratamento de frete/desconto e câmbio, pacote final medido, documentação
-aduaneira apropriada conferida e confirmações específicas de emissão e etiqueta.
-
-## Próximos gates
-
-1. Guardar conexão PostgreSQL de staging no cofre, sem expor senha.
-2. Conferir histórico real de schema; aplicar migrações pendentes e deltas
-   na ordem correta, sem repetir policies/triggers já existentes.
-3. Testar migrações 39–41 e rollback operacional contra staging.
-4. Homologar Focus e DHL com fixtures/mocks, sem NF-e ou etiqueta real.
-5. Repetir revisão se a homologação exigir novas mudanças de código.
-6. Promover schema, integrar main e verificar deploy com emissão desligada.
-
-Nenhuma NF-e real, etiqueta cobrável ou comunicação ao cliente foi criada.
+Nenhuma NF-e real, etiqueta cobrável ou comunicação ao cliente foi criada
+nesta execução. Nenhum campo fiscal ou medida final foi inventado.
