@@ -5,6 +5,53 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "../stubs/fake-supabase";
 
+class ConfirmationBank extends FakeSupabase {
+  async rpc(name: string, args: Record<string, unknown>) {
+    if (name === "reserve_paid_confirmations") {
+      for (const order of this.tabela("orders")) {
+        if (args.p_order_id && order.id !== args.p_order_id) continue;
+        if (order.payment_status !== "paid") continue;
+        const customer = this.tabela("customers").find(c => c.id === order.customer_id);
+        if (!String(customer?.email ?? "").includes("@")) continue;
+        const r = await this.from("order_notifications").insert({order_id: order.id,
+          kind: "confirmacao_cliente", channel: "email", sent_at: null, attempts: 5, confirmation_attempts: 0,
+          confirmation_review_required: false, confirmation_next_attempt_at: new Date(0).toISOString()});
+        if (r.error && (r.error as {code:string}).code !== "23505") return r;
+      }
+      return {data:null,error:null};
+    }
+    if (name === "paid_confirmation_candidates") {
+      const eligible=this.tabela("order_notifications").filter(q=>{
+        const o=this.tabela("orders").find(o=>o.id===q.order_id);
+        const c=this.tabela("customers").find(c=>c.id===o?.customer_id);
+        return o?.payment_status==="paid" && !o.canceled_at && String(c?.email??"").includes("@") && !q.sent_at && !q.confirmation_review_required;
+      }); return {data:eligible.slice(0,10),error:null};
+    }
+    const row = this.tabela("order_notifications").find(r => r.order_id === args.p_order_id);
+    if (name === "claim_paid_confirmation") {
+      if (!row || row.sent_at || row.confirmation_lease || row.confirmation_review_required) return {data:[],error:null};
+      if (row.confirmation_first_attempt_at && Date.parse(String(row.confirmation_first_attempt_at)) < Date.now()-20*3600000) {
+        row.confirmation_review_required = true; return {data:[],error:null};
+      }
+      row.confirmation_payload ??= args.p_payload;
+      row.confirmation_had_uncertain_attempt = Boolean(row.confirmation_had_uncertain_attempt || row.confirmation_first_attempt_at);
+      row.confirmation_first_attempt_at ??= new Date().toISOString();
+      row.confirmation_lease = "lease";
+      row.attempts = Math.max(Number(row.attempts), 5);
+      row.confirmation_attempts = Number(row.confirmation_attempts ?? 0) + 1;
+      return {data:[{lease:"lease",payload:row.confirmation_payload}],error:null};
+    }
+    if (name === "finish_paid_confirmation" && row && row.confirmation_lease === args.p_lease) {
+      row.confirmation_lease = null;
+      row.last_error = args.p_sent ? null : args.p_error;
+      if (args.p_sent) row.sent_at = new Date().toISOString();
+      if (args.p_definite_failure && !row.confirmation_had_uncertain_attempt) {row.confirmation_first_attempt_at = null;row.confirmation_payload=null;}
+      return {data:true,error:null};
+    }
+    return {data:false,error:null};
+  }
+}
+
 const PEDIDO = "66666666-6666-4666-8666-666666666666";
 const enviar = vi.fn();
 
@@ -30,6 +77,7 @@ const base = {
 beforeEach(() => {
   vi.resetModules();
   vi.stubEnv("RESEND_API_KEY", "re_teste");
+  vi.stubEnv("REVERA_CONFIRMATION_SEND_ENABLED", "1");
   enviar.mockReset().mockResolvedValue({ estado: "enviado", id: "x" });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -65,9 +113,9 @@ describe("montarConfirmacao", () => {
 
 describe("enviarConfirmacaoAoCliente", () => {
   function banco(email: string | null = "ivan@example.com") {
-    return new FakeSupabase(
+    return new ConfirmationBank(
       {
-        orders: [{ id: PEDIDO, order_number: "REV-T1", access_token: "tok", currency: "EUR", subtotal_cents: 14650, discount_cents: 0, shipping_cents: 8631, total_cents: 23281, customer_id: "c1", address_id: "a1" }],
+        orders: [{ payment_status: "paid", id: PEDIDO, order_number: "REV-T1", access_token: "tok", currency: "EUR", subtotal_cents: 14650, discount_cents: 0, shipping_cents: 8631, total_cents: 23281, customer_id: "c1", address_id: "a1" }],
         customers: [{ id: "c1", full_name: "Ivan Pineda Mota", email, phone: "+49" }],
         addresses: [{ id: "a1", country: "DE", recipient_name: "Ivan Pineda Mota", company: null, cep: null, street: null, number: null, complement: null, neighborhood: null, city: "Ottobrunn", state: null, line1: "Hauptstraße 1", line2: null, postal_code: "85521", region: null }],
         order_items: [{ order_id: PEDIDO, product_name_snapshot: "Micropele 0,08mm", variant_label_snapshot: "1b", quantity: 1, subtotal_cents: 14650 }],
@@ -108,7 +156,7 @@ describe("enviarConfirmacaoAoCliente", () => {
     const linha = fake.tabela("order_notifications")[0]!;
     expect(linha.sent_at ?? null).toBeNull();
     expect(linha.last_error).toBe("Resend fora");
-    expect(linha.attempts).toBe(1);
+    expect(linha.confirmation_attempts).toBe(1);
     linha.created_at = new Date(Date.now() - 10 * 60_000).toISOString();
     linha.sent_at = null; // no banco real a coluna nasce nula
     await expect(mod.reenviarConfirmacoesPendentes(fake as never)).resolves.toBe(1);
@@ -116,12 +164,81 @@ describe("enviarConfirmacaoAoCliente", () => {
     expect(enviar).toHaveBeenCalledTimes(2);
   });
 
-  it("sem RESEND_API_KEY não reserva (o pedido não fica preso)", async () => {
+  it("sem RESEND_API_KEY preserva reserva e recupera quando disponível", async () => {
     vi.stubEnv("RESEND_API_KEY", "");
     const fake = banco();
     const { enviarConfirmacaoAoCliente } = await import("@/lib/notificacoes/confirmacao-cliente");
     await enviarConfirmacaoAoCliente(fake as never, PEDIDO);
-    expect(fake.tabela("order_notifications")).toHaveLength(0);
+    expect(fake.tabela("order_notifications")).toHaveLength(1);
+    expect(enviar).not.toHaveBeenCalled();
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    const { reenviarConfirmacoesPendentes } = await import("@/lib/notificacoes/confirmacao-cliente");
+    expect(await reenviarConfirmacoesPendentes(fake as never)).toBe(1);
+  });
+  it("recupera falha de reserva a partir do pedido pago", async () => {
+    const fake = banco(); fake.falharProxima("order_notifications", "insert");
+    const mod = await import("@/lib/notificacoes/confirmacao-cliente");
+    await mod.enviarConfirmacaoAoCliente(fake as never, PEDIDO);
+    expect(enviar).not.toHaveBeenCalled();
+    expect(await mod.reenviarConfirmacoesPendentes(fake as never)).toBe(1);
+  });
+  it("não abandona reserva sem envio com mais de20h e5tentativas", async () => {
+    const fake = banco(); vi.stubEnv("RESEND_API_KEY", "");
+    const mod = await import("@/lib/notificacoes/confirmacao-cliente");
+    await mod.enviarConfirmacaoAoCliente(fake as never, PEDIDO);
+    Object.assign(fake.tabela("order_notifications")[0]!, {attempts:8,created_at:new Date(0).toISOString()});
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    expect(await mod.reenviarConfirmacoesPendentes(fake as never)).toBe(1);
+  });
+  it("duas recuperações concorrentes enviam uma única mensagem", async () => {
+    const fake = banco(); const mod = await import("@/lib/notificacoes/confirmacao-cliente");
+    await Promise.all([mod.reenviarConfirmacoesPendentes(fake as never),mod.reenviarConfirmacoesPendentes(fake as never)]);
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+  it("resultado incerto antigo fica observável sem reenvio", async () => {
+    const fake = banco();vi.stubEnv("RESEND_API_KEY", "");
+    const mod = await import("@/lib/notificacoes/confirmacao-cliente");
+    await mod.enviarConfirmacaoAoCliente(fake as never,PEDIDO);
+    fake.tabela("order_notifications")[0]!.confirmation_first_attempt_at = new Date(0).toISOString();
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    expect(await mod.reenviarConfirmacoesPendentes(fake as never)).toBe(0);
+    expect(enviar).not.toHaveBeenCalled();
+    expect(fake.tabela("order_notifications")[0]!.confirmation_review_required).toBe(true);
+  });
+  it("transporte desligado ainda recupera intenção sem enviar backlog", async () => {
+    vi.stubEnv("REVERA_CONFIRMATION_SEND_ENABLED", "0");
+    const fake = banco();const mod=await import("@/lib/notificacoes/confirmacao-cliente");
+    expect(await mod.reenviarConfirmacoesPendentes(fake as never)).toBe(0);
+    expect(fake.tabela("order_notifications")).toHaveLength(1);
     expect(enviar).not.toHaveBeenCalled();
   });
+
+  it("recusa após timeout não apaga a primeira tentativa incerta",async()=>{
+    const fake=banco();const mod=await import("@/lib/notificacoes/confirmacao-cliente");
+    enviar.mockResolvedValueOnce({estado:"erro",motivo:"timeout"});
+    await mod.enviarConfirmacaoAoCliente(fake as never,PEDIDO);
+    const first=fake.tabela("order_notifications")[0]!.confirmation_first_attempt_at;
+    enviar.mockResolvedValueOnce({estado:"erro",motivo:"429",definiteFailure:true});
+    await mod.reenviarConfirmacoesPendentes(fake as never);
+    expect(fake.tabela("order_notifications")[0]!.confirmation_first_attempt_at).toBe(first);
+  });
+  it("dez reservas canceladas não bloqueiam pedido pago seguinte",async()=>{
+    const fake=banco();for(let i=0;i<10;i++){
+      fake.tabela("orders").unshift({id:"cancel"+i,customer_id:"c1",payment_status:"paid",canceled_at:"now"});
+      fake.tabela("order_notifications").push({order_id:"cancel"+i,kind:"confirmacao_cliente",sent_at:null,confirmation_review_required:false});
+    }
+    const mod=await import("@/lib/notificacoes/confirmacao-cliente");
+    expect(await mod.reenviarConfirmacoesPendentes(fake as never)).toBe(1);
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+
+  it("recusa comprovada permite corrigir destinatário e recuperar",async()=>{
+    const fake=banco();const mod=await import("@/lib/notificacoes/confirmacao-cliente");
+    enviar.mockResolvedValueOnce({estado:"erro",motivo:"422",definiteFailure:true});
+    await mod.enviarConfirmacaoAoCliente(fake as never,PEDIDO);
+    fake.tabela("customers")[0]!.email="corrected@example.invalid";
+    expect(await mod.reenviarConfirmacoesPendentes(fake as never)).toBe(1);
+    expect(enviar.mock.calls[1]![0].para).toEqual(["corrected@example.invalid"]);
+  });
+
 });

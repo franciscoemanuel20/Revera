@@ -1,6 +1,6 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
-import { avaliarExportacao, escolherModoInvoicePedido, guiaDhlValida, type DocumentoExportacao, type EntradaProcesso,
+import { avaliarExportacao, escolherModoInvoicePedido, guiaDhlValida, remessaDhlEmAvaliacao, type DocumentoExportacao, type EntradaProcesso,
   type Exportador, type ItemExportacao, type PacoteExportacao } from "./processo-exportacao";
 
 type Cliente = Awaited<ReturnType<typeof createClient>>;
@@ -42,7 +42,7 @@ export async function carregarProcessosExportacao(s: Cliente, ids: string[]) {
     const envios = Array.isArray(p.shipments) ? p.shipments : p.shipments ? [p.shipments] : [];
     const documentosPedido = (documentos.data ?? []).filter(i => i.order_id === p.id) as DocumentoExportacao[];
     const focus = (focusNotas.data ?? []).find(n => n.order_id === p.id);
-    const remessa = envios.find(e => e.provider === "dhl");
+    const remessa = remessaDhlEmAvaliacao(envios);
     const modoRemessa = remessa?.metadata?.exporter_snapshot?.invoice_mode ??
       remessa?.metadata?.request_snapshot?.exporter_snapshot?.invoice_mode ??
       (remessa?.metadata?.request_snapshot?.request?.requestInvoice === true ? "api" :

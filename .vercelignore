@@ -1,0 +1,13 @@
+# O que NUNCA sobe num deploy por CLI (30/09/2026).
+#
+# O deploy dpl_6JD2QNGCdyfkFZQphbXfVHPH4E76 foi feito por `vercel deploy` a
+# partir de uma pasta de trabalho e levou junto dois arquivos ignorados pelo
+# Git: `.env.staging` (com as chaves do staging) e `tsconfig.tsbuildinfo`.
+# A CLI só ignora sozinha `.env.local` e `.env.*.local`; o resto de `.env*`
+# precisa estar aqui. Com esta lista, o que a CLI envia é o conteúdo
+# rastreado do commit — conferível por `npm run verify:proveniencia`.
+#
+# `.env.example` fica: é rastreado e não tem segredo.
+.env*
+!.env.example
+*.tsbuildinfo
